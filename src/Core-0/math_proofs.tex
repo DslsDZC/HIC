@@ -6,6 +6,17 @@
 \usepackage{mathpartir}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{ctex}
+
+% 重新定义定理环境以确保兼容性
+\newtheorem{theorem}{定理}[section]
+\newtheorem{lemma}[theorem]{引理}
+\newtheorem{corollary}[theorem]{推论}
+\theoremstyle{definition}
+\newtheorem{definition}{定义}[section]
+\newtheorem{example}{例}[section]
+\theoremstyle{remark}
+\newtheorem{remark}{注}[section]
 
 \title{HIK内核形式化验证数学证明}
 \author{DslsDZC}

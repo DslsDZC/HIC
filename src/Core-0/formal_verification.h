@@ -128,6 +128,188 @@ void fv_init(void);
  */
 void fv_get_stats(u64* total_checks, u64* violations, u64* last_violation_id);
 
+/**
+ * 获取详细的验证报告
+ * 
+ * 参数：
+ *   report - 输出报告缓冲区
+ *   size - 缓冲区大小
+ * 
+ * 返回值：实际写入的字节数
+ */
+u64 fv_get_report(char* report, u64 size);
+
+/**
+ * 验证覆盖率统计
+ */
+typedef struct fv_coverage {
+    u64 total_code_paths;     // 总代码路径数
+    u64 verified_paths;       // 已验证路径数
+    u64 coverage_percent;     // 覆盖率百分比
+    u64 last_verify_time;     // 最后验证时间
+} fv_coverage_t;
+
+/**
+ * 获取验证覆盖率
+ * 
+ * 参数：
+ *   coverage - 输出覆盖率统计
+ */
+void fv_get_coverage(fv_coverage_t* coverage);
+
+/* ========== 不变式依赖关系 ========== */
+
+/**
+ * 不变式依赖关系
+ */
+typedef struct invariant_dependency {
+    u64 invariant_id;         // 不变式ID
+    u64 depends_on[6];        // 依赖的不变式ID列表
+    u64 dependency_count;     // 依赖数量
+} invariant_dependency_t;
+
+/**
+ * 获取不变式依赖关系
+ * 
+ * 参数：
+ *   deps - 输出依赖关系数组
+ *   count - 数组大小
+ * 
+ * 返回值：实际写入的依赖关系数量
+ */
+u64 fv_get_invariant_dependencies(invariant_dependency_t* deps, u64 count);
+
+/* ========== 验证时序保证 ========== */
+
+/**
+ * 验证时序状态
+ */
+typedef enum {
+    FV_STATE_IDLE,           // 空闲
+    FV_STATE_CHECKING,       // 检查中
+    FV_STATE_VIOLATED,       // 违反
+    FV_STATE_RECOVERING      // 恢复中
+} fv_state_t;
+
+/**
+ * 获取当前验证状态
+ * 
+ * 返回值：当前验证状态
+ */
+fv_state_t fv_get_state(void);
+
+/**
+ * 设置验证状态
+ * 
+ * 参数：
+ *   state - 新的验证状态
+ */
+void fv_set_state(fv_state_t state);
+
+/* ========== 证明检查点 ========== */
+
+/**
+ * 证明检查点
+ */
+typedef struct proof_checkpoint {
+    u64 checkpoint_id;       // 检查点ID
+    u64 theorem_id;          // 关联的定理ID
+    u64 invariant_id;        // 关联的不变式ID
+    const char* proof_step;  // 证明步骤描述
+    bool verified;           // 是否已验证
+    u64 verify_time;         // 验证时间戳
+} proof_checkpoint_t;
+
+/**
+ * 注册证明检查点
+ * 
+ * 参数：
+ *   theorem_id - 定理ID
+ *   invariant_id - 不变式ID
+ *   proof_step - 证明步骤描述
+ * 
+ * 返回值：检查点ID
+ */
+u64 fv_register_checkpoint(u64 theorem_id, u64 invariant_id, const char* proof_step);
+
+/**
+ * 验证检查点
+ * 
+ * 参数：
+ *   checkpoint_id - 检查点ID
+ * 
+ * 返回值：true 如果验证成功
+ */
+bool fv_verify_checkpoint(u64 checkpoint_id);
+
+/**
+ * 获取所有检查点
+ * 
+ * 参数：
+ *   checkpoints - 输出检查点数组
+ *   count - 数组大小
+ * 
+ * 返回值：实际写入的检查点数量
+ */
+u64 fv_get_checkpoints(proof_checkpoint_t* checkpoints, u64 count);
+
+/* ========== 验证状态机 ========== */
+
+/**
+ * 验证状态机事件
+ */
+typedef enum {
+    FV_EVENT_START_CHECK,    // 开始检查
+    FV_EVENT_CHECK_PASS,     // 检查通过
+    FV_EVENT_CHECK_FAIL,     // 检查失败
+    FV_EVENT_RECOVERY_START, // 开始恢复
+    FV_EVENT_RECOVERY_END,   // 恢复结束
+} fv_event_t;
+
+/**
+ * 验证状态机转换
+ */
+typedef struct fv_transition {
+    fv_state_t from_state;   // 源状态
+    fv_event_t event;        // 事件
+    fv_state_t to_state;     // 目标状态
+    bool (*action)(void);    // 转换动作
+} fv_transition_t;
+
+/**
+ * 触发验证事件
+ * 
+ * 参数：
+ *   event - 事件类型
+ * 
+ * 返回值：true 如果状态转换成功
+ */
+bool fv_trigger_event(fv_event_t event);
+
+/* ========== 形式化规范 ========== */
+
+/**
+ * 不变式形式化规范
+ */
+typedef struct invariant_spec {
+    u64 invariant_id;         // 不变式ID
+    const char* name;         // 名称
+    const char* formal_expr;  // 形式化表达式
+    const char* description;  // 描述
+    bool (*check)(void);      // 检查函数
+} invariant_spec_t;
+
+/**
+ * 获取不变式形式化规范
+ * 
+ * 参数：
+ *   specs - 输出规范数组
+ *   count - 数组大小
+ * 
+ * 返回值：实际写入的规范数量
+ */
+u64 fv_get_invariant_specs(invariant_spec_t* specs, u64 count);
+
 /* 内部辅助函数（用于形式化证明） */
 
 /**
@@ -144,6 +326,16 @@ bool is_permission_subset(cap_id_t derived, cap_id_t source);
  * 检查类型兼容性
  */
 bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type);
+
+/**
+ * 注册代码路径（用于覆盖率统计）
+ */
+void fv_register_code_path(void);
+
+/**
+ * 标记路径已验证（用于覆盖率统计）
+ */
+void fv_mark_path_verified(void);
 
 /* 外部依赖接口（由其他内核模块提供） */
 
