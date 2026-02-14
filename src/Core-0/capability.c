@@ -6,6 +6,7 @@
 #include "capability.h"
 #include "domain.h"
 #include "audit.h"
+#include "formal_verification.h"
 #include "lib/string.h"
 #include "lib/mem.h"
 
@@ -88,6 +89,38 @@ hik_status_t cap_check_access(domain_id_t domain, cap_id_t cap, cap_rights_t req
         return HIK_ERROR_PERMISSION;
     }
     
+    /* 调用形式化验证 */
+    extern bool fv_verify_syscall_atomicity(syscall_id_t, u64, u64);
+    extern int fv_check_all_invariants(void);
+    
+    /* 在关键操作前后验证不变式 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[CAP] Invariant violation detected!\n");
+    }
+    
+    AUDIT_LOG_CAP_VERIFY(domain, cap, true);
+    return HIK_SUCCESS;
+}
+    }
+    
+    /* 检查能力是否被撤销 */
+    if (entry->flags & CAP_FLAG_REVOKED) {
+        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
+        return HIK_ERROR_CAP_REVOKED;
+    }
+    
+    /* 检查所有权 */
+    if (entry->owner != domain) {
+        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
+        return HIK_ERROR_PERMISSION;
+    }
+    
+    /* 检查权限 */
+    if ((entry->rights & required) != required) {
+        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
+        return HIK_ERROR_PERMISSION;
+    }
+    
     /* 记录审计日志 */
     AUDIT_LOG_CAP_VERIFY(domain, cap, true);
     
@@ -140,6 +173,11 @@ hik_status_t cap_transfer(domain_id_t from, domain_id_t to, cap_id_t cap)
     /* 记录审计日志 */
     AUDIT_LOG_CAP_TRANSFER(from, to, cap, true);
     
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[CAP] Invariant violation detected after cap_transfer!\n");
+    }
+    
     return HIK_SUCCESS;
 }
 
@@ -180,6 +218,12 @@ hik_status_t cap_derive(domain_id_t owner, cap_id_t parent,
             parent_entry->ref_count++;
             
             *out = i;
+            
+            /* 调用形式化验证 */
+            if (fv_check_all_invariants() != FV_SUCCESS) {
+                console_puts("[CAP] Invariant violation detected after cap_derive!\n");
+            }
+            
             return HIK_SUCCESS;
         }
     }
@@ -208,6 +252,11 @@ hik_status_t cap_revoke(cap_id_t cap)
     
     /* 记录审计日志 */
     AUDIT_LOG_CAP_REVOKE(owner, cap, true);
+    
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[CAP] Invariant violation detected after cap_revoke!\n");
+    }
     
     return HIK_SUCCESS;
 }
@@ -239,6 +288,139 @@ hik_status_t cap_create_mmio(domain_id_t owner, phys_addr_t base,
     
     AUDIT_LOG_CAP_CREATE(owner, 0, false);
     return HIK_ERROR_NO_MEMORY;
+}
+
+/* ============================================ */
+/* 形式化验证接口实现 */
+/* ============================================ */
+
+/**
+ * 检查能力是否存在
+ */
+bool capability_exists(cap_id_t cap)
+{
+    if (cap >= CAP_TABLE_SIZE) {
+        return false;
+    }
+    
+    return g_cap_table[cap].cap_id != 0 && 
+           !(g_cap_table[cap].flags & CAP_FLAG_REVOKED);
+}
+
+/**
+ * 获取能力的派生能力列表
+ */
+cap_id_t* get_capability_derivatives(cap_id_t cap)
+{
+    static cap_id_t derivative_cache[256];
+    
+    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
+        derivative_cache[0] = INVALID_CAP_ID;
+        return derivative_cache;
+    }
+    
+    /* 查找所有派生自该能力的能力 */
+    u32 count = 0;
+    for (cap_id_t i = 1; i < CAP_TABLE_SIZE; i++) {
+        if (g_cap_table[i].type == CAP_TYPE_CAP_DERIVE &&
+            g_cap_table[i].derive.parent_cap == cap &&
+            capability_exists(i)) {
+            
+            if (count < 255) {
+                derivative_cache[count++] = i;
+            }
+        }
+    }
+    
+    derivative_cache[count] = INVALID_CAP_ID;
+    return derivative_cache;
+}
+
+/**
+ * 获取能力的权限
+ */
+u64 get_capability_permissions(cap_id_t cap)
+{
+    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
+        return 0;
+    }
+    
+    return g_cap_table[cap].rights;
+}
+
+/**
+ * 获取能力的类型
+ */
+cap_type_t get_capability_type(cap_id_t cap)
+{
+    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
+        return CAP_TYPE_COUNT;
+    }
+    
+    return g_cap_table[cap].type;
+}
+
+/**
+ * 获取能力关联的对象类型
+ */
+obj_type_t get_capability_object_type(cap_id_t cap)
+{
+    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
+        return OBJ_TYPE_COUNT;
+    }
+    
+    /* 根据能力类型返回对象类型 */
+    switch (g_cap_table[cap].type) {
+    case CAP_TYPE_MEMORY:
+        return OBJ_MEMORY;
+    case CAP_TYPE_MMIO:
+        return OBJ_DEVICE;
+    case CAP_TYPE_IPC_ENDPOINT:
+        return OBJ_IPC;
+    case CAP_TYPE_CAP_DERIVE:
+        return OBJ_SHARED;
+    default:
+        return OBJ_TYPE_COUNT;
+    }
+}
+
+/**
+ * 获取两个域共享的能力
+ */
+cap_id_t* get_shared_capabilities(domain_id_t d1, domain_id_t d2)
+{
+    static cap_id_t shared_cache[256];
+    
+    if (d1 >= MAX_DOMAINS || d2 >= MAX_DOMAINS) {
+        shared_cache[0] = INVALID_CAP_ID;
+        return shared_cache;
+    }
+    
+    domain_t domain1, domain2;
+    if (domain_get_info(d1, &domain1) != HIK_SUCCESS ||
+        domain_get_info(d2, &domain2) != HIK_SUCCESS) {
+        shared_cache[0] = INVALID_CAP_ID;
+        return shared_cache;
+    }
+    
+    /* 查找两个域都持有的能力 */
+    u32 count = 0;
+    for (u32 i = 0; i < domain1.cap_count && count < 255; i++) {
+        cap_id_t cap1 = domain1.cap_space[i].cap_id;
+        
+        /* 检查domain2是否也持有该能力 */
+        for (u32 j = 0; j < domain2.cap_count && count < 255; j++) {
+            cap_id_t cap2 = domain2.cap_space[j].cap_id;
+            
+            if (cap1 == cap2 && capability_exists(cap1)) {
+                shared_cache[count++] = cap1;
+                break;
+            }
+        }
+    }
+    
+    shared_cache[count] = INVALID_CAP_ID;
+    return shared_cache;
 }
 
 /* 创建IRQ能力 */

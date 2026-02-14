@@ -8,6 +8,7 @@
 #include "domain.h"
 #include "domain_switch.h"
 #include "thread.h"
+#include "formal_verification.h"
 #include "lib/console.h"
 
 /* IPC调用实现 */
@@ -93,6 +94,32 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
     switch (syscall_num) {
         case SYSCALL_IPC_CALL:
             status = syscall_ipc_call((ipc_call_params_t *)arg1);
+            break;
+        case SYSCALL_CAP_TRANSFER:
+            status = syscall_cap_transfer((domain_id_t)arg1, (cap_id_t)arg2);
+            break;
+        case SYSCALL_CAP_DERIVE:
+            status = syscall_cap_derive((cap_id_t)arg1, (cap_rights_t)arg2, (cap_id_t*)arg3);
+            break;
+        case SYSCALL_CAP_REVOKE:
+            status = syscall_cap_revoke((cap_id_t)arg1);
+            break;
+        default:
+            console_puts("[SYSCALL] Unknown syscall: ");
+            console_putu64(syscall_num);
+            console_puts("\n");
+            status = HIK_ERROR_NOT_SUPPORTED;
+            break;
+    }
+    
+    /* 记录系统调用审计日志 */
+    AUDIT_LOG_SYSCALL(current_domain, syscall_num, (status == HIK_SUCCESS));
+    
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[SYSCALL] Invariant violation detected after syscall!\n");
+    }
+}
             break;
             
         case SYSCALL_CAP_TRANSFER:

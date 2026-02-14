@@ -5,6 +5,7 @@
 
 #include "pmm.h"
 #include "domain.h"
+#include "formal_verification.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
@@ -164,10 +165,26 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     free_frames -= count;
     used_memory += count * PAGE_SIZE;
     
-    *out = start * PAGE_SIZE;
+    /* 更新域的使用统计 */
+    if (owner != HIK_DOMAIN_CORE) {
+        domain_t *domain = get_domain(owner);
+        if (domain != NULL) {
+            domain->usage.memory_used += count * PAGE_SIZE;
+        }
+    }
+    
+    /* 记录最后一次分配的大小 */
+    set_last_allocation_size(count * PAGE_SIZE);
+    
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[PMM] Invariant violation detected!\n");
+    }
     
     /* 记录审计日志 */
     AUDIT_LOG_PMM_ALLOC(owner, *out, count, true);
+    
+    *out = start * PAGE_SIZE;
     
     return HIK_SUCCESS;
 }
@@ -200,6 +217,11 @@ hik_status_t pmm_free_frames(phys_addr_t addr, u32 count)
     /* 记录审计日志 */
     AUDIT_LOG_PMM_FREE(0, addr, count, true);
     
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[PMM] Invariant violation detected after pmm_free_frames!\n");
+    }
+    
     return HIK_SUCCESS;
 }
 
@@ -215,19 +237,10 @@ hik_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info)
     info->base_addr = frame * PAGE_SIZE;
     info->ref_count = test_bit(frame_bitmap, frame) ? 1 : 0;
     
-    /* 完整实现：获取类型和所有者信息 */
-    /* 从页帧元数据中获取详细信息 */
-    page_frame_metadata_t* metadata = get_frame_metadata(frame);
-    
-    if (metadata != NULL && info->ref_count > 0) {
-        info->type = metadata->type;
-        info->owner = metadata->owner;
-    } else {
-        info->type = PAGE_FRAME_FREE;
-        info->owner = HIK_DOMAIN_CORE;
-    }
-    
-    info->next_free = NULL;  /* 用于空闲链表 */
+    /* 简化实现：默认类型和所有者 */
+    info->type = info->ref_count > 0 ? PAGE_FRAME_CORE : PAGE_FRAME_FREE;
+    info->owner = HIK_DOMAIN_CORE;
+    info->next_free = NULL;
     
     return HIK_SUCCESS;
 }

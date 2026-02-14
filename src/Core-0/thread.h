@@ -10,6 +10,9 @@
 #include "domain.h"
 #include "hal.h"
 
+/* 全局线程表 */
+extern thread_t *g_threads[MAX_THREADS];
+
 /* 线程状态 */
 typedef enum {
     THREAD_STATE_READY,       /* 就绪 */
@@ -77,5 +80,71 @@ void scheduler_tick(void);
 
 /* 当前线程 */
 extern thread_t *g_current_thread;
+
+/* ============================================ */
+/* 形式化验证接口实现 */
+/* ============================================ */
+
+/**
+ * 检查线程是否活跃
+ */
+bool thread_is_active(thread_id_t thread)
+{
+    if (thread >= MAX_THREADS) {
+        return false;
+    }
+    
+    /* 假设有全局线程表 */
+    extern thread_t *g_threads[MAX_THREADS];
+    thread_t *t = &g_threads[thread];
+    
+    return t != NULL && (t->state == THREAD_STATE_READY || 
+                           t->state == THREAD_STATE_RUNNING ||
+                           t->state == THREAD_STATE_BLOCKED ||
+                           t->state == THREAD_STATE_WAITING);
+}
+
+/**
+ * 获取线程等待时间
+ */
+u64 get_thread_wait_time(thread_id_t thread)
+{
+    if (thread >= MAX_THREADS) {
+        return 0;
+    }
+    
+    /* 假设有全局线程表 */
+    extern thread_t *g_threads[MAX_THREADS];
+    thread_t *t = &g_threads[thread];
+    
+    if (t == NULL || t->state != THREAD_STATE_BLOCKED && 
+        t->state != THREAD_STATE_WAITING) {
+        return 0;
+    }
+    
+    /* 返回等待时间（当前时间 - 上次运行时间） */
+    extern u64 get_system_time_ns(void);
+    return get_system_time_ns() - t->last_run_time;
+}
+
+/**
+ * 获取线程等待的资源
+ */
+cap_id_t get_thread_wait_resource(thread_id_t thread)
+{
+    if (thread >= MAX_THREADS) {
+        return INVALID_CAP_ID;
+    }
+    
+    extern thread_t *g_threads[MAX_THREADS];
+    thread_t *t = &g_threads[thread];
+    
+    if (t == NULL || t->state != THREAD_STATE_BLOCKED) {
+        return INVALID_CAP_ID;
+    }
+    
+    /* 返回等待的能力ID */
+    return (cap_id_t)(u64)t->wait_data;
+}
 
 #endif /* HIK_KERNEL_THREAD_H */

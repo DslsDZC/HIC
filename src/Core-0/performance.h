@@ -76,4 +76,7 @@ void perf_measure_context_switch(u64 cycles);
 /* 性能统计输出 */
 void perf_print_stats(void);
 
+/* 时间接口 */
+u64 get_system_time_ns(void);
+
 #endif /* HIK_KERNEL_PERFORMANCE_H */

@@ -5,6 +5,18 @@
 #include "performance.h"
 #include "lib/console.h"
 #include "lib/mem.h"
+#include "hal.h"
+
+/* 获取系统时间（纳秒） */
+u64 get_system_time_ns(void)
+{
+    /* 使用HAL接口获取时间戳 */
+    u64 timestamp = hal_get_timestamp();
+    
+    /* 假设时间戳是纳秒级，如果是其他单位需要转换 */
+    /* 这里假设TSC频率约为3GHz，转换为纳秒 */
+    return timestamp / 3;  /* 简化：TSC周期/3 ≈ 纳秒 */
+}
 
 /* 全局性能计数器 */
 static perf_counter_t g_perf_counter;

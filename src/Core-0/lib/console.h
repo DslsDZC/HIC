@@ -1,6 +1,7 @@
 #ifndef HIK_LIB_CONSOLE_H
 #define HIK_LIB_CONSOLE_H
 
+#include <stdarg.h>
 #include "../include/types.h"
 #include "../include/hal.h"
 
@@ -39,6 +40,7 @@ void console_init(console_type_t type);
 void console_putchar(char c);
 void console_puts(const char *str);
 void console_printf(const char *fmt, ...);
+void console_vprintf(const char *fmt, va_list args);
 
 /* 控制台控制 */
 void console_clear(void);
@@ -53,5 +55,10 @@ void console_putu64(u64 value);
 void console_putu32(u32 value);
 void console_puti64(s64 value);
 void console_puti32(s32 value);
+
+/* 日志输出 */
+void log_info(const char *fmt, ...);
+void log_warning(const char *fmt, ...);
+void log_error(const char *fmt, ...);
 
 #endif /* HIK_LIB_CONSOLE_H */

@@ -32,7 +32,7 @@ typedef struct mem_region {
 
 /* 能力类型 */
 typedef enum {
-    CAP_MEMORY,
+    CAP_MEMORY = 0,
     CAP_DEVICE,
     CAP_IPC,
     CAP_THREAD,
@@ -156,7 +156,6 @@ u64 get_domain_revoked_caps(domain_id_t domain);
 mem_region_t get_domain_memory_region(domain_id_t domain);
 u64 get_domain_allocated_memory(domain_id_t domain);
 u64 get_domain_cpu_quota(domain_id_t domain);
-u64 get_domain_required_permissions(domain_id_t domain);
 
 /* 能力管理接口 */
 bool capability_exists(cap_id_t cap);
@@ -171,13 +170,6 @@ bool thread_is_active(thread_id_t thread);
 u64 get_thread_wait_time(thread_id_t thread);
 
 /* 系统服务接口 */
-bool (*get_syscall_atomicity_checker(syscall_id_t syscall_id))(u64, u64);
-void audit_log(audit_severity_t severity, const char* event, const char* fmt, ...);
-void system_enter_emergency_mode(void);
-void system_panic_with_reason(const char* reason);
-void console_print(const char* message);
-void debug_log(const char* message);
-u64 get_system_time_ns(void);
-u64 get_total_physical_memory(void);
+bool fv_verify_syscall_atomicity(syscall_id_t syscall_id, u64 pre_state, u64 post_state);
 
 #endif /* FORMAL_VERIFICATION_H */

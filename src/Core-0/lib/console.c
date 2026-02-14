@@ -2,26 +2,15 @@
  * HIK内核控制台实现
  */
 
+#include <stdarg.h>
 #include "console.h"
 #include "mem.h"
 
 static uint16_t *vga_buffer = (uint16_t *)VGA_BUFFER;
 static int cursor_row = 0;
 static int cursor_col = 0;
-static vga_color_t fg_color = VGA_COLOR_WHITE;
-static vga_color_t bg_color = VGA_COLOR_BLACK;
-
-/* VGA颜色属性 */
-static inline uint8_t vga_entry_color(vga_color_t fg, vga_color_t bg)
-{
-    return fg | (bg << 4);
-}
-
-/* VGA字符属性 */
-static inline uint16_t vga_entry(unsigned char uc, uint8_t color)
-{
-    return (uint16_t)uc | (uint16_t)color << 8;
-}
+static u8 fg_color = 0x0F;
+static u8 bg_color = 0x00;
 
 /* 初始化控制台 */
 void console_init(void)
@@ -33,7 +22,7 @@ void console_init(void)
 void console_clear(void)
 {
     for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
-        vga_buffer[i] = vga_entry(' ', vga_entry_color(fg_color, bg_color));
+        vga_buffer[i] = (uint16_t)' ' | ((uint16_t)(fg_color | (bg_color << 4)) << 8);
     }
     cursor_row = 0;
     cursor_col = 0;
@@ -51,8 +40,7 @@ void console_putchar(char c)
         cursor_col = (cursor_col + 4) & ~3;
     } else if (c >= ' ') {
         const int index = cursor_row * VGA_WIDTH + cursor_col;
-        vga_buffer[index] = vga_entry((unsigned char)c, 
-                                       vga_entry_color(fg_color, bg_color));
+        vga_buffer[index] = (uint16_t)c | ((uint16_t)(fg_color | (bg_color << 4)) << 8);
         cursor_col++;
     }
     
@@ -70,7 +58,7 @@ void console_putchar(char c)
         
         /* 清空最后一行 */
         for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++) {
-            vga_buffer[i] = vga_entry(' ', vga_entry_color(fg_color, bg_color));
+            vga_buffer[i] = (uint16_t)' ' | ((uint16_t)(fg_color | (bg_color << 4)) << 8);
         }
         
         cursor_row = VGA_HEIGHT - 1;
@@ -105,6 +93,25 @@ void console_putu64(uint64_t value)
     console_puts(&buffer[pos]);
 }
 
+/* 输出有符号整数（64位） */
+void console_puti64(s64 value)
+{
+    if (value < 0) {
+        console_putchar('-');
+        value = -value;
+    }
+    console_putu64((u64)value);
+}
+
+/* 格式化输出 */
+void console_printf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    console_vprintf(fmt, args);
+    va_end(args);
+}
+
 /* 输出数字（十六进制） */
 void console_puthex64(uint64_t value)
 {
@@ -117,6 +124,23 @@ void console_puthex64(uint64_t value)
     }
 }
 
+void console_puthex32(uint32_t value)
+{
+    console_puthex64(value);
+}
+
+/* 输出32位无符号整数 */
+void console_putu32(uint32_t value)
+{
+    console_putu64(value);
+}
+
+/* 输出32位有符号整数 */
+void console_puti32(s32 value)
+{
+    console_puti64(value);
+}
+
 /* 设置光标位置 */
 void console_set_cursor(int row, int col)
 {
@@ -124,4 +148,88 @@ void console_set_cursor(int row, int col)
         cursor_row = row;
         cursor_col = col;
     }
+}
+
+/* 格式化输出（va_list版本） */
+void console_vprintf(const char *fmt, va_list args)
+{
+    while (*fmt) {
+        if (*fmt == '%') {
+            fmt++;
+            switch (*fmt) {
+                case 'd':
+                    console_puti64(va_arg(args, s64));
+                    break;
+                case 'u':
+                    console_putu64(va_arg(args, u64));
+                    break;
+                case 'x':
+                    console_puthex64(va_arg(args, u64));
+                    break;
+                case 'p':
+                    console_puts("0x");
+                    console_puthex64(va_arg(args, u64));
+                    break;
+                case 'c':
+                    console_putchar(va_arg(args, int));
+                    break;
+                case 's':
+                    console_puts(va_arg(args, const char*));
+                    break;
+                case 'l':
+                    fmt++;
+                    if (*fmt == 'u') {
+                        console_putu64(va_arg(args, u64));
+                    } else if (*fmt == 'd') {
+                        console_puti64(va_arg(args, s64));
+                    } else if (*fmt == 'x') {
+                        console_puthex64(va_arg(args, u64));
+                    } else {
+                        console_putchar('%');
+                        console_putchar('l');
+                        console_putchar(*fmt);
+                    }
+                    break;
+                case '\0':
+                    console_putchar('%');
+                    goto done;
+                default:
+                    console_putchar('%');
+                    console_putchar(*fmt);
+                    break;
+            }
+        } else {
+            console_putchar(*fmt);
+        }
+        fmt++;
+    }
+done:
+    return;
+}
+
+/* 日志输出函数 */
+void log_info(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    console_vprintf(fmt, args);
+    va_end(args);
+}
+
+void log_warning(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    console_puts("[WARN] ");
+    console_vprintf(fmt, args);
+    va_end(args);
+}
+
+void log_error(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    console_puts("[ERROR] ");
+    console_vprintf(fmt, args);
+    va_end(args);
 }

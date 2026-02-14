@@ -5,11 +5,15 @@
 
 #include "thread.h"
 #include "types.h"
+#include "formal_verification.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
 /* 当前运行的线程 */
 thread_t *g_current_thread = NULL;
+
+/* 全局线程表 */
+thread_t *g_threads[MAX_THREADS] = {0};
 
 /* 就绪队列（按优先级） */
 static thread_t *ready_queues[5];  /* 5个优先级 */
@@ -147,6 +151,11 @@ void schedule(void)
     }
     
     g_current_thread = next;
+    
+    /* 调用形式化验证 */
+    if (fv_check_all_invariants() != FV_SUCCESS) {
+        console_puts("[SCHED] Invariant violation detected after thread switch!\n");
+    }
     
     /* 执行上下文切换 */
     context_switch(prev, next);

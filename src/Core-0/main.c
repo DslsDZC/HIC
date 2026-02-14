@@ -12,6 +12,7 @@
 #include "syscall.h"
 #include "build_config.h"
 #include "audit.h"
+#include "formal_verification.h"
 #include "lib/console.h"
 
 /* 内核启动信息 */
@@ -39,12 +40,17 @@ void kernel_main(kernel_info_t *info)
     console_puts("Initializing Hierarchical Isolation Kernel...\n");
     
     /* 初始化审计日志系统（必须在最前面） */
-    console_puts("[0/9] Initializing Audit System...\n");
+    console_puts("[0/10] Initializing Audit System...\n");
     audit_system_init();
+    
+    /* 初始化形式化验证系统（在审计系统之后） */
+    console_puts("[1/10] Initializing Formal Verification...\n");
+    fv_init();
+    
     /* 分配审计日志缓冲区（在pmm_init之后） */
     
     /* 0. 初始化构建时配置 */
-    console_puts("[1/9] Initializing build configuration...\n");
+    console_puts("[2/10] Initializing build configuration...\n");
     build_config_init();
     build_config_load_yaml("platform.yaml");
     build_config_parse_and_validate();
