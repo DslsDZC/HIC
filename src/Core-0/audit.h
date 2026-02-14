@@ -1,0 +1,107 @@
+/**
+ * HIK审计日志系统
+ * 遵循文档第3.3节：安全审计与防篡改日志
+ */
+
+#ifndef HIK_KERNEL_AUDIT_H
+#define HIK_KERNEL_AUDIT_H
+
+#include "types.h"
+#include "capability.h"
+#include "domain.h"
+
+/* 审计日志事件类型 */
+typedef enum {
+    AUDIT_EVENT_CAP_VERIFY,       /* 能力验证 */
+    AUDIT_EVENT_CAP_CREATE,       /* 能力创建 */
+    AUDIT_EVENT_CAP_TRANSFER,     /* 能力传递 */
+    AUDIT_EVENT_CAP_DERIVE,       /* 能力派生 */
+    AUDIT_EVENT_CAP_REVOKE,       /* 能力撤销 */
+    AUDIT_EVENT_DOMAIN_CREATE,    /* 域创建 */
+    AUDIT_EVENT_DOMAIN_DESTROY,   /* 域销毁 */
+    AUDIT_EVENT_DOMAIN_SUSPEND,   /* 域暂停 */
+    AUDIT_EVENT_DOMAIN_RESUME,    /* 域恢复 */
+    AUDIT_EVENT_THREAD_CREATE,    /* 线程创建 */
+    AUDIT_EVENT_THREAD_DESTROY,   /* 线程销毁 */
+    AUDIT_EVENT_THREAD_SWITCH,    /* 线程切换 */
+    AUDIT_EVENT_SYSCALL,          /* 系统调用 */
+    AUDIT_EVENT_IRQ,              /* 中断处理 */
+    AUDIT_EVENT_IPC_CALL,         /* IPC调用 */
+    AUDIT_EVENT_PRIVILEGED_CALL,  /* 特权调用 */
+    AUDIT_EVENT_EXCEPTION,        /* 异常事件 */
+    AUDIT_EVENT_SECURITY_VIOLATION, /* 安全违规 */
+    AUDIT_EVENT_PMM_ALLOC,        /* 物理内存分配 */
+    AUDIT_EVENT_PMM_FREE,         /* 物理内存释放 */
+    AUDIT_EVENT_PAGETABLE_MAP,    /* 页表映射 */
+    AUDIT_EVENT_PAGETABLE_UNMAP,  /* 页表解映射 */
+    AUDIT_EVENT_SERVICE_START,    /* 服务启动 */
+    AUDIT_EVENT_SERVICE_STOP,     /* 服务停止 */
+    AUDIT_EVENT_SERVICE_CRASH,    /* 服务崩溃 */
+    AUDIT_EVENT_MODULE_LOAD,      /* 模块加载 */
+    AUDIT_EVENT_MODULE_UNLOAD,    /* 模块卸载 */
+    AUDIT_EVENT_MONITOR_ACTION,   /* 监控操作 */
+} audit_event_type_t;
+
+/* 审计日志条目 */
+typedef struct audit_entry {
+    u64 timestamp;               /* 高精度时间戳 */
+    u32 sequence;                /* 序列号 */
+    audit_event_type_t type;     /* 事件类型 */
+    domain_id_t domain;          /* 相关域ID */
+    cap_id_t cap_id;             /* 相关能力ID */
+    thread_id_t thread_id;       /* 相关线程ID */
+    u64 data[4];                 /* 事件特定数据 */
+    u8 result;                   /* 结果：0=失败，1=成功 */
+    u8 reserved[3];
+} audit_entry_t;
+
+/* 审计日志缓冲区 */
+typedef struct audit_buffer {
+    void* base;                  /* 物理基地址 */
+    size_t size;                 /* 缓冲区大小 */
+    size_t write_offset;         /* 写入偏移 */
+    u64 sequence;                /* 当前序列号 */
+    bool initialized;            /* 是否已初始化 */
+} audit_buffer_t;
+
+/* 审计日志系统接口 */
+void audit_system_init(void);
+void audit_system_init_buffer(phys_addr_t base, size_t size);
+
+/* 记录审计事件 */
+void audit_log_event(audit_event_type_t type, domain_id_t domain, 
+                     cap_id_t cap_id, thread_id_t thread_id, 
+                     u64* data, u32 data_count, bool result);
+
+/* 便捷宏 */
+#define AUDIT_LOG_CAP_VERIFY(domain, cap, result) \
+    audit_log_event(AUDIT_EVENT_CAP_VERIFY, domain, cap, 0, NULL, 0, result)
+
+#define AUDIT_LOG_CAP_CREATE(domain, cap, result) \
+    audit_log_event(AUDIT_EVENT_CAP_CREATE, domain, cap, 0, NULL, 0, result)
+
+#define AUDIT_LOG_CAP_TRANSFER(from, to, cap, result) \
+    do { u64 data[2] = {from, to}; \
+         audit_log_event(AUDIT_EVENT_CAP_TRANSFER, from, cap, 0, data, 2, result); \
+    } while(0)
+
+#define AUDIT_LOG_CAP_REVOKE(domain, cap, result) \
+    audit_log_event(AUDIT_EVENT_CAP_REVOKE, domain, cap, 0, NULL, 0, result)
+
+#define AUDIT_LOG_DOMAIN_CREATE(domain, result) \
+    audit_log_event(AUDIT_EVENT_DOMAIN_CREATE, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_DOMAIN_DESTROY(domain, result) \
+    audit_log_event(AUDIT_EVENT_DOMAIN_DESTROY, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_IPC_CALL(caller, cap, result) \
+    audit_log_event(AUDIT_EVENT_IPC_CALL, caller, cap, 0, NULL, 0, result)
+
+#define AUDIT_LOG_SECURITY_VIOLATION(domain, reason) \
+    audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &reason, 1, false)
+
+/* 获取统计信息 */
+u64 audit_get_entry_count(void);
+u64 audit_get_buffer_usage(void);
+
+#endif /* HIK_KERNEL_AUDIT_H */

@@ -1,0 +1,138 @@
+# HIK内核编译配置文件
+# 用于x86_64通用架构的内核编译配置
+# 运行时硬件信息将通过CPUID、ACPI、PCI等机制动态探测
+
+# 目标架构配置
+target:
+  architecture: "x86_64"           # 目标架构
+  endian: "little"                 # 字节序
+  word_size: 64                    # 字长
+  page_size: 4096                  # 页面大小
+
+# 编译选项
+build:
+  mode: "dynamic"                  # dynamic=通用计算模式，static=嵌入式静态模式
+  optimize_level: 2                # 优化级别: 0=无, 1=基础, 2=标准, 3=激进
+  debug_symbols: true              # 是否包含调试符号
+  lto: false                       # 链接时优化（影响调试）
+  strip: false                     # 是否剥离符号表
+
+# 启用的CPU特性（编译时支持）
+cpu_features:
+  mmx: true
+  sse: true
+  sse2: true
+  sse3: true
+  ssse3: true
+  sse4_1: true
+  sse4_2: true
+  avx: true
+  avx2: true
+  aes: true
+  rdrand: true
+
+# 编译时启用的内核功能
+features:
+  smp: true                       # 对称多处理器支持
+  apic: true                      # 本地APIC/IOAPIC支持
+  acpi: true                      # ACPI支持（用于硬件探测）
+  pci: true                       # PCI总线支持
+  ahci: true                      # AHCI磁盘支持
+  usb: true                       # USB支持
+  virtio: true                    # VirtIO支持（虚拟化）
+  efi: true                       # UEFI支持
+
+# 静态链接的核心服务（必须存在，不可动态加载）
+core_services:
+  - name: "capability_manager"
+    type: "core"
+    priority: 0
+    
+  - name: "scheduler"
+    type: "core"
+    priority: 1
+    
+  - name: "memory_manager"
+    type: "core"
+    priority: 2
+    
+  - name: "irq_controller"
+    type: "core"
+    priority: 3
+    
+  - name: "syscall_dispatcher"
+    type: "core"
+    priority: 4
+    
+  - name: "module_manager"        # 模块管理器（支持动态加载）
+    type: "core"
+    priority: 5
+
+# 动态模块配置（运行时从模块仓库加载）
+dynamic_modules:
+  # 模块仓库配置
+  repository:
+    local_path: "/var/lib/hik/modules"
+    remote_url: "https://repo.hik-os.org/modules"
+    verify_signature: true        # 必须验证签名
+    cache_enabled: true           # 启用本地缓存
+  
+  # 预加载模块（启动时自动加载）
+  preload:
+    - "console_driver.hikmod"     # 控制台驱动
+    - "keyboard_driver.hikmod"    # 键盘驱动
+    - "ps2_mouse.hikmod"          # PS/2鼠标驱动
+    - "uart_driver.hikmod"        # UART驱动
+
+# 资源配额（默认值，运行时可调整）
+resource_quotas:
+  # 域默认配额
+  domain_default:
+    max_memory: 1048576           # 1MB
+    max_threads: 16
+    max_capabilities: 128
+    cpu_quota_percent: 10
+  
+  # 特定服务配额
+  service_quotas:
+    console_driver:
+      max_memory: 65536
+      max_threads: 2
+      max_capabilities: 16
+      cpu_quota_percent: 5
+
+# 安全策略
+security:
+  isolation_mode: "strict"        # strict=严格隔离, permissive=宽松模式
+  audit_enabled: true             # 启用审计日志
+  form_verification: true         # 启用形式化验证
+  
+  # 能力系统配置
+  capability:
+    max_capabilities: 65536       # 全局能力表大小
+    revoke_delay_ms: 100          # 撤销延迟（毫秒）
+  
+  # 内存保护
+  memory:
+    guard_pages: true             # 启用保护页
+    guard_page_size: 4096         # 保护页大小
+    zero_on_free: true            # 释放时清零内存
+
+# 调试选项
+debug:
+  console_log: true               # 控制台日志
+  serial_log: false               # 串口日志
+  panic_on_bug: true              # Bug检查失败时Panic
+  stack_canary: true              # 栈金丝雀保护
+  bounds_check: false             # 边界检查（性能影响大）
+
+# 部署模式
+deployment:
+  mode: "generic"                 # generic=通用计算，embedded=嵌入式
+  target_platform: "pc"           # pc=PC/服务器, embedded=嵌入式设备
+  
+  # 嵌入式模式配置（仅在mode=embedded时有效）
+  embedded:
+    static_compilation: true      # 静态编译所有模块
+    hardware_specific: true       # 针对特定硬件优化
+    deterministic: true           # 确定性执行（适合功能安全）
