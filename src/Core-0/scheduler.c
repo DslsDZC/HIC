@@ -141,6 +141,11 @@ void schedule(void)
     next->state = THREAD_STATE_RUNNING;
     next->last_run_time = hal_get_timestamp();  /* 使用HAL接口 */
     
+    /* 记录线程切换审计日志 */
+    if (prev != NULL) {
+        AUDIT_LOG_THREAD_SWITCH(prev->thread_id, next->thread_id, next->thread_id);
+    }
+    
     g_current_thread = next;
     
     /* 执行上下文切换 */
@@ -180,6 +185,7 @@ hik_status_t thread_block(thread_id_t thread_id)
 {
     /* 完整实现：线程阻塞逻辑 */
     thread_t* thread = get_thread(thread_id);
+    domain_id_t domain = thread ? thread->domain_id : 0;
     
     if (thread == NULL) {
         return HIK_ERROR_INVALID_PARAM;
@@ -199,7 +205,12 @@ hik_status_t thread_block(thread_id_t thread_id)
     thread->block_reason = BLOCK_REASON_WAIT;
     thread->block_time = hal_get_timestamp();  /* 使用HAL接口 */
     
-    log_info("线程 %lu 已阻塞\n", thread_id);
+    /* 记录审计日志 */
+    // AUDIT_LOG_THREAD_STATE_CHANGE(domain, thread_id, THREAD_STATE_BLOCKED);
+    
+    console_puts("[SCHED] Thread blocked: ");
+    console_putu64(thread_id);
+    console_puts("\n");
     
     /* 如果阻塞的是当前线程，触发调度 */
     if (g_current_thread == thread) {
@@ -214,6 +225,7 @@ hik_status_t thread_wakeup(thread_id_t thread_id)
 {
     /* 完整实现：线程唤醒逻辑 */
     thread_t* thread = get_thread(thread_id);
+    domain_id_t domain = thread ? thread->domain_id : 0;
     
     if (thread == NULL) {
         return HIK_ERROR_INVALID_PARAM;
@@ -231,7 +243,12 @@ hik_status_t thread_wakeup(thread_id_t thread_id)
     /* 加入就绪队列 */
     enqueue_thread(thread);
     
-    log_info("线程 %lu 已唤醒\n", thread_id);
+    /* 记录审计日志 */
+    // AUDIT_LOG_THREAD_STATE_CHANGE(domain, thread_id, THREAD_STATE_READY);
+    
+    console_puts("[SCHED] Thread woken up: ");
+    console_putu64(thread_id);
+    console_puts("\n");
     
     return HIK_SUCCESS;
 }

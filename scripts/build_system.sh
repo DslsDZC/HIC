@@ -19,7 +19,14 @@ RESET='\033[0m'
 # 配置
 PROJECT="HIK System"
 VERSION="0.1.0"
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# 自动检测ROOT_DIR：如果在scripts目录中，则返回上级；如果在根目录，则保持
+if [ "$(basename "$(pwd)")" = "scripts" ]; then
+    ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+else
+    ROOT_DIR="$(pwd)"
+fi
+
 BUILD_DIR="${ROOT_DIR}/build"
 OUTPUT_DIR="${ROOT_DIR}/output"
 SIGN_KEY_FILE="${BUILD_DIR}/signing_key.pem"

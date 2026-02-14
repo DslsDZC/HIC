@@ -166,6 +166,9 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     
     *out = start * PAGE_SIZE;
     
+    /* 记录审计日志 */
+    AUDIT_LOG_PMM_ALLOC(owner, *out, count, true);
+    
     return HIK_SUCCESS;
 }
 
@@ -193,6 +196,9 @@ hik_status_t pmm_free_frames(phys_addr_t addr, u32 count)
     
     free_frames += count;
     used_memory -= count * PAGE_SIZE;
+    
+    /* 记录审计日志 */
+    AUDIT_LOG_PMM_FREE(0, addr, count, true);
     
     return HIK_SUCCESS;
 }

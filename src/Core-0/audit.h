@@ -94,11 +94,73 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
 #define AUDIT_LOG_DOMAIN_DESTROY(domain, result) \
     audit_log_event(AUDIT_EVENT_DOMAIN_DESTROY, domain, 0, 0, NULL, 0, result)
 
+#define AUDIT_LOG_DOMAIN_SUSPEND(domain, result) \
+    audit_log_event(AUDIT_EVENT_DOMAIN_SUSPEND, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_DOMAIN_RESUME(domain, result) \
+    audit_log_event(AUDIT_EVENT_DOMAIN_RESUME, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_THREAD_CREATE(domain, thread, result) \
+    audit_log_event(AUDIT_EVENT_THREAD_CREATE, domain, 0, thread, NULL, 0, result)
+
+#define AUDIT_LOG_THREAD_DESTROY(domain, thread, result) \
+    audit_log_event(AUDIT_EVENT_THREAD_DESTROY, domain, 0, thread, NULL, 0, result)
+
+#define AUDIT_LOG_THREAD_SWITCH(from, to, thread) \
+    do { u64 data[2] = {from, to}; \
+         audit_log_event(AUDIT_EVENT_THREAD_SWITCH, 0, 0, thread, data, 2, true); \
+    } while(0)
+
+#define AUDIT_LOG_SYSCALL(domain, syscall_num, result) \
+    audit_log_event(AUDIT_EVENT_SYSCALL, domain, 0, 0, &syscall_num, 1, result)
+
+#define AUDIT_LOG_IRQ(vector, domain, result) \
+    audit_log_event(AUDIT_EVENT_IRQ, domain, 0, 0, &vector, 1, result)
+
 #define AUDIT_LOG_IPC_CALL(caller, cap, result) \
     audit_log_event(AUDIT_EVENT_IPC_CALL, caller, cap, 0, NULL, 0, result)
 
+#define AUDIT_LOG_EXCEPTION(domain, exc_type, result) \
+    audit_log_event(AUDIT_EVENT_EXCEPTION, domain, 0, 0, &exc_type, 1, result)
+
 #define AUDIT_LOG_SECURITY_VIOLATION(domain, reason) \
     audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &reason, 1, false)
+
+#define AUDIT_LOG_PMM_ALLOC(domain, addr, count, result) \
+    do { u64 data[2] = {addr, count}; \
+         audit_log_event(AUDIT_EVENT_PMM_ALLOC, domain, 0, 0, data, 2, result); \
+    } while(0)
+
+#define AUDIT_LOG_PMM_FREE(domain, addr, count, result) \
+    do { u64 data[2] = {addr, count}; \
+         audit_log_event(AUDIT_EVENT_PMM_FREE, domain, 0, 0, data, 2, result); \
+    } while(0)
+
+#define AUDIT_LOG_PAGETABLE_MAP(domain, virt, phys, result) \
+    do { u64 data[2] = {virt, phys}; \
+         audit_log_event(AUDIT_EVENT_PAGETABLE_MAP, domain, 0, 0, data, 2, result); \
+    } while(0)
+
+#define AUDIT_LOG_PAGETABLE_UNMAP(domain, addr, result) \
+    audit_log_event(AUDIT_EVENT_PAGETABLE_UNMAP, domain, 0, 0, &addr, 1, result)
+
+#define AUDIT_LOG_SERVICE_START(domain, result) \
+    audit_log_event(AUDIT_EVENT_SERVICE_START, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_SERVICE_STOP(domain, result) \
+    audit_log_event(AUDIT_EVENT_SERVICE_STOP, domain, 0, 0, NULL, 0, result)
+
+#define AUDIT_LOG_SERVICE_CRASH(domain, reason) \
+    audit_log_event(AUDIT_EVENT_SERVICE_CRASH, domain, 0, 0, &reason, 1, false)
+
+#define AUDIT_LOG_MODULE_LOAD(domain, instance_id, result) \
+    audit_log_event(AUDIT_EVENT_MODULE_LOAD, domain, 0, 0, &instance_id, 1, result)
+
+#define AUDIT_LOG_MODULE_UNLOAD(domain, instance_id, result) \
+    audit_log_event(AUDIT_EVENT_MODULE_UNLOAD, domain, 0, 0, &instance_id, 1, result)
+
+#define AUDIT_LOG_MONITOR_ACTION(action, domain, result) \
+    audit_log_event(AUDIT_EVENT_MONITOR_ACTION, domain, 0, 0, &action, 1, result)
 
 /* 获取统计信息 */
 u64 audit_get_entry_count(void);

@@ -16,6 +16,7 @@
 #include "console.h"
 #include "string.h"
 #include "crypto.h"
+#include "bootlog.h"
 
 // 全局变量
 static EFI_SYSTEM_TABLE *gST = NULL;
@@ -115,16 +116,22 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     // 初始化控制台
     console_init();
     
+    // 初始化引导日志
+    bootlog_init();
+    bootlog_event(BOOTLOG_UEFI_INIT, NULL, 0);
+    
     // 输出 hello world
     log_info("hello world\n");
     log_info("HIK UEFI Bootloader v1.0\n");
     log_info("Starting HIK system...\n");
+    bootlog_info("UEFI initialized");
     
     // 获取加载的映像协议
     status = gBS->HandleProtocol(gImageHandle, 
                                   &gEfiLoadedImageProtocolGuid,
                                   (void**)&gLoadedImage);
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to get loaded image protocol");
         log_error("Failed to get loaded image protocol: %d\n", status);
         return status;
     }
@@ -133,7 +140,10 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     log_info("Loading boot configuration...\n");
     status = load_boot_config();
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to load config, using defaults");
         log_warn("Failed to load config, using defaults\n");
+    } else {
+        bootlog_info("Boot configuration loaded");
     }
     
     // 步骤2: 加载内核映像
@@ -142,47 +152,58 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     uint64_t kernel_size = 0;
     status = load_kernel_image(&kernel_data, &kernel_size);
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to load kernel");
         log_error("Failed to load kernel: %d\n", status);
         return status;
     }
     log_info("Kernel loaded at 0x%llx, size: %llu bytes\n", 
              (uint64_t)kernel_data, kernel_size);
+    bootlog_info("Kernel image loaded");
     
     // 步骤3: 验证内核签名
     log_info("Verifying kernel signature...\n");
     hik_verify_result_t verify_result = hik_image_verify(kernel_data, kernel_size);
     if (verify_result != HIK_VERIFY_SUCCESS) {
+        bootlog_error("Kernel signature verification failed");
         log_error("Kernel verification failed: %d\n", verify_result);
         return EFI_SECURITY_VIOLATION;
     }
     log_info("Kernel signature verified successfully\n");
+    bootlog_info("Kernel signature verified");
     
     // 步骤4: 准备启动信息结构
     log_info("Preparing boot information...\n");
     hik_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
     if (!boot_info) {
+        bootlog_error("Failed to prepare boot info");
         log_error("Failed to prepare boot info\n");
         return EFI_OUT_OF_RESOURCES;
     }
+    bootlog_info("Boot information prepared");
     
     // 步骤5: 加载内核段到内存
     log_info("Loading kernel segments...\n");
     status = load_kernel_segments(kernel_data, kernel_size, boot_info);
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to load kernel segments");
         log_error("Failed to load kernel segments: %d\n", status);
         return status;
     }
+    bootlog_info("Kernel segments loaded");
     
     // 步骤6: 退出UEFI启动服务
     log_info("Exiting boot services...\n");
     status = exit_boot_services(boot_info);
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to exit boot services");
         log_error("Failed to exit boot services: %d\n", status);
         return status;
     }
+    bootlog_info("Boot services exited");
     
     // 步骤7: 跳转到内核
     log_info("Jumping to kernel...\n");
+    bootlog_event(BOOTLOG_JUMP_TO_KERNEL, NULL, 0);
     jump_to_kernel(boot_info);
     
     // 不应该到达这里
@@ -568,6 +589,12 @@ hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     boot_info->firmware.uefi.system_table = gST;
     boot_info->firmware.uefi.image_handle = gImageHandle;
     
+    // 保存引导日志信息
+    boot_info->boot_log.log_buffer = g_bootlog_buffer;
+    boot_info->boot_log.log_size = sizeof(g_bootlog_buffer);
+    boot_info->boot_log.log_entry_count = g_bootlog_index;
+    boot_info->boot_log.boot_time = g_boot_start_time;
+    
     // 内核信息
     hik_image_header_t *header = (hik_image_header_t *)kernel_data;
     boot_info->kernel_base = kernel_data;
@@ -584,10 +611,12 @@ hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     // 获取内存映射
     status = get_memory_map(boot_info);
     if (EFI_ERROR(status)) {
+        bootlog_error("Failed to get memory map");
         log_error("Failed to get memory map: %d\n", status);
         free_pool(boot_info);
         return NULL;
     }
+    bootlog_info("Memory map obtained");
     
     // 查找ACPI表
     find_acpi_tables(boot_info);

@@ -101,6 +101,14 @@ typedef struct {
     } modules[16];
     u64 module_count;
     
+    /* 引导日志信息 */
+    struct {
+        void* log_buffer;       /* 引导日志缓冲区地址 */
+        u64 log_size;           /* 日志大小 */
+        u32 log_entry_count;     /* 日志条目数 */
+        u64 boot_time;           /* 引导开始时间戳 */
+    } boot_log;
+    
     /* 系统信息 */
     system_info_t system;
     
