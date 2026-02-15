@@ -315,7 +315,7 @@ log_trace("Trace message\n");
 
 - 作者：DslsDZC
 - 邮箱：dsls.dzc@gmail.com
-- 项目：https://github.com/yourusername/HIK
+- 项目：https://github.com/DslsDZC/HIK
 
 ## 参考文献
 

@@ -6,7 +6,8 @@
 #include "exception.h"
 #include "monitor.h"
 #include "audit.h"
-#include "scheduler.h"
+#include "thread.h"  /* 包含 schedule 等函数声明 */
+#include "lib/mem.h"
 #include "lib/console.h"
 #include "lib/string.h"
 

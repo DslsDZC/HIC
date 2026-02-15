@@ -408,7 +408,7 @@ python3 -c "import rich; print(rich.__version__)"
 
 ```bash
 # 克隆项目（如果还没有）
-git clone https://github.com/yourusername/hik.git
+git clone https://github.com/DslsDZC/HIK.git
 cd hik
 
 # 测试构建

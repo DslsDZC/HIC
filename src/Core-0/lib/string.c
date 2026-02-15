@@ -4,6 +4,7 @@
 
 #include "string.h"
 #include "mem.h"
+#include "../types.h"
 
 /* 字符串长度 */
 size_t strlen(const char *str)
@@ -157,4 +158,47 @@ long atol(const char *str)
     }
     
     return sign * result;
+}
+
+/* 内存复制 */
+void *memcpy(void *dest, const void *src, size_t n) {
+    u8 *d = (u8*)dest;
+    const u8 *s = (const u8*)src;
+    
+    for (size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    
+    return dest;
+}
+
+/* 内存移动（处理重叠） */
+void *memmove(void *dest, const void *src, size_t n) {
+    u8 *d = (u8*)dest;
+    const u8 *s = (const u8*)src;
+    
+    if (d < s) {
+        /* 从前向后复制 */
+        for (size_t i = 0; i < n; i++) {
+            d[i] = s[i];
+        }
+    } else if (d > s) {
+        /* 从后向前复制 */
+        for (size_t i = n; i > 0; i--) {
+            d[i-1] = s[i-1];
+        }
+    }
+    
+    return dest;
+}
+
+/* 内存填充 */
+void *memset(void *s, int c, size_t n) {
+    u8 *p = (u8*)s;
+    
+    for (size_t i = 0; i < n; i++) {
+        p[i] = (u8)c;
+    }
+    
+    return s;
 }

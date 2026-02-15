@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdarg.h>
 
 /**
  * 内存复制
@@ -76,7 +77,54 @@ int strcmp(const char *s1, const char *s2)
         s1++;
         s2++;
     }
+
+    return *(const uint8_t *)s1 - *(const uint8_t *)s2;
+}
+
+/**
+ * 查找子字符串
+ */
+char *strstr(const char *haystack, const char *needle)
+{
+    if (!needle || !*needle) {
+        return (char *)haystack;
+    }
     
+    if (!haystack) {
+        return NULL;
+    }
+    
+    size_t needle_len = strlen(needle);
+    size_t haystack_len = strlen(haystack);
+    
+    if (needle_len > haystack_len) {
+        return NULL;
+    }
+    
+    for (size_t i = 0; i <= haystack_len - needle_len; i++) {
+        if (memcmp(haystack + i, needle, needle_len) == 0) {
+            return (char *)(haystack + i);
+        }
+    }
+    
+    return NULL;
+}
+
+/**
+ * 字符串比较（限制长度）
+ */
+int strncmp(const char *s1, const char *s2, size_t n)
+{
+    while (n && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+
+    if (n == 0) {
+        return 0;
+    }
+
     return *(const uint8_t *)s1 - *(const uint8_t *)s2;
 }
 
@@ -347,8 +395,169 @@ int64_t strtoll(const char *str, char **endptr, int base)
     }
     
     result = strtoull(p, endptr, base);
-    
+
     return sign * (int64_t)result;
+}
+
+/**
+ * 简化的格式化输出函数（仅支持%s和%d）
+ */
+int snprintf(char *str, size_t size, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    const char *p = fmt;
+    char *buf = str;
+    size_t remaining = size;
+
+    while (*p && remaining > 1) {
+        if (*p == '%') {
+            p++;
+            if (*p == 's') {
+                const char *s = va_arg(args, const char*);
+                while (*s && remaining > 1) {
+                    *buf++ = *s++;
+                    remaining--;
+                }
+            } else if (*p == 'd' || *p == 'i') {
+                int val = va_arg(args, int);
+                char temp[32];
+                int i = 0;
+                if (val < 0) {
+                    *buf++ = '-';
+                    remaining--;
+                    val = -val;
+                }
+                do {
+                    temp[i++] = '0' + (val % 10);
+                    val /= 10;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else if (*p == 'x' || *p == 'X') {
+                unsigned int val = va_arg(args, unsigned int);
+                char temp[32];
+                int i = 0;
+                do {
+                    temp[i++] = "0123456789ABCDEF"[val % 16];
+                    val /= 16;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else if (*p == 'l' && *(p+1) == 'l' && *(p+2) == 'x') {
+                uint64_t val = va_arg(args, uint64_t);
+                p += 2;
+                char temp[32];
+                int i = 0;
+                do {
+                    temp[i++] = "0123456789ABCDEF"[val % 16];
+                    val /= 16;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else {
+                *buf++ = *p;
+                remaining--;
+            }
+            p++;
+        } else {
+            *buf++ = *p++;
+            remaining--;
+        }
+    }
+
+    *buf = '\0';
+
+    va_end(args);
+    return size - remaining;
+}
+
+/**
+ * 简化的格式化输入函数（仅支持%d）
+ */
+int sscanf(const char *str, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    const char *p = fmt;
+    const char *s = str;
+    int count = 0;
+
+    while (*p && *s) {
+        if (*p == '%') {
+            p++;
+            if (*p == 'd') {
+                int *val = va_arg(args, int*);
+                int sign = 1;
+                int result = 0;
+
+                while (*s == ' ') s++;
+                if (*s == '-') {
+                    sign = -1;
+                    s++;
+                } else if (*s == '+') {
+                    s++;
+                }
+
+                while (*s >= '0' && *s <= '9') {
+                    result = result * 10 + (*s - '0');
+                    s++;
+                }
+
+                *val = sign * result;
+                count++;
+            } else if (*p == 'u') {
+                unsigned int *val = va_arg(args, unsigned int*);
+                unsigned int result = 0;
+
+                while (*s == ' ') s++;
+                while (*s >= '0' && *s <= '9') {
+                    result = result * 10 + (*s - '0');
+                    s++;
+                }
+
+                *val = result;
+                count++;
+            } else if (*p == 'x') {
+                unsigned int *val = va_arg(args, unsigned int*);
+                unsigned int result = 0;
+
+                while (*s == ' ') s++;
+                while (*s) {
+                    if (*s >= '0' && *s <= '9') {
+                        result = result * 16 + (*s - '0');
+                    } else if (*s >= 'a' && *s <= 'f') {
+                        result = result * 16 + (*s - 'a' + 10);
+                    } else if (*s >= 'A' && *s <= 'F') {
+                        result = result * 16 + (*s - 'A' + 10);
+                    } else {
+                        break;
+                    }
+                    s++;
+                }
+
+                *val = result;
+                count++;
+            }
+            p++;
+        } else if (*p == *s) {
+            p++;
+            s++;
+        } else {
+            break;
+        }
+    }
+
+    va_end(args);
+    return count;
 }
 
 /**

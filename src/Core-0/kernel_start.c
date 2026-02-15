@@ -23,7 +23,7 @@ void kernel_start(hik_boot_info_t* boot_info) {
     if (boot_info && boot_info->version >= 1) {
         // boot_info可能包含引导日志指针
         console_puts("Boot log entries: ");
-        console_putu64(boot_info->boot_log_count);
+        console_putu64(boot_info->boot_log.log_entry_count);
         console_puts("\n");
     }
     

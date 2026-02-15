@@ -27,6 +27,17 @@ typedef struct {
     uint8_t  base_high;
     uint32_t base_upper;
     uint32_t reserved;
+
+    /* TSS状态（x86-64） */
+    uint32_t reserved0;
+    uint64_t rsp0;
+    uint64_t rsp1;
+    uint64_t rsp2;
+    uint64_t reserved1;
+    uint64_t ist[7];
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t iomap_base;
 } __attribute__((packed)) tss_entry_t;
 
 /* GDT指针 */
@@ -44,6 +55,7 @@ typedef struct {
 #define GDT_ACCESS_EXECUTABLE (1 << 3)
 #define GDT_ACCESS_READ_WRITE (1 << 1)
 #define GDT_ACCESS_ACCESSED   (1 << 0)
+#define GDT_ACCESS_TSS        (0x9)  /* TSS类型：可用64位TSS */
 
 /* 粒度定义 */
 #define GDT_GRANULARITY_4K    (1 << 7)
@@ -64,6 +76,9 @@ void gdt_init(void);
 
 /* 加载GDT */
 extern void gdt_load(gdt_ptr_t *gdt_ptr);
+
+/* 加载TSS */
+extern void tss_load(uint16_t tss_selector);
 
 /* 设置TSS */
 void tss_set_stack(uint64_t rsp);

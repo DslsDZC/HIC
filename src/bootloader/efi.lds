@@ -1,21 +1,21 @@
 OUTPUT_FORMAT("pe-x86-64")
-ENTRY(_start)
+ENTRY(efi_main)
 SECTIONS
 {
     . = 0;
-    .text : {
+    .text : ALIGN(4096) {
         *(.text)
         *(.text*)
     }
-    .rodata : {
+    .rodata : ALIGN(4096) {
         *(.rodata)
         *(.rodata*)
     }
-    .data : {
+    .data : ALIGN(4096) {
         *(.data)
         *(.data*)
     }
-    .bss : {
+    .bss : ALIGN(4096) {
         *(.bss)
         *(.bss*)
         *(COMMON)
@@ -23,5 +23,11 @@ SECTIONS
     /DISCARD/ : {
         *(.comment)
         *(.note.gnu.build-id)
+        *(.eh_frame)
+    }
+    /* 设置UEFI子系统类型 */
+    . = 0;
+    .pe_header : {
+        LONG(0x0000000a);  /* Subsystem: EFI Application */
     }
 }

@@ -35,4 +35,9 @@ int atoi(const char *str);
 long atol(const char *str);
 int memcmp(const void *ptr1, const void *ptr2, size_t len);
 
+/* 内存操作 */
+void *memcpy(void *dest, const void *src, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
+void *memset(void *s, int c, size_t n);
+
 #endif /* HIK_LIB_STRING_H */

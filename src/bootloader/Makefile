@@ -27,7 +27,8 @@ BIN_DIR    = bin
 BUILD_TARGET ?= uefi
 
 # 源文件
-UEFI_CORE_SRCS = $(wildcard $(SRC_DIR)/main.c) $(wildcard $(SRC_DIR)/*.c)
+UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c
+# UEFI_CRYPTO_SRCS = $(wildcard $(SRC_DIR)/crypto/*.c)  # 暂时禁用
 UEFI_LIB_SRCS  = $(wildcard $(LIB_DIR)/*.c)
 UEFI_SRCS      = $(UEFI_CORE_SRCS) $(UEFI_LIB_SRCS)
 
@@ -48,9 +49,9 @@ UEFI_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
              -mno-red-zone -mcmodel=large -m64 \
              -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
-UEFI_LDFLAGS = -nostdlib -shared -Wl,-subsystem,10 \
-               -e efi_main -Wl,-entry:efi_main \
-               -Wl,-Map,$(BIN_DIR)/$(UEFI_PROJECT).map
+UEFI_LDFLAGS = -nostdlib -shared -e efi_main \
+               --subsystem=10 \
+               -Map $(BIN_DIR)/$(UEFI_PROJECT).map
 
 # BIOS编译选项
 BIOS_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
@@ -110,11 +111,6 @@ $(BIN_DIR)/$(BIOS_PROJECT).elf: $(BIOS_OBJS) bios.lds | $(BIN_DIR)
 # 生成BIOS二进制
 $(BIN_DIR)/$(BIOS_PROJECT).bin: $(BIN_DIR)/$(BIOS_PROJECT).elf
 	$(BIOS_OBJCOPY) -O binary $< $@
-
-# 生成UEFI应用
-$(BIN_DIR)/bootx64.efi: $(BIN_DIR)/$(UEFI_PROJECT).efi
-	$(UEFI_OBJCOPY) -j .text -j .data -j .rodata -j .reloc --strip-unneeded \
-	            -O binary $< $@
 
 # 清理
 clean:

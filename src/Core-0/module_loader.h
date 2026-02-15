@@ -1,7 +1,10 @@
 /**
- * HIK内核动态模块加载器
- * 支持运行时加载.hikmod格式的驱动模块
+ * HIK内核静态模块加载器
+ * 支持静态链接.hikmod格式的驱动模块
  */
+
+#ifndef HIK_MODULE_LOADER_H
+#define HIK_MODULE_LOADER_H
 
 #include <stdint.h>
 #include "types.h"

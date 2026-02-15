@@ -52,7 +52,7 @@ typedef struct privileged_service {
     
     /* 模块信息 */
     u64             instance_id;     /* 模块实例ID */
-    hik_module_instance_t *module;   /* 模块实例指针 */
+    hikmod_instance_t *module;   /* 模块实例指针 */
     
     /* 物理内存映射（直接映射） */
     phys_addr_t     code_base;       /* 代码段物理地址 */

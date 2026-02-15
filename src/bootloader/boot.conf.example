@@ -1,0 +1,140 @@
+# HIK 引导程序配置文件
+# 此文件用于配置引导程序的各种参数
+# 
+# ⚠️ 重要说明：
+# 1. 此配置文件会被传递给内核
+# 2. 内核会读取此配置来调整运行时行为
+# 3. 部分配置会影响与 platform.yaml 的交互
+# 4. 修改此文件需要重启系统才能生效
+
+# ============ 基本配置 ============
+
+# 内核路径（相对于EFI分区根目录）
+kernel=\EFI\HIK\kernel.hik
+
+# 内核命令行参数
+# 这些参数会被传递给内核，与 platform.yaml 中的设置互补
+cmdline=console=ttyS0,115200n8 earlyprintk=serial
+
+# 启动超时时间（秒）
+timeout=5
+
+# 启用调试模式（0=禁用, 1=启用）
+# 启用后会增加详细日志输出
+debug=1
+
+# ============ 视频配置 ============
+
+# 视频模式：text, vga, vesa, none
+# 这里的设置会影响内核的图形初始化
+video=text
+
+# VESA模式参数（仅当video=vesa时有效）
+# 格式：widthxheightxbpp
+# video=vesa1024x768x32
+
+# ============ 串口配置 ============
+
+# 串口端口和波特率
+# 格式：端口,波特率
+# 这与 platform.yaml 中的 serial_log 配置协同工作
+serial=0x3F8,115200
+
+# ============ ACPI配置 ============
+
+# 启用ACPI（0=禁用, 1=启用）
+# 禁用ACPI会影响内核的硬件检测能力
+# 与 platform.yaml 中的 features.acpi 配置对应
+acpi=1
+
+# ============ 系统配置 ============
+
+# 启用安全启动（0=禁用, 1=启用）
+# 与 platform.yaml 中的 security.isolation_mode 相关
+secure_boot=0
+
+# 启用恢复模式（0=禁用, 1=启用）
+# 恢复模式下会禁用某些优化和特性
+recovery_mode=0
+
+# 启用快速启动（0=禁用, 1=启用）
+# 快速启动会跳过一些硬件检测
+fast_boot=0
+
+# 启用静默启动（0=禁用, 1=启用）
+# 静默启动会减少屏幕输出
+quiet_boot=0
+
+# ============ 硬件检测配置 ============
+
+# 检测CPU信息（0=禁用, 1=启用）
+# 禁用CPU检测会影响内核的性能优化
+detect_cpu=1
+
+# 检测内存信息（0=禁用, 1=启用）
+# 内存检测结果会影响内存管理策略
+detect_memory=1
+
+# 检测PCI设备（0=禁用, 1=启用）
+# 与 platform.yaml 中的 features.pci 配置对应
+detect_pci=0
+
+# ============ 日志配置 ============
+
+# 日志级别：error, warn, info, debug, trace
+# 这会影响引导程序和内核的日志详细程度
+log_level=info
+
+# 日志输出到串口（0=禁用, 1=启用）
+# 与 platform.yaml 中的 debug.serial_log 配置对应
+log_to_serial=1
+
+# 日志输出到屏幕（0=禁用, 1=启用）
+# 与 platform.yaml 中的 debug.console_log 配置对应
+log_to_screen=1
+
+# 日志缓冲区大小（条目数）
+# 这会影响日志记录的容量
+log_buffer_size=64
+
+# ============ 内存配置 ============
+
+# 最大内存限制（MB），0表示不限制
+# 这会限制内核可使用的物理内存
+max_memory=0
+
+# 启用高位内存（0=禁用, 1=启用）
+# 影响内核是否使用4GB以上的内存
+enable_high_memory=1
+
+# ============ 性能配置 ============
+
+# 启用MTRR（0=禁用, 1=启用）
+# 与 platform.yaml 中的 CPU 特性相关
+enable_mtrr=1
+
+# 启用CPU缓存（0=禁用, 1=启用）
+# 禁用缓存会严重影响性能
+enable_cache=1
+
+# 启用TSC（0=禁用, 1=启用）
+# 时间戳计数器用于精确计时
+enable_tsc=1
+
+# ============ 配置传递机制 ============
+#
+# 此配置文件的处理流程：
+# 1. 引导程序在启动时读取此文件
+# 2. 解析配置项并应用到引导程序行为
+# 3. 将配置文件内容保存到内存
+# 4. 通过 boot_info.config 结构传递给内核
+# 5. 内核读取配置并调整其运行时行为
+#
+# 配置优先级：
+# boot.conf > platform.yaml > 内核默认值
+#
+# 修改建议：
+# - 调试问题：增加 debug=1 和 log_level=debug
+# - 性能测试：启用 fast_boot=1
+# - 安全需求：启用 secure_boot=1
+# - 嵌入式系统：根据硬件调整内存限制

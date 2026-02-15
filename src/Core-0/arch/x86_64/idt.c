@@ -3,6 +3,7 @@
  */
 
 #include "idt.h"
+#include "gdt.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
@@ -35,11 +36,8 @@ extern void isr_20(void);
 extern void isr_30(void);
 extern void isr_128(void);
 
-/* 中断处理函数 */
-static void (*interrupt_handlers[256])(void) = {NULL};
-
 /* 设置IDT门 */
-void idt_set_gate(uint8_t vector, uint64_t handler, uint16_t selector, 
+void idt_set_gate(uint8_t vector, uint64_t handler, uint16_t selector,
                  uint8_t type, uint8_t dpl)
 {
     idt[vector].offset_low  = handler & 0xFFFF;
@@ -64,49 +62,49 @@ void idt_init(void)
     idt_ptr.base = (uint64_t)&idt;
     
     /* 设置异常处理程序 */
-    idt_set_gate(IDT_VECTOR_DIVIDE_ERROR, (uint64_t)isr_0, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_DIVIDE_ERROR, (uint64_t)isr_0, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_DEBUG, (uint64_t)isr_1, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_DEBUG, (uint64_t)isr_1, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_NMI, (uint64_t)isr_2, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_NMI, (uint64_t)isr_2, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_BREAKPOINT, (uint64_t)isr_3, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_BREAKPOINT, (uint64_t)isr_3, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_OVERFLOW, (uint64_t)isr_4, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_OVERFLOW, (uint64_t)isr_4, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_BOUND_RANGE, (uint64_t)isr_5, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_BOUND_RANGE, (uint64_t)isr_5, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_INVALID_OPCODE, (uint64_t)isr_6, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_INVALID_OPCODE, (uint64_t)isr_6, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_DEVICE_NOT_AVAIL, (uint64_t)isr_7, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_DEVICE_NOT_AVAIL, (uint64_t)isr_7, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_DOUBLE_FAULT, (uint64_t)isr_8, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_DOUBLE_FAULT, (uint64_t)isr_8, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_INVALID_TSS, (uint64_t)isr_10, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_INVALID_TSS, (uint64_t)isr_10, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_SEGMENT_NOT_PRESENT, (uint64_t)isr_11, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_SEGMENT_NOT_PRESENT, (uint64_t)isr_11, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_STACK_SEGMENT, (uint64_t)isr_12, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_STACK_SEGMENT, (uint64_t)isr_12, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_GENERAL_PROTECTION, (uint64_t)isr_13, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_GENERAL_PROTECTION, (uint64_t)isr_13, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_PAGE_FAULT, (uint64_t)isr_14, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_PAGE_FAULT, (uint64_t)isr_14, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_X87_FPU_ERROR, (uint64_t)isr_16, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_X87_FPU_ERROR, (uint64_t)isr_16, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_ALIGNMENT_CHECK, (uint64_t)isr_17, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_ALIGNMENT_CHECK, (uint64_t)isr_17, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_MACHINE_CHECK, (uint64_t)isr_18, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_MACHINE_CHECK, (uint64_t)isr_18, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_SIMD_FP, (uint64_t)isr_19, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_SIMD_FP, (uint64_t)isr_19, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_VIRTUALIZATION, (uint64_t)isr_20, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_VIRTUALIZATION, (uint64_t)isr_20, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    idt_set_gate(IDT_VECTOR_SECURITY, (uint64_t)isr_30, KERNEL_CS, 
+    idt_set_gate(IDT_VECTOR_SECURITY, (uint64_t)isr_30, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    
+
     /* 设置系统调用 */
-    idt_set_gate(IDT_VECTOR_SYSCALL, (uint64_t)isr_128, USER_CS, 
+    idt_set_gate(IDT_VECTOR_SYSCALL, (uint64_t)isr_128, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL3);
     
     /* 加载IDT */

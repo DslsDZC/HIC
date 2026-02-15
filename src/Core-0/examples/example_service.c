@@ -1,15 +1,15 @@
 /**
  * HIK示例Privileged-1服务
  * 演示如何创建和实现一个Privileged-1服务
- * 
+ *
  * 此示例实现一个简单的回显服务，接收消息并返回
  */
 
-#include "../include/privileged_service.h"
-#include "../include/types.h"
-#include "../include/console.h"
-#include "../include/string.h"
-#include "../include/mem.h"
+#include "privileged_service.h"
+#include "types.h"
+#include "console.h"
+#include "string.h"
+#include "mem.h"
 
 /* 服务端点定义 */
 #define SERVICE_ENDPOINT_ECHO  0x1000

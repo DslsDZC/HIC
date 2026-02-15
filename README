@@ -9,9 +9,9 @@ Quick Start
 -----------
 
 * Report a bug: See docs/Wiki/FAQ.md
-* Get the latest version: https://github.com/your-org/HIK
+* Get the latest version: https://github.com/DslsDZC/HIK
 * Build the kernel: See docs/Wiki/03-QuickStart.md
-* View architecture: See docs/Wiki/02-Architecture.md
+* View architecture: docs/Wiki/02-Architecture.md
 
 Essential Documentation
 -----------------------
@@ -23,7 +23,7 @@ All users should be familiar with:
 * License: See LICENSE
 * Mathematical proofs: src/Core-0/math_proofs.tex
 
-Documentation is available in the docs/ directory.
+Documentation is available in the docs directory.
 
 
 Who Are You?
@@ -37,7 +37,6 @@ Find your role below:
 * System Administrator - Configuring and troubleshooting
 * Privileged Service Developer - Building Privileged-1 layer services
 * Application Developer - Creating Application-3 layer applications
-* AI Coding Assistant - LLMs and AI-powered development tools
 
 
 For Specific Users
@@ -112,23 +111,6 @@ Create Application-3 layer applications:
 * API Reference: docs/Wiki/11-CapabilitySystem.md
 * Development Guide: docs/Wiki/05-DevelopmentEnvironment.md
 
-AI Coding Assistant
--------------------
-
-CRITICAL: If you are an LLM or AI-powered coding assistant, you MUST read and
-follow the HIK coding standards and formal verification requirements before
-contributing:
-
-* Coding Standards: docs/Wiki/06-CodingStandards.md
-* Formal Verification: src/Core-0/formal_verification.c
-* Architecture Compliance: docs/COMPLIANCE_REPORT.md
-* Mathematical Proofs: src/Core-0/math_proofs.tex
-
-This documentation contains essential requirements about code completeness,
-formal verification compliance, and mathematical proof adherence that all AI
-tools must follow.
-
-
 Core Documentation
 =================
 
@@ -157,4 +139,5 @@ Communication and Support
 * Documentation: docs/Wiki/index.md
 * FAQ: docs/Wiki/FAQ.md
 * Build Scripts: scripts/build_system.py, scripts/build_system.sh
+* Repository: https://github.com/DslsDZC/HIK
 * License: LICENSE (GPL-2.0)

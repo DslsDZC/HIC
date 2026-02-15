@@ -8,6 +8,9 @@
 #include "efi.h"
 #include "stdlib.h"
 
+/* 外部全局变量（在main.c中定义） */
+extern EFI_SYSTEM_TABLE *gST;
+
 /* 日志缓冲区 */
 #define BOOTLOG_MAX_ENTRIES 64
 static bootlog_entry_t g_bootlog_buffer[BOOTLOG_MAX_ENTRIES];
@@ -21,15 +24,15 @@ static uint64_t get_timestamp(void)
         return 0;
     }
     
-    EFI_TIME_CAPS time_caps;
-    EFI_STATUS status = gST->RuntimeServices->GetTime(NULL, &time_caps);
-    if (EFI_ERROR(status)) {
-        return 0;
+    /* 使用Boot Services获取时间 */
+    if (gST->boot_services != NULL) {
+        // 这里可以使用更精确的计时器
+        // 目前返回一个简单的递增值
+        static uint64_t counter = 0;
+        return ++counter;
     }
     
-    /* 简化实现：返回相对时间 */
-    return (gST->BootServices->GetTimerValue) ? 
-           gST->BootServices->GetTimerValue() : 0;
+    return 0;
 }
 
 /* 初始化引导日志 */
@@ -87,4 +90,22 @@ void bootlog_info(const char* msg)
     console_puts("\n");
     
     bootlog_event(BOOTLOG_KERNEL_LOAD, msg, strlen(msg));
+}
+
+/* 获取日志缓冲区 */
+const bootlog_entry_t* bootlog_get_buffer(void)
+{
+    return g_bootlog_buffer;
+}
+
+/* 获取日志索引 */
+uint32_t bootlog_get_index(void)
+{
+    return g_bootlog_index;
+}
+
+/* 获取启动时间 */
+uint64_t bootlog_get_start_time(void)
+{
+    return g_boot_start_time;
 }

@@ -72,11 +72,16 @@ void perf_init(void);
 void perf_measure_syscall(u64 cycles);
 void perf_measure_irq(u64 cycles);
 void perf_measure_context_switch(u64 cycles);
+void perf_measure_timer(u64 ticks);
+void perf_update_stats(void);
 
 /* 性能统计输出 */
 void perf_print_stats(void);
 
 /* 时间接口 */
 u64 get_system_time_ns(void);
+
+/* 定时器接口 */
+void timer_update(void);
 
 #endif /* HIK_KERNEL_PERFORMANCE_H */

@@ -2,8 +2,8 @@
 #define HIK_LIB_CONSOLE_H
 
 #include <stdarg.h>
-#include "../include/types.h"
-#include "../include/hal.h"
+#include "types.h"
+#include "hal.h"
 
 /* VGA控制台（x86特有） */
 #if defined(__x86_64__)

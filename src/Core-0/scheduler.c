@@ -13,14 +13,14 @@
 thread_t *g_current_thread = NULL;
 
 /* 全局线程表 */
-thread_t *g_threads[MAX_THREADS] = {0};
+thread_t g_threads[MAX_THREADS] = {0};
 
 /* 就绪队列（按优先级） */
 static thread_t *ready_queues[5];  /* 5个优先级 */
 static u64 runqueue_counts[5];
 
 /* 空闲线程 */
-static thread_t idle_thread;
+thread_t idle_thread;
 
 /* 初始化调度器 */
 void scheduler_init(void)
@@ -70,7 +70,7 @@ static void enqueue_thread(thread_t *thread)
 }
 
 /* 从就绪队列移除线程 */
-static void dequeue_thread(thread_t *thread)
+__attribute__((unused)) static void dequeue_thread(thread_t *thread)
 {
     if (thread == NULL) {
         return;
@@ -145,11 +145,6 @@ void schedule(void)
     next->state = THREAD_STATE_RUNNING;
     next->last_run_time = hal_get_timestamp();  /* 使用HAL接口 */
     
-    /* 记录线程切换审计日志 */
-    if (prev != NULL) {
-        AUDIT_LOG_THREAD_SWITCH(prev->thread_id, next->thread_id, next->thread_id);
-    }
-    
     g_current_thread = next;
     
     /* 调用形式化验证 */
@@ -159,6 +154,25 @@ void schedule(void)
     
     /* 执行上下文切换 */
     context_switch(prev, next);
+}
+
+/* 选择下一个要运行的线程 */
+thread_id_t scheduler_pick_next(void)
+{
+    /* 按优先级从高到低查找就绪线程 */
+    for (int prio = HIK_PRIORITY_REALTIME; prio >= HIK_PRIORITY_IDLE; prio--) {
+        thread_t *thread = ready_queues[prio];
+        
+        while (thread != NULL) {
+            if (thread->state == THREAD_STATE_READY && thread->domain_id != HIK_DOMAIN_CORE) {
+                return thread->thread_id;
+            }
+            thread = thread->next;
+        }
+    }
+    
+    /* 没有就绪线程，返回空闲线程 */
+    return idle_thread.thread_id;
 }
 
 /* 调度器时钟tick */
@@ -190,29 +204,19 @@ void thread_yield(void)
 }
 
 /* 阻塞线程 */
-hik_status_t thread_block(thread_id_t thread_id)
-{
-    /* 完整实现：线程阻塞逻辑 */
-    thread_t* thread = get_thread(thread_id);
-    domain_id_t domain = thread ? thread->domain_id : 0;
+hik_status_t thread_block(thread_id_t thread_id) {
+    if (thread_id >= MAX_THREADS) {
+        return HIK_ERROR_INVALID_PARAM;
+    }
+    
+    thread_t* thread = &g_threads[thread_id];
     
     if (thread == NULL) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
-    if (thread->state == THREAD_STATE_BLOCKED) {
-        return HIK_ERROR_INVALID_STATE;
-    }
-    
-    /* 从运行队列移除 */
-    if (thread->state == THREAD_STATE_RUNNING) {
-        dequeue_thread(thread);
-    }
-    
-    /* 设置为阻塞状态 */
+    /* 从就绪队列中移除 */
     thread->state = THREAD_STATE_BLOCKED;
-    thread->block_reason = BLOCK_REASON_WAIT;
-    thread->block_time = hal_get_timestamp();  /* 使用HAL接口 */
     
     /* 记录审计日志 */
     // AUDIT_LOG_THREAD_STATE_CHANGE(domain, thread_id, THREAD_STATE_BLOCKED);
@@ -230,11 +234,12 @@ hik_status_t thread_block(thread_id_t thread_id)
 }
 
 /* 唤醒线程 */
-hik_status_t thread_wakeup(thread_id_t thread_id)
-{
-    /* 完整实现：线程唤醒逻辑 */
-    thread_t* thread = get_thread(thread_id);
-    domain_id_t domain = thread ? thread->domain_id : 0;
+hik_status_t thread_wakeup(thread_id_t thread_id) {
+    if (thread_id >= MAX_THREADS) {
+        return HIK_ERROR_INVALID_PARAM;
+    }
+    
+    thread_t* thread = &g_threads[thread_id];
     
     if (thread == NULL) {
         return HIK_ERROR_INVALID_PARAM;
@@ -247,17 +252,30 @@ hik_status_t thread_wakeup(thread_id_t thread_id)
     /* 重置时间片 */
     thread->time_slice = 100;
     thread->state = THREAD_STATE_READY;
-    thread->block_reason = BLOCK_REASON_NONE;
     
     /* 加入就绪队列 */
     enqueue_thread(thread);
-    
-    /* 记录审计日志 */
-    // AUDIT_LOG_THREAD_STATE_CHANGE(domain, thread_id, THREAD_STATE_READY);
     
     console_puts("[SCHED] Thread woken up: ");
     console_putu64(thread_id);
     console_puts("\n");
     
     return HIK_SUCCESS;
+}
+
+/* 检查线程超时 */
+void thread_check_timeouts(void) {
+    u64 current_time = hal_get_timestamp();
+    
+    for (u32 i = 0; i < MAX_THREADS; i++) {
+        thread_t *t = &g_threads[i];
+        
+        if (t && (t->state == THREAD_STATE_BLOCKED || t->state == THREAD_STATE_WAITING)) {
+            /* 检查是否超时（超时时间：5秒） */
+            if (current_time - t->last_run_time > 5000000) {
+                /* 超时，唤醒线程 */
+                thread_wakeup(i);
+            }
+        }
+    }
 }

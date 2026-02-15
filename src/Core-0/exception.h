@@ -9,6 +9,7 @@
 #include "types.h"
 #include "domain.h"
 #include "thread.h"
+#include "hal.h"
 
 /* 异常类型 */
 typedef enum {
@@ -41,7 +42,7 @@ typedef struct {
     thread_id_t thread;
     u64 error_code;
     u64 fault_address;
-    arch_context_t* context;
+    hal_context_t* context;
 } exception_context_t;
 
 /* 异常处理程序类型 */

@@ -154,9 +154,9 @@
 
 ## 🔗 相关链接
 
-- **项目主页**: [GitHub仓库](https://github.com/yourusername/hik)
-- **问题追踪**: [Issues](https://github.com/yourusername/hik/issues)
-- **讨论区**: [Discussions](https://github.com/yourusername/hik/discussions)
+- **项目主页**: [GitHub仓库](https://github.com/DslsDZC/HIK)
+- **问题追踪**: [Issues](https://github.com/DslsDZC/HIK/issues)
+- **讨论区**: [Discussions](https://github.com/DslsDZC/HIK/discussions)
 - **技术文档**: [TD目录](../TD/)
 - **项目文档**: [README](../README.md)
 
@@ -174,8 +174,8 @@
 ## 📧 联系方式
 
 - **Email**: dsls.dzc@gmail.com
-- **GitHub**: https://github.com/yourusername/hik
-- **Discussions**: https://github.com/yourusername/hik/discussions
+- **GitHub**: https://github.com/DslsDZC/HIK
+- **Discussions**: https://github.com/DslsDZC/HIK/discussions
 
 ## 📄 许可证
 

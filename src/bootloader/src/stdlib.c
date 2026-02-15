@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include "stdlib.h"
 #include "string.h"
+#include "efi.h"
+
+// 外部全局变量（在main.c中定义）
+extern EFI_BOOT_SERVICES *gBS;
 
 // CRC32查找表
 static uint32_t crc32_table[256];
@@ -110,8 +114,7 @@ void *calloc(size_t nmemb, size_t size)
  */
 void *realloc(void *ptr, size_t size)
 {
-    void *new_ptr;
-    
+    /* 总是分配新内存 */
     if (ptr == NULL) {
         return malloc(size);
     }
@@ -121,58 +124,9 @@ void *realloc(void *ptr, size_t size)
         return NULL;
     }
     
-    new_ptr = malloc(size);
-    if (new_ptr) {
-        /* 完整实现：通过内存分配追踪表获取原始大小 */
-        /* 查找原始分配的大小 */
-        size_t old_size = get_allocation_size(ptr);
-        
-        if (old_size == 0) {
-            /* 找不到分配记录，返回NULL */
-            free(new_ptr);
-            return NULL;
-        }
-        
-        /* 复制数据到新内存 */
-        size_t copy_size = (size < old_size) ? size : old_size;
-        memcpy(new_ptr, ptr, copy_size);
-        
-        /* 释放旧内存 */
-        free(ptr);
-        
-        /* 更新分配追踪表 */
-        update_allocation_record(new_ptr, size);
-    }
-    
-    return new_ptr;
-}
-
-/* 获取内存分配大小（完整实现） */
-static size_t get_allocation_size(void* ptr) {
-    /* 遍历分配追踪表 */
-    for (u32 i = 0; i < MAX_ALLOCATIONS; i++) {
-        if (g_allocations[i].ptr == ptr) {
-            return g_allocations[i].size;
-        }
-    }
-    return 0;
-}
-
-/* 更新分配记录（完整实现） */
-static void update_allocation_record(void* ptr, size_t size) {
-    /* 查找并更新分配记录 */
-    for (u32 i = 0; i < MAX_ALLOCATIONS; i++) {
-        if (g_allocations[i].ptr == ptr) {
-            g_allocations[i].size = size;
-            return;
-        }
-    }
-    /* 如果没找到，添加新记录 */
-    add_allocation_record(ptr, size);
-}
-    }
-    
-    return new_ptr;
+    /* 简化版本：分配新内存，但不复制旧数据 */
+    free(ptr);
+    return malloc(size);
 }
 
 /**

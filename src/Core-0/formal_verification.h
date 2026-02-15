@@ -37,6 +37,11 @@ typedef enum {
     CAP_IPC,
     CAP_THREAD,
     CAP_SHARED,
+    CAP_CAP_DERIVE,        /* 派生能力 */
+    CAP_IRQ,               /* 中断能力 */
+    CAP_ENDPOINT,          /* IPC端点 */
+    CAP_SERVICE,           /* 服务能力 */
+    CAP_MMIO,              /* MMIO区域能力 */
     CAP_TYPE_COUNT
 } cap_type_t;
 
@@ -311,21 +316,6 @@ typedef struct invariant_spec {
 u64 fv_get_invariant_specs(invariant_spec_t* specs, u64 count);
 
 /* 内部辅助函数（用于形式化证明） */
-
-/**
- * 检查两个内存区域是否重叠
- */
-bool regions_overlap(const mem_region_t* r1, const mem_region_t* r2);
-
-/**
- * 检查权限是否是子集
- */
-bool is_permission_subset(cap_id_t derived, cap_id_t source);
-
-/**
- * 检查类型兼容性
- */
-bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type);
 
 /**
  * 注册代码路径（用于覆盖率统计）

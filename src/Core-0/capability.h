@@ -1,22 +1,16 @@
 /**
  * HIK能力系统(Capability System)头文件
- * 遵循三层模型文档第3.1节：能力系统的动态生命周期与安全传递
+ * 遵循三层模型文档第3.1节：能力系统的静态生命周期与安全传递
  */
 
 #ifndef HIK_KERNEL_CAPABILITY_H
 #define HIK_KERNEL_CAPABILITY_H
 
 #include "types.h"
+#include "formal_verification.h"  /* 包含 cap_type_t 和 mem_region_t 定义 */
 
-/* 能力类型定义 */
-typedef enum {
-    CAP_TYPE_MEMORY,           /* 内存区域能力 */
-    CAP_TYPE_MMIO,             /* MMIO区域能力 */
-    CAP_TYPE_IRQ,              /* 中断线能力 */
-    CAP_TYPE_ENDPOINT,         /* IPC端点能力 */
-    CAP_TYPE_CAP_DERIVE,       /* 派生能力 */
-    CAP_TYPE_SERVICE,          /* 服务能力 */
-} cap_type_t;
+/* 能力表大小 */
+#define CAP_TABLE_SIZE  65536
 
 /* 内存权限标志 */
 #define CAP_MEM_READ   (1U << 0)

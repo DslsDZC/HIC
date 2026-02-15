@@ -6,6 +6,7 @@
 #include "domain.h"
 #include "capability.h"
 #include "pmm.h"
+#include "pagetable.h"
 #include "formal_verification.h"
 #include "console.h"
 
@@ -65,10 +66,17 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
     
     /* 分配能力空间 */
     domain->cap_capacity = quota->max_caps;
-    domain->cap_space = (cap_handle_t *)pmm_alloc_frames(HIK_DOMAIN_CORE,
-                                                       (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE,
-                                                       PAGE_FRAME_CORE, NULL);
+    phys_addr_t cap_space_phys;
+    u32 cap_pages = (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE;
+    if (pmm_alloc_frames(HIK_DOMAIN_CORE, cap_pages, PAGE_FRAME_CORE, &cap_space_phys) != HIK_SUCCESS) {
+        return HIK_ERROR_NO_RESOURCE;
+    }
+    
+    /* 将物理地址映射到虚拟地址 */
+    /* 使用直接映射（虚拟地址 = 物理地址） */
+    domain->cap_space = (cap_handle_t *)cap_space_phys;
     if (!domain->cap_space) {
+        pmm_free_frames(cap_space_phys, cap_pages);
         return HIK_ERROR_NO_RESOURCE;
     }
     
@@ -90,7 +98,7 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
     domain->phys_size = mem_size;
     domain->page_table = 0;
     domain->cap_count = 0;
-    domain->thread_list = NULL;
+    domain->thread_list = 0;
     domain->thread_count = 0;
     domain->quota = *quota;
     domain->usage.memory_used = 0;
@@ -130,7 +138,7 @@ hik_status_t domain_destroy(domain_id_t domain_id)
     
     /* 回收所有能力 */
     for (u32 i = 0; i < domain->cap_count; i++) {
-        cap_revoke(domain_id, domain->cap_space[i]);
+        cap_revoke(domain->cap_space[i].cap_id);
     }
     
     /* 释放能力空间 */
@@ -306,8 +314,8 @@ u64 get_domain_granted_caps(domain_id_t domain)
     
     for (u32 i = 0; i < d->cap_count; i++) {
         cap_entry_t cap;
-        if (cap_get_info(d->cap_space[i], &cap) == HIK_SUCCESS) {
-            if (cap.type == CAP_TYPE_CAP_DERIVE) {
+        if (cap_get_info(d->cap_space[i].cap_id, &cap) == HIK_SUCCESS) {
+            if (cap.type == CAP_CAP_DERIVE) {
                 granted_count++;
             }
         }

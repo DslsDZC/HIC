@@ -1,11 +1,36 @@
 /**
- * HIK内核运行时硬件探测模块
- * 提供架构无关的硬件发现接口
+ * HIK内核静态硬件探测实现
+ * 提供跨架构的静态硬件探测接口
  */
+
+#ifndef HIK_HARDWARE_PROBE_H
+#define HIK_HARDWARE_PROBE_H
 
 #include <stdint.h>
 #include "types.h"
-#include "hal.h"
+#include "formal_verification.h"  /* 包含 mem_region_t 完整定义 */
+
+/* 从 boot_info.h 中提取的最小定义（避免循环依赖） */
+typedef struct {
+    u32 cpu_count;
+    u32 memory_size_mb;
+    u32 architecture;
+    u32 platform_type;
+} system_info_t;
+
+typedef struct {
+    void* system_table;
+    void* image_handle;
+} firmware_info_t;
+
+typedef struct {
+    void* log_buffer;
+    u64 log_size;
+    u32 log_entry_count;
+    u64 boot_time;
+    u16 serial_port;           /* 串口端口 */
+    u16 debug_flags;
+} debug_info_t;
 
 /* CPU信息结构（架构无关） */
 typedef struct cpu_info {
@@ -23,25 +48,20 @@ typedef struct cpu_info {
     u32 arch_type;             /* 架构类型（枚举值） */
 } cpu_info_t;
 
-/* 内存区域类型 */
-typedef enum {
-    MEM_TYPE_USABLE,           /* 可用内存 */
-    MEM_TYPE_RESERVED,         /* 保留内存 */
-    MEM_TYPE_ACPI_RECLAIMABLE, /* ACPI可回收 */
-    MEM_TYPE_ACPI_NVS,         /* ACPI NVS */
-    MEM_TYPE_UNUSABLE,         /* 不可用 */
-    MEM_TYPE_COUNT
-} mem_type_t;
+/* 内存区域类型（使用 boot_info.h 中的定义） */
+// typedef enum {
+//     MEM_TYPE_USABLE,           /* 可用内存 */
+//     MEM_TYPE_RESERVED,         /* 保留内存 */
+//     MEM_TYPE_ACPI_RECLAIMABLE, /* ACPI可回收 */
+//     MEM_TYPE_ACPI_NVS,         /* ACPI NVS */
+//     MEM_TYPE_UNUSABLE,         /* 不可用 */
+//     MEM_TYPE_COUNT
+// } mem_type_t;
 
-/* 内存区域 */
-typedef struct mem_region {
-    u64 base;                  /* 基地址 */
-    u64 length;                /* 长度 */
-    u32 type;                  /* 类型 (mem_type_t) */
-    u32 acpi_attr;             /* ACPI属性 */
-} mem_region_t;
+/* 使用 boot_info.h 中的内存类型 */
+#define mem_type_t u32
 
-/* 内存拓扑信息 */
+/* 内存拓扑信息（mem_region_t 在 formal_verification.h 中定义） */
 typedef struct memory_topology {
     u64 total_usable;          /* 总可用内存 */
     u64 total_physical;        /* 总物理内存 */
@@ -106,6 +126,7 @@ typedef struct device {
 /* 设备列表 */
 typedef struct device_list {
     u32 device_count;          /* 设备数量 */
+    u32 pci_count;             /* PCI设备数量 */
     device_t devices[256];
 } device_list_t;
 
@@ -138,7 +159,7 @@ hik_status_t probe_cpu(cpu_info_t *result);
 /**
  * 探测内存拓扑
  */
-hik_status_t probe_memory_topology(const hik_mem_entry_t *boot_mem_map,
+hik_status_t probe_memory_topology(const void *boot_mem_map,
                                    u32 mem_map_count,
                                    memory_topology_t *result);
 
@@ -163,55 +184,4 @@ void hardware_probe_init(void);
  */
 hik_status_t hardware_probe_all(hardware_probe_result_t *result);
 
-/* 架构特定的CPUID/MSR操作 */
-static inline u32 arch_cpuid(u32 leaf, u32 subleaf, u32 *eax, u32 *ebx, 
-                              u32 *ecx, u32 *edx) {
-#if CURRENT_ARCH == ARCH_X86_64
-    __asm__ volatile("cpuid"
-                     : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
-                     : "a"(leaf), "c"(subleaf));
-    return *eax;
-#else
-    *eax = *ebx = *ecx = *edx = 0;
-    return 0;
-#endif
-}
-
-static inline u64 arch_rdmsr(u32 msr) {
-#if CURRENT_ARCH == ARCH_X86_64
-    u32 low, high;
-    __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
-    return ((u64)high << 32) | low;
-#else
-    return 0;
-#endif
-}
-
-static inline void arch_wrmsr(u32 msr, u64 value) {
-#if CURRENT_ARCH == ARCH_X86_64
-    u32 low = value & 0xFFFFFFFF;
-    u32 high = value >> 32;
-    __asm__ volatile("wrmsr" : : "a"(low), "d"(high), "c"(msr));
-#endif
-}
-
-/* IO端口操作（仅x86） */
-static inline u8 arch_inb(u16 port) {
-#if CURRENT_ARCH == ARCH_X86_64
-    u8 value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-#else
-    (void)port;
-    return 0xFF;
-#endif
-}
-
-static inline void arch_outb(u16 port, u8 value) {
-#if CURRENT_ARCH == ARCH_X86_64
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-#else
-    (void)port;
-    (void)value;
-#endif
-}
+#endif /* HIK_HARDWARE_PROBE_H */

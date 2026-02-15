@@ -299,8 +299,8 @@ A: HIK目前处于v0.1.0阶段，核心功能已实现，但还需要更多的�
 A: 可以通过以下方式获取帮助：
 1. 查看 [Wiki文档](./index.md)
 2. 查看 [故障排查](./38-Troubleshooting.md)
-3. 提交 [Issue](https://github.com/yourusername/hik/issues)
-4. 加入 [讨论区](https://github.com/yourusername/hik/discussions)
+3. 提交 [Issue](https://github.com/DslsDZC/HIK/issues)
+4. 加入 [讨论区](https://github.com/DslsDZC/HIK/discussions)
 
 ### Q: 如何报告Bug？
 

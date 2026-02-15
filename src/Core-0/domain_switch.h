@@ -10,6 +10,8 @@
 #include "types.h"
 #include "domain.h"
 #include "capability.h"
+#include "pagetable.h"
+#include "hal.h"
 
 /* 域切换上下文 */
 typedef struct {
@@ -29,7 +31,7 @@ typedef struct {
     hik_status_t result;
     
     /* 保存的上下文 */
-    arch_context_t saved_context;
+    hal_context_t saved_context;
 } domain_switch_context_t;
 
 /* 域切换接口 */
@@ -44,15 +46,21 @@ hik_status_t domain_switch(domain_id_t from, domain_id_t to,
 void domain_switch_return(hik_status_t result);
 
 /* 保存当前域上下文 */
-void domain_switch_save_context(domain_id_t domain, arch_context_t* ctx);
+void domain_switch_save_context(domain_id_t domain, hal_context_t* ctx);
 
 /* 恢复域上下文 */
-void domain_switch_restore_context(domain_id_t domain, arch_context_t* ctx);
+void domain_switch_restore_context(domain_id_t domain, hal_context_t* ctx);
 
 /* 获取当前域ID */
 domain_id_t domain_switch_get_current(void);
 
 /* 设置当前域ID */
 void domain_switch_set_current(domain_id_t domain);
+
+/* 设置域页表 */
+hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable);
+
+/* 获取域页表 */
+page_table_t* domain_switch_get_pagetable(domain_id_t domain);
 
 #endif /* HIK_KERNEL_DOMAIN_SWITCH_H */

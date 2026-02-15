@@ -1,12 +1,58 @@
-/**
+/*
  * HIK内核启动信息处理
  * 接收并处理Bootloader传递的启动信息
  */
+
+#ifndef HIK_KERNEL_BOOT_INFO_H
+#define HIK_KERNEL_BOOT_INFO_H
 
 #include <stdint.h>
 #include "types.h"
 #include "kernel.h"
 #include "hardware_probe.h"
+
+/* ACPI类型定义 */
+#define ACPI_SIG_RSDP  "RSD PTR "
+#define ACPI_SIG_RSDT  "RSDT"
+#define ACPI_SIG_XSDT  "XSDT"
+
+/* ACPI RSDP结构 */
+typedef struct {
+    u8 signature[8];        /* "RSD PTR " */
+    u8 checksum;
+    u8 oem_id[6];
+    u8 revision;
+    u32 rsdt_address;       /* RSDT物理地址 */
+    u32 length;
+    u64 xsdt_address;       /* XSDT物理地址 (ACPI 2.0+) */
+    u8 extended_checksum;
+    u8 reserved[3];
+} acpi_rsdp_t;
+
+/* ACPI SDT表头 */
+typedef struct {
+    char signature[4];      /* 表签名 */
+    u32 length;
+    u8 revision;
+    u8 checksum;
+    char oem_id[6];
+    char oem_table_id[8];
+    char oem_revision[4];
+    char creator_id[4];
+    char creator_revision[4];
+} acpi_sdt_header_t;
+
+/* ACPI RSDT结构 */
+typedef struct {
+    acpi_sdt_header_t header;
+    u32 entry_pointers[];    /* 指向其他SDT的指针数组 */
+} acpi_rsdt_t;
+
+/* ACPI XSDT结构 */
+typedef struct {
+    acpi_sdt_header_t header;
+    u64 entry_pointers[];    /* 指向其他SDT的指针数组 (64位) */
+} acpi_xsdt_t;
 
 /* 引导信息魔数 */
 #define HIK_BOOT_INFO_MAGIC  0x48494B21  // "HIK!"
@@ -40,27 +86,9 @@ typedef struct {
     u32 bpp;
 } video_info_t;
 
-/* 调试信息 */
-typedef struct {
-    u16 serial_port;
-    u16 debug_flags;
-    void* log_buffer;
-    u64 log_size;
-} debug_info_t;
-
-/* 系统信息 */
-typedef struct {
-    u32 cpu_count;
-    u32 memory_size_mb;
-    u32 architecture;
-    u32 platform_type;
-} system_info_t;
-
-/* 固件信息 */
-typedef struct {
-    void* system_table;
-    void* image_handle;
-} firmware_info_t;
+/* 前向声明（避免循环依赖） */
+struct hardware_probe_result;
+typedef struct hardware_probe_result hardware_probe_result_t;
 
 /* HIK引导信息结构 */
 typedef struct {
@@ -77,6 +105,7 @@ typedef struct {
     // ACPI信息
     void* rsdp;                   // ACPI RSDP指针
     void* xsdp;                   // ACPI XSDP指针 (UEFI)
+    bool acpi_valid;             // ACPI是否有效
     
     // 固件信息
     firmware_info_t firmware;
@@ -112,6 +141,10 @@ typedef struct {
     /* 系统信息 */
     system_info_t system;
     
+    /* 配置数据（platform.yaml等） */
+    void* config_data;
+    u64 config_size;
+    
     /* 固件类型 */
     u8 firmware_type;
     u8 reserved[7];
@@ -138,9 +171,19 @@ typedef struct {
 /* 启动信息处理状态 */
 typedef struct boot_state {
     hik_boot_info_t* boot_info;    // Bootloader传递的信息
-    hardware_probe_result_t hw;    // 运行时硬件探测结果
+    hardware_probe_result_t hw;    // 静态硬件探测结果
     u8 valid;                      // 信息是否有效
+    
+    /* 扩展字段 */
+    bool recovery_mode;            // 恢复模式
+    u16 serial_port;               // 串口端口
+    u32 serial_baud;               // 串口波特率
+    bool debug_enabled;            // 调试模式
+    bool quiet_mode;               // 静默模式
 } boot_state_t;
+
+/* 全局启动状态 */
+extern boot_state_t g_boot_state;
 
 /* 外部API声明 */
 
@@ -165,7 +208,7 @@ bool boot_info_validate(hik_boot_info_t* boot_info);
 
 /**
  * 处理启动信息
- * 解析Bootloader传递的信息并与运行时探测结果整合
+ * 解析Bootloader传递的信息并与静态探测结果整合
  * 
  * 参数：
  *   boot_info - Bootloader传递的启动信息
@@ -209,5 +252,31 @@ boot_state_t* get_boot_state(void);
  * 打印启动信息摘要
  */
 void boot_info_print_summary(void);
+
+/* 内核主循环 */
+void kernel_main_loop(void);
+
+/* 中断处理 */
+bool interrupts_pending(void);
+void handle_pending_interrupts(void);
+
+/* 系统调用处理 */
+bool syscalls_pending(void);
+void handle_pending_syscalls(void);
+
+/* 定时器 */
+void timer_update(void);
+
+/* 内核维护任务 */
+void kernel_maintenance_tasks(void);
+
+/* 硬件探测 */
+void probe_all_hardware(hardware_probe_result_t *result);
+
+/* 内存管理 */
+void pmm_mark_used(u64 base, u64 size);
+
+/* ACPI */
+void boot_info_parse_acpi_tables(void *sdt, const char *signature);
 
 #endif /* BOOT_INFO_H */

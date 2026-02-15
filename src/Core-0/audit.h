@@ -34,8 +34,10 @@ typedef enum {
     AUDIT_EVENT_PMM_FREE,         /* 物理内存释放 */
     AUDIT_EVENT_PAGETABLE_MAP,    /* 页表映射 */
     AUDIT_EVENT_PAGETABLE_UNMAP,  /* 页表解映射 */
+    AUDIT_EVENT_SERVICE_CREATE,   /* 服务创建 */
     AUDIT_EVENT_SERVICE_START,    /* 服务启动 */
     AUDIT_EVENT_SERVICE_STOP,     /* 服务停止 */
+    AUDIT_EVENT_SERVICE_DESTROY,  /* 服务销毁 */
     AUDIT_EVENT_SERVICE_CRASH,    /* 服务崩溃 */
     AUDIT_EVENT_MODULE_LOAD,      /* 模块加载 */
     AUDIT_EVENT_MODULE_UNLOAD,    /* 模块卸载 */
@@ -121,10 +123,14 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
     audit_log_event(AUDIT_EVENT_IPC_CALL, caller, cap, 0, NULL, 0, result)
 
 #define AUDIT_LOG_EXCEPTION(domain, exc_type, result) \
-    audit_log_event(AUDIT_EVENT_EXCEPTION, domain, 0, 0, &exc_type, 1, result)
+    do { u64 _exc = exc_type; \
+         audit_log_event(AUDIT_EVENT_EXCEPTION, domain, 0, 0, &_exc, 1, result); \
+    } while(0)
 
 #define AUDIT_LOG_SECURITY_VIOLATION(domain, reason) \
-    audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &reason, 1, false)
+    do { u64 _reason = reason; \
+         audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &_reason, 1, false); \
+    } while(0)
 
 #define AUDIT_LOG_PMM_ALLOC(domain, addr, count, result) \
     do { u64 data[2] = {addr, count}; \

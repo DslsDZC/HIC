@@ -8,6 +8,9 @@
 
 #include <stdint.h>
 
+/* 日志缓冲区大小 */
+#define BOOTLOG_MAX_ENTRIES 64
+
 /* 引导日志事件类型 */
 typedef enum {
     BOOTLOG_UEFI_INIT,
@@ -34,5 +37,10 @@ void bootlog_init(void);
 void bootlog_event(bootlog_event_t type, const void* data, uint32_t len);
 void bootlog_error(const char* msg);
 void bootlog_info(const char* msg);
+
+/* 获取日志信息 */
+const bootlog_entry_t* bootlog_get_buffer(void);
+uint32_t bootlog_get_index(void);
+uint64_t bootlog_get_start_time(void);
 
 #endif /* BOOTLOADER_BOOTLOG_H */

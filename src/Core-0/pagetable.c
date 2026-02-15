@@ -8,6 +8,7 @@
 #include "pmm.h"
 #include "hal.h"
 #include "hal_cr3.h"
+#include "domain_switch.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 

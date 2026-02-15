@@ -6,7 +6,7 @@
 #ifndef HIK_ARCH_RISCV_ASM_H
 #define HIK_ARCH_RISCV_ASM_H
 
-#include "../include/types.h"
+#include "types.h"
 
 /* RISC-V特权级 */
 #define RISCV_U_MODE  0  /* 用户态 */

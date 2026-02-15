@@ -8,36 +8,36 @@
 .extern kernel_start
 
 # 内核入口点
-# 参数: RDI = hik_boot_info_t* boot_info
+# 参数: %rdi = hik_boot_info_t* boot_info
 _start:
 kernel_entry:
     # 保存调用者上下文
-    push rbx
-    push rbp
-    push r12
-    push r13
-    push r14
-    push r15
-    
+    push %rbx
+    push %rbp
+    push %r12
+    push %r13
+    push %r14
+    push %r15
+
     # 保存boot_info指针
-    mov r15, rdi
-    
+    mov %rdi, %r15
+
     # 设置新的GDT（如果需要）
-    # lgdt [gdt_ptr]
-    
+    # lgdt gdt_ptr
+
     # 设置新的段选择器
-    # mov ax, 0x10      # 数据段选择器
-    # mov ds, ax
-    # mov es, ax
-    # mov fs, ax
-    # mov gs, ax
-    # mov ss, ax
-    
+    # mov $0x10, %ax      # 数据段选择器
+    # mov %ax, %ds
+    # mov %ax, %es
+    # mov %ax, %fs
+    # mov %ax, %gs
+    # mov %ax, %ss
+
     # 清除BSS段
     # call clear_bss
-    
+
     # 调用C语言内核入口点
-    mov rdi, r15        # boot_info作为第一个参数
+    mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
     
     # 如果kernel_start返回，进入无限循环

@@ -88,9 +88,9 @@
 
 ## 相关链接
 
-- [GitHub仓库](https://github.com/yourusername/hik)
-- [Issue追踪](https://github.com/yourusername/hik/issues)
-- [讨论区](https://github.com/yourusername/hik/discussions)
+- [GitHub仓库](https://github.com/DslsDZC/HIK)
+- [Issue追踪](https://github.com/DslsDZC/HIK/issues)
+- [讨论区](https://github.com/DslsDZC/HIK/discussions)
 
 ## 许可证
 

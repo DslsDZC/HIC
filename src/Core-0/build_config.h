@@ -8,16 +8,7 @@
 
 #include "types.h"
 #include "capability.h"
-
-/* CPU信息 */
-typedef struct cpu_info {
-    u32 cpu_id;
-    u32 cores;
-    u32 threads_per_core;
-    u64 cache_l1_size;
-    u64 cache_l2_size;
-    u64 cache_l3_size;
-} cpu_info_t;
+#include "hardware_probe.h"  /* 包含 cpu_info_t 定义 */
 
 /* 内存拓扑 */
 typedef struct mem_topology {
@@ -114,11 +105,21 @@ typedef struct device_init_sequence {
 
 /* 构建时配置 */
 typedef struct build_config {
+    /* 构建选项 */
+    u32 target_architecture;
+    
+    u32 build_mode;
+#define BUILD_MODE_STATIC  0
+    
     /* 硬件信息 */
     cpu_info_t          cpu_info;
     mem_topology_t      mem_topology;
     device_info_t       devices[32];
     u32                 num_devices;
+    
+    /* 内存区域 */
+    mem_region_t        memory_regions[128];
+    u32                 num_memory_regions;
     
     /* 服务配置 */
     service_config_t    services[16];

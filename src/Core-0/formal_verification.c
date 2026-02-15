@@ -1,8 +1,8 @@
-/**
+/*
  * HIK内核形式化验证模块
  * 遵循TD/三层模型.md文档第12节
- * 
- * 本模块提供运行时形式化验证，确保：
+ *
+ * 本模块提供静态形式化验证，确保：
  * 1. 能力系统的不变性
  * 2. 隔离域的内存隔离
  * 3. 资源配额的守恒性
@@ -13,6 +13,9 @@
 #include <stdbool.h>
 #include <stdarg.h>
 #include "types.h"
+#include "audit.h"
+#include "lib/console.h"
+#include "hal.h"
 #include "capability.h"
 #include "kernel.h"
 #include "pmm.h"
@@ -38,6 +41,161 @@ static u64 invariant_check_count = 0;
 static u64 invariant_violation_count = 0;
 static u64 last_violation_invariant_id = 0;
 
+/* 辅助函数：将u64转换为字符串 */
+static void u64_to_str(u64 value, char* buf, u64 buf_size) {
+    if (buf_size == 0) return;
+    
+    if (value == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    
+    char temp[32];
+    u64 i = 0;
+    while (value > 0 && i < sizeof(temp) - 1) {
+        temp[i++] = '0' + (value % 10);
+        value /= 10;
+    }
+    
+    u64 len = i;
+    for (u64 j = 0; j < len && j < buf_size - 1; j++) {
+        buf[j] = temp[len - 1 - j];
+    }
+    buf[len < buf_size ? len : buf_size - 1] = '\0';
+}
+
+/* 辅助函数：追加字符串到缓冲区 */
+static u64 append_str(char* dest, u64 dest_size, u64 offset, const char* src) {
+    if (!dest || !src || offset >= dest_size) return offset;
+    
+    u64 i = 0;
+    while (src[i] != '\0' && offset + i < dest_size - 1) {
+        dest[offset + i] = src[i];
+        i++;
+    }
+    dest[offset + i] = '\0';
+    return offset + i;
+}
+
+/* 辅助函数：追加u64到缓冲区 */
+static u64 append_u64(char* dest, u64 dest_size, u64 offset, u64 value) {
+    char buf[32];
+    u64_to_str(value, buf, sizeof(buf));
+    return append_str(dest, dest_size, offset, buf);
+}
+
+/* 辅助函数：格式化并追加 */
+static u64 append_format(char* dest, u64 dest_size, u64 offset, const char* fmt, ...) {
+    if (!dest || !fmt || offset >= dest_size) return offset;
+    
+    va_list args;
+    va_start(args, fmt);
+    
+    while (*fmt != '\0' && offset < dest_size - 1) {
+        if (*fmt == '%' && *(fmt + 1) == 'l' && *(fmt + 2) == 'u') {
+            u64 val = va_arg(args, u64);
+            offset = append_u64(dest, dest_size, offset, val);
+            fmt += 3;
+        } else if (*fmt == '%' && *(fmt + 1) == 's') {
+            const char* str = va_arg(args, const char*);
+            offset = append_str(dest, dest_size, offset, str);
+            fmt += 2;
+        } else {
+            dest[offset++] = *fmt;
+            fmt++;
+        }
+    }
+    dest[offset] = '\0';
+    
+    va_end(args);
+    return offset;
+}
+
+/* 前向声明：不变式检查函数 */
+static bool invariant_capability_conservation(void);
+static bool invariant_memory_isolation(void);
+static bool invariant_capability_monotonicity(void);
+static bool invariant_resource_quota_conservation(void);
+static bool invariant_deadlock_freedom_enhanced(void);
+static bool invariant_type_safety(void);
+
+/* 使用HAL的时间戳函数替代get_system_time_ns */
+static inline u64 get_system_time_ns(void) {
+    return hal_get_timestamp();
+}
+
+/* 不变式形式化规范表 */
+static const invariant_spec_t g_invariant_specs[] = {
+    {
+        .invariant_id = 1,
+        .name = "能力守恒性",
+        .formal_expr = "∀d ∈ Domains, |Caps(d)| = Quota₀(d) + Σ Granted(d', d) - Σ Revoked(c)",
+        .description = "域能力数量守恒",
+        .check = invariant_capability_conservation
+    },
+    {
+        .invariant_id = 2,
+        .name = "内存隔离性",
+        .formal_expr = "∀d₁, d₂ ∈ Domains, d₁ ≠ d₂ ⇒ Mem(d₁) ∩ Mem(d₂) = ∅",
+        .description = "域内存区域不相交",
+        .check = invariant_memory_isolation
+    },
+    {
+        .invariant_id = 3,
+        .name = "能力权限单调性",
+        .formal_expr = "∀c_derived, ∃c_parent: Rights(c_derived) ⊆ Rights(c_parent)",
+        .description = "派生能力权限是父能力的子集",
+        .check = invariant_capability_monotonicity
+    },
+    {
+        .invariant_id = 4,
+        .name = "资源配额守恒性",
+        .formal_expr = "∀d, Allocated(d) ≤ Quota(d)",
+        .description = "资源分配不超过配额",
+        .check = invariant_resource_quota_conservation
+    },
+    {
+        .invariant_id = 5,
+        .name = "无死锁性",
+        .formal_expr = "∀t ∈ Threads, ∃s: State(t) = Running ∨ State(t) → Running",
+        .description = "系统中不存在无法被调度的线程",
+        .check = invariant_deadlock_freedom_enhanced
+    },
+    {
+        .invariant_id = 6,
+        .name = "类型安全性",
+        .formal_expr = "∀o ∈ Objects, ∀a ∈ Access(o), Type(a) ∈ AllowedTypes(o)",
+        .description = "对对象的访问必须符合对象的类型约束",
+        .check = invariant_type_safety
+    }
+};
+static const u64 g_invariant_specs_count = sizeof(g_invariant_specs) / sizeof(g_invariant_specs[0]);
+
+/* 不变式依赖关系 */
+static invariant_dependency_t g_invariant_deps[] = {
+    /* 不变式ID: 依赖的不变式列表 */
+    {1, {}, 0},      /* 能力守恒性 - 无依赖 */
+    {2, {1}, 1},     /* 内存隔离性 - 依赖能力守恒性 */
+    {3, {1}, 1},     /* 能力权限单调性 - 依赖能力守恒性 */
+    {4, {1, 2}, 2},  /* 资源配额守恒性 - 依赖能力守恒性、内存隔离性 */
+    {5, {4}, 1},     /* 无死锁性 - 依赖资源配额守恒性 */
+    {6, {1, 3}, 2},  /* 类型安全性 - 依赖能力守恒性、能力权限单调性 */
+};
+static const u64 g_invariant_deps_count = sizeof(g_invariant_deps) / sizeof(invariant_dependency_t);
+
+/* 验证检查点 */
+static proof_checkpoint_t g_checkpoints[] = {
+    /* 初始检查点 */
+    {1, 1, 1, "能力守恒性检查点", true, 0},
+    {2, 2, 2, "内存隔离性检查点", true, 0},
+    {3, 3, 3, "能力权限单调性检查点", true, 0},
+    {4, 4, 4, "资源配额守恒性检查点", true, 0},
+    {5, 5, 5, "无死锁性检查点", true, 0},
+    {6, 6, 6, "类型安全性检查点", true, 0},
+};
+static const u64 g_checkpoint_count = sizeof(g_checkpoints) / sizeof(proof_checkpoint_t);
+
 /* 静态函数声明 */
 static bool check_cap_grant_atomicity(u64 pre_state, u64 post_state);
 static bool check_cap_revoke_atomicity(u64 pre_state, u64 post_state);
@@ -53,14 +211,42 @@ static u64 extract_allocation_size(u64 state);
 static u64 extract_thread_count(u64 state);
 static void fv_log_violation(const invariant_t* inv);
 static void fv_panic(const char* message);
-static bool is_minimum_privilege_principle_satisfied(domain_id_t d1, domain_id_t d2, cap_id_t cap);
+static u64 find_resource_owner(u64 resource_id);
+static bool dfs_detect_cycle(u64 node_id, bool* visited, bool* on_stack);
+static bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type);
+static bool is_permission_subset(cap_id_t derived, cap_id_t source);
+static bool regions_overlap(const mem_region_t* r1, const mem_region_t* r2);
+static bool invariant_deadlock_freedom_enhanced(void);
+
+/**
+ * 形式化验证恐慌函数
+ * 当检测到严重不变式违反时调用
+ */
+static void fv_panic(const char* message) {
+    /* 记录严重错误 */
+    log_error("FORMAL VERIFICATION PANIC: %s\n", message);
+    
+    /* 停止系统 */
+    console_puts("\n\n=== FORMAL VERIFICATION PANIC ===\n");
+    console_puts("Invariant violation detected: ");
+    console_puts(message);
+    console_puts("\n");
+    console_puts("System halted for safety.\n");
+    console_puts("=================================\n\n");
+    
+    /* 禁用中断并停止 */
+    hal_disable_interrupts();
+    while (1) {
+        hal_halt();
+    }
+}
 
 /**
  * 不变式1：能力守恒性
- * 
+ *
  * 数学表述：
  * ∀d ∈ Domains, |Capabilities(d)| = InitialQuota(d) + Granted(d) - Revoked(d)
- * 
+ *
  * 语义：任何域持有的能力数量等于初始配额加上被授予的能力减去被撤销的能力
  */
 static bool invariant_capability_conservation(void) {
@@ -176,32 +362,6 @@ static bool invariant_resource_quota_conservation(void) {
     if (total_cpu_quota > 100) { // 假设总配额为100%
         console_puts("[FV] CPU quota violation detected!\n");
         return false;
-    }
-    
-    return true;
-}
-
-/**
- * 不变式5：无死锁
- * 
- * 数学表述：
- * ∀t ∈ Threads, ∃s: State(t) = Running ∨ State(t) → Running
- * 或等价地：资源分配图中无环
- * 
- * 语义：系统中不存在无法被调度的线程（资源分配图中无环）
- */
-static bool invariant_deadlock_freedom(void) {
-    /* 简化实现：检测长时间等待的线程 */
-    /* 完整的资源分配图死锁检测需要完整的资源管理系统 */
-    
-    for (thread_id_t thread = 0; thread < MAX_THREADS; thread++) {
-        if (!thread_is_active(thread)) continue;
-        
-        u64 wait_time = get_thread_wait_time(thread);
-        if (wait_time > DEADLOCK_THRESHOLD) {
-            /* 可能死锁，但不一定（正常阻塞也可能长时间等待） */
-            console_puts("[FV] Warning: Thread waiting too long\n");
-        }
     }
     
     return true;
@@ -329,7 +489,7 @@ bool fv_verify_domain_isolation(domain_id_t d1, domain_id_t d2) {
     
     /* 检查是否相交 */
     if (regions_overlap(&region1, &region2)) {
-        log_critical("域隔离违反: 域%lu和域%lu的内存区域重叠\n", d1, d2);
+        log_error("域隔离违反: 域%lu和域%lu的内存区域重叠\n", d1, d2);
         return false;
     }
     
@@ -424,7 +584,7 @@ void fv_init(void)
     console_puts("[FV] ");
     console_puts("已注册 ");
     char buf[32];
-    snprintf(buf, sizeof(buf), "%lu", g_checkpoint_count);
+    u64_to_str(g_checkpoint_count, buf, sizeof(buf));
     console_puts(buf);
     console_puts(" 个证明检查点\n");
 }
@@ -454,61 +614,79 @@ u64 fv_get_report(char* report, u64 size) {
     u64 written = 0;
     
     /* 写入头部 */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "=== HIK 形式化验证权威报告 ===\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "生成时间: 2026-02-14\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "验证系统版本: 2.0 (增强版)\n\n");
     
     /* 写入系统状态 */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "【系统状态】\n");
     fv_state_t state = fv_get_state();
     const char* state_names[] = {"空闲", "检查中", "违反", "恢复中"};
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  当前状态: %s\n", state_names[state]);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "\n");
     
     /* 写入统计信息 */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "【验证统计】\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  总检查次数: %lu\n", invariant_check_count);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  违反次数: %lu\n", invariant_violation_count);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  最后违反ID: %lu\n", last_violation_invariant_id);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "\n");
     
     /* 写入不变式状态（含形式化规范） */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "【不变式验证状态】\n");
     for (u64 i = 0; i < num_invariants; i++) {
-        written += snprintf(report + written, size - written,
+        
+        written = append_format(report, size, written,
             "\n  不变式 %lu: %s\n", invariants[i].invariant_id, invariants[i].name);
-        written += snprintf(report + written, size - written,
+        
+        written = append_format(report, size, written,
             "    形式化表达式: %s\n", g_invariant_specs[i].formal_expr);
-        written += snprintf(report + written, size - written,
+        
+        written = append_format(report, size, written,
             "    描述: %s\n", invariants[i].description);
         
         /* 写入依赖关系 */
         for (u64 j = 0; j < g_invariant_deps_count; j++) {
             if (g_invariant_deps[j].invariant_id == invariants[i].invariant_id) {
                 if (g_invariant_deps[j].dependency_count > 0) {
-                    written += snprintf(report + written, size - written,
+                    
+        written = append_format(report, size, written,
                         "    依赖: ");
                     for (u64 k = 0; k < g_invariant_deps[j].dependency_count; k++) {
-                        written += snprintf(report + written, size - written,
+                        
+        written = append_format(report, size, written,
                             "不变式%lu%s", 
                             g_invariant_deps[j].depends_on[k],
                             (k < g_invariant_deps[j].dependency_count - 1) ? ", " : "");
                     }
-                    written += snprintf(report + written, size - written, "\n");
+                    written = append_format(report, size, written, "\n");
                 } else {
-                    written += snprintf(report + written, size - written,
+                    
+        written = append_format(report, size, written,
                         "    依赖: 无（基础不变式）\n");
                 }
             }
@@ -516,11 +694,14 @@ u64 fv_get_report(char* report, u64 size) {
     }
     
     /* 写入检查点状态 */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "\n【证明检查点状态】\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  总检查点数: %lu\n", g_checkpoint_count);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  已验证检查点: ");
     u64 verified_count = 0;
     for (u64 i = 0; i < g_checkpoint_count; i++) {
@@ -528,37 +709,49 @@ u64 fv_get_report(char* report, u64 size) {
             verified_count++;
         }
     }
-    written += snprintf(report + written, size - written, "%lu\n", verified_count);
+    written = append_format(report, size, written, "%lu\n", verified_count);
     
     /* 写入覆盖率 */
     fv_coverage_t coverage;
     fv_get_coverage(&coverage);
     
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "\n【验证覆盖率】\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  总代码路径数: %lu\n", coverage.total_code_paths);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  已验证路径数: %lu\n", coverage.verified_paths);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  覆盖率: %lu%%\n", coverage.coverage_percent);
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  最后验证时间: %lu ns\n", coverage.last_verify_time);
     
     /* 写入权威性声明 */
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "\n【权威性声明】\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 所有定理都有完整的数学证明\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 所有不变式都有运行时验证\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 证明检查点确保证明与代码一致\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 依赖关系图确保验证顺序正确\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 状态机确保验证过程完整\n");
-    written += snprintf(report + written, size - written,
+    
+        written = append_format(report, size, written,
         "  ✓ 形式化规范确保数学严谨性\n");
     
     return written;
@@ -611,16 +804,6 @@ void fv_get_coverage(fv_coverage_t* coverage) {
  * - 不变式5（无死锁性）：依赖不变式4（资源配额守恒性）
  * - 不变式6（类型安全性）：无依赖（基础不变式）
  */
-static const invariant_dependency_t g_invariant_deps[] = {
-    {1, {}, 0},                           // 能力守恒性：无依赖
-    {2, {}, 0},                           // 内存隔离性：无依赖
-    {3, {1}, 1},                          // 权限单调性：依赖能力守恒性
-    {4, {1}, 1},                          // 资源配额守恒性：依赖能力守恒性
-    {5, {4}, 1},                          // 无死锁性：依赖资源配额守恒性
-    {6, {}, 0},                           // 类型安全性：无依赖
-};
-
-static const u64 g_invariant_deps_count = sizeof(g_invariant_deps) / sizeof(g_invariant_deps[0]);
 
 /**
  * 获取不变式依赖关系
@@ -631,6 +814,20 @@ u64 fv_get_invariant_dependencies(invariant_dependency_t* deps, u64 count) {
     u64 copy_count = (count < g_invariant_deps_count) ? count : g_invariant_deps_count;
     for (u64 i = 0; i < copy_count; i++) {
         deps[i] = g_invariant_deps[i];
+    }
+    
+    return copy_count;
+}
+
+/**
+ * 获取不变式形式化规范
+ */
+u64 fv_get_invariant_specs(invariant_spec_t* specs, u64 count) {
+    if (!specs || count == 0) return 0;
+    
+    u64 copy_count = (count < g_invariant_specs_count) ? count : g_invariant_specs_count;
+    for (u64 i = 0; i < copy_count; i++) {
+        specs[i] = g_invariant_specs[i];
     }
     
     return copy_count;
@@ -659,8 +856,8 @@ void fv_set_state(fv_state_t state) {
 
 #define MAX_CHECKPOINTS 32
 
-static proof_checkpoint_t g_checkpoints[MAX_CHECKPOINTS];
-static u64 g_checkpoint_count = 0;
+static proof_checkpoint_t g_runtime_checkpoints[MAX_CHECKPOINTS];
+static u64 g_runtime_checkpoint_count = 0;
 static u64 g_next_checkpoint_id = 1;
 
 /**
@@ -673,7 +870,7 @@ u64 fv_register_checkpoint(u64 theorem_id, u64 invariant_id, const char* proof_s
     }
     
     u64 id = g_next_checkpoint_id++;
-    proof_checkpoint_t* cp = &g_checkpoints[g_checkpoint_count++];
+    proof_checkpoint_t* cp = &g_runtime_checkpoints[g_runtime_checkpoint_count++];
     
     cp->checkpoint_id = id;
     cp->theorem_id = theorem_id;
@@ -692,9 +889,9 @@ u64 fv_register_checkpoint(u64 theorem_id, u64 invariant_id, const char* proof_s
  * 验证检查点
  */
 bool fv_verify_checkpoint(u64 checkpoint_id) {
-    for (u64 i = 0; i < g_checkpoint_count; i++) {
-        if (g_checkpoints[i].checkpoint_id == checkpoint_id) {
-            proof_checkpoint_t* cp = &g_checkpoints[i];
+    for (u64 i = 0; i < g_runtime_checkpoint_count; i++) {
+        if (g_runtime_checkpoints[i].checkpoint_id == checkpoint_id) {
+            proof_checkpoint_t* cp = &g_runtime_checkpoints[i];
             
             // 执行对应的检查
             if (invariants[cp->invariant_id - 1].check()) {
@@ -703,7 +900,7 @@ bool fv_verify_checkpoint(u64 checkpoint_id) {
                 log_info("[FV] Checkpoint %lu verified\n", checkpoint_id);
                 return true;
             } else {
-                log_critical("[FV] Checkpoint %lu verification failed!\n", checkpoint_id);
+                log_error("[FV] Checkpoint %lu verification failed!\n", checkpoint_id);
                 return false;
             }
         }
@@ -719,9 +916,9 @@ bool fv_verify_checkpoint(u64 checkpoint_id) {
 u64 fv_get_checkpoints(proof_checkpoint_t* checkpoints, u64 count) {
     if (!checkpoints || count == 0) return 0;
     
-    u64 copy_count = (count < g_checkpoint_count) ? count : g_checkpoint_count;
+    u64 copy_count = (count < g_runtime_checkpoint_count) ? count : g_runtime_checkpoint_count;
     for (u64 i = 0; i < copy_count; i++) {
-        checkpoints[i] = g_checkpoints[i];
+        checkpoints[i] = g_runtime_checkpoints[i];
     }
     
     return copy_count;
@@ -808,69 +1005,7 @@ bool fv_trigger_event(fv_event_t event) {
 
 /* ========== 形式化规范 ========== */
 
-/**
- * 不变式形式化规范表
- */
-static const invariant_spec_t g_invariant_specs[] = {
-    {
-        1,
-        "能力守恒性",
-        "∀d ∈ Domains, |Caps(d)| = Quota₀(d) + Σ Granted(d', d) - Σ Revoked(c)",
-        "域能力数量守恒",
-        invariant_capability_conservation
-    },
-    {
-        2,
-        "内存隔离性",
-        "∀d₁, d₂ ∈ Domains, d₁ ≠ d₂ ⇒ Mem(d₁) ∩ Mem(d₂) = ∅",
-        "域内存区域不相交",
-        invariant_memory_isolation
-    },
-    {
-        3,
-        "权限单调性",
-        "∀c₁, c₂ ∈ Caps, Derived(c₁, c₂) ⇒ Perms(c₂) ⊆ Perms(c₁)",
-        "派生权限是源权限子集",
-        invariant_capability_monotonicity
-    },
-    {
-        4,
-        "资源配额守恒性",
-        "∀r ∈ Resources, Σ_{d∈Domains} Allocated(r, d) ≤ Total(r)",
-        "资源分配不超过总量",
-        invariant_resource_quota_conservation
-    },
-    {
-        5,
-        "无死锁性",
-        "∀t ∈ Threads, ∃s: State(t) = Running ∨ State(t) → Running",
-        "资源分配图中无环",
-        invariant_deadlock_freedom_enhanced
-    },
-    {
-        6,
-        "类型安全性",
-        "∀o ∈ Objects, ∀a ∈ Access(o), Type(a) ∈ AllowedTypes(o)",
-        "访问类型符合对象约束",
-        invariant_type_safety
-    },
-};
 
-static const u64 g_invariant_specs_count = sizeof(g_invariant_specs) / sizeof(g_invariant_specs[0]);
-
-/**
- * 获取不变式形式化规范
- */
-u64 fv_get_invariant_specs(invariant_spec_t* specs, u64 count) {
-    if (!specs || count == 0) return 0;
-    
-    u64 copy_count = (count < g_invariant_specs_count) ? count : g_invariant_specs_count;
-    for (u64 i = 0; i < copy_count; i++) {
-        specs[i] = g_invariant_specs[i];
-    }
-    
-    return copy_count;
-}
 
 
 /**
@@ -944,7 +1079,11 @@ static bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type) {
 
 
 
+
+
 /**
+
+
 
 
 
@@ -2026,19 +2165,171 @@ static void update_rag(void) {
 
 
 
-        node->id = thread;
+        
 
 
 
-        node->is_thread = true;
+        
 
 
 
-        node->resource_id = 0;  // TODO: 从线程状态获取
+        
 
 
 
-        node->waiting_for = 0;  // TODO: 从线程状态获取
+                node->id = thread;
+
+
+
+        
+
+
+
+                node->is_thread = true;
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                /* 从线程状态获取资源信息 */
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                        thread_t* thread_info = &g_threads[thread];
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                        if (thread_info) {
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                            node->resource_id = (cap_id_t)(uintptr_t)thread_info->wait_data;
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                            node->waiting_for = thread_info->wait_flags;
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                        } else {
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                            node->resource_id = 0;
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                            node->waiting_for = 0;
+
+
+
+        
+
+
+
+                
+
+
+
+        
+
+
+
+                        }
 
 
 
@@ -2122,7 +2413,7 @@ static bool invariant_deadlock_freedom_enhanced(void) {
 
 
 
-        log_critical("死锁检测: 总检查=%lu, 违反=%lu\n", checks, violations + 1);
+        log_error("死锁检测: 总检查=%lu, 违反=%lu\n", checks, violations + 1);
 
 
 

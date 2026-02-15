@@ -1,14 +1,143 @@
-/**
- * HIK内核运行时硬件探测实现
- * 实现x86_64架构的硬件发现
+/*
+ * HIK内核静态硬件探测实现
+ * 提供跨架构的静态硬件探测接口
  */
 
 #include "hardware_probe.h"
 #include "string.h"
 #include "console.h"
+#include "hal.h"
+#include "boot_info.h"
 
-/* 全局硬件信息 */
-static hardware_probe_result_t hw_probe_result;
+/* 前向声明 */
+static inline u8 pci_read_config_byte(u8 bus, u8 device, u8 function, u8 offset);
+static inline u32 pci_read_config(u8 bus, u8 device, u8 function, u8 offset);
+static inline void pci_write_config(u8 bus, u8 device, u8 function, u8 offset, u32 value);
+
+/* PCI配置空间访问函数 */
+static inline u32 pci_read_config(u8 bus, u8 device, u8 function, u8 offset) {
+    u32 address = (1 << 31) | (bus << 16) | (device << 11) |
+                  (function << 8) | (offset & 0xFC);
+    hal_outb(0xCF8, address >> 8);
+    hal_outb(0xCF9, address);
+    return hal_inb(0xCFC) | (hal_inb(0xCFC + 1) << 8) |
+           (hal_inb(0xCFC + 2) << 16) | (hal_inb(0xCFC + 3) << 24);
+}
+
+static inline u8 pci_read_config_byte(u8 bus, u8 device, u8 function, u8 offset) {
+    u32 value = pci_read_config(bus, device, function, offset & 0xFC);
+    return (value >> ((offset & 3) * 8)) & 0xFF;
+}
+
+static inline void pci_write_config(u8 bus, u8 device, u8 function, u8 offset, u32 value) {
+    u32 address = (1 << 31) | (bus << 16) | (device << 11) |
+                  (function << 8) | (offset & 0xFC);
+    hal_outb(0xCF8, address >> 8);
+    hal_outb(0xCF9, address);
+    hal_outb(0xCFC, value & 0xFF);
+    hal_outb(0xCFC + 1, (value >> 8) & 0xFF);
+    hal_outb(0xCFC + 2, (value >> 16) & 0xFF);
+    hal_outb(0xCFC + 3, (value >> 24) & 0xFF);
+}
+
+/* 外部变量 */
+extern boot_state_t g_boot_state;
+
+/* 辅助函数：数字转字符串 */
+static void u16_to_str(u16 value, char* buf, u64 buf_size) {
+    if (buf_size == 0) return;
+    
+    if (value == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    
+    char temp[8];
+    u64 i = 0;
+    while (value > 0 && i < sizeof(temp) - 1) {
+        temp[i++] = '0' + (value % 16);
+        value /= 16;
+    }
+    
+    u64 len = i;
+    for (u64 j = 0; j < len && j < buf_size - 1; j++) {
+        buf[j] = temp[len - 1 - j];
+    }
+    buf[len < buf_size ? len : buf_size - 1] = '\0';
+}
+
+/* 辅助函数：字符串追加 */
+static u64 append_str(char* dest, u64 dest_size, u64 offset, const char* src) {
+    if (!dest || !src || offset >= dest_size) return 0;
+    
+    u64 i = 0;
+    while (src[i] && offset + i < dest_size - 1) {
+        dest[offset + i] = src[i];
+        i++;
+    }
+    dest[offset + i] = '\0';
+    return i;
+}
+
+/* 辅助函数：x86_64 CPUID指令 */
+static inline void cpuid(u32 leaf, u32 subleaf, u32* eax, u32* ebx, u32* ecx, u32* edx) {
+    __asm__ volatile (
+        "cpuid"
+        : "=a" (*eax), "=b" (*ebx), "=c" (*ecx), "=d" (*edx)
+        : "a" (leaf), "c" (subleaf)
+    );
+}
+
+/* 辅助函数：格式化设备名称 */
+static void format_device_name(char* dest, u64 dest_size, const char* vendor, const char* device, u8 bus, u8 dev, u8 func, u16 vid, u16 did) {
+    if (!dest || dest_size == 0) return;
+    
+    u64 offset = 0;
+    
+    if (vendor && device) {
+        offset += append_str(dest, dest_size, offset, vendor);
+        offset += append_str(dest, dest_size, offset, " ");
+        offset += append_str(dest, dest_size, offset, device);
+        offset += append_str(dest, dest_size, offset, " (PCI ");
+        
+        char buf[4];
+        u16_to_str(bus, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ":");
+        
+        u16_to_str(dev, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ".");
+        
+        u16_to_str(func, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ")");
+    } else {
+        offset += append_str(dest, dest_size, offset, "PCI ");
+        
+        char buf[4];
+        u16_to_str(bus, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ":");
+        
+        u16_to_str(dev, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ".");
+        
+        u16_to_str(func, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, " (");
+        
+        u16_to_str(vid, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ":");
+        
+        u16_to_str(did, buf, sizeof(buf));
+        offset += append_str(dest, dest_size, offset, buf);
+        offset += append_str(dest, dest_size, offset, ")");
+    }
+}
 
 /**
  * 探测CPU信息
@@ -28,13 +157,13 @@ void detect_cpu_info(cpu_info_t* info) {
     info->stepping = eax & 0xF;
     info->model = (eax >> 4) & 0xF;
     info->family = (eax >> 8) & 0xF;
-    info->feature_flags_ecx = ecx;
-    info->feature_flags_edx = edx;
+    info->feature_flags[0] = ecx;
+    info->feature_flags[1] = edx;
     
     // 获取扩展特性
     cpuid(0x80000001, 0, &eax, &ebx, &ecx, &edx);
-    info->extended_features_ecx = ecx;
-    info->extended_features_edx = edx;
+    info->feature_flags[2] = ecx;
+    info->feature_flags[3] = edx;
     
     // 获取缓存行大小
     cpuid(0x80000000, 0, &eax, &ebx, &ecx, &edx);
@@ -63,7 +192,7 @@ void detect_cpu_info(cpu_info_t* info) {
         info->physical_cores = (ecx & 0xFF) + 1;
     } else {
         // 估算：逻辑核心数 / 超线程
-        if (info->feature_flags_edx & (1 << 28)) { // HTT支持
+        if (info->feature_flags[1] & (1 << 28)) { // HTT支持
             info->physical_cores = info->logical_cores / 2;
         } else {
             info->physical_cores = info->logical_cores;
@@ -89,11 +218,9 @@ void detect_memory_topology(memory_topology_t* topo) {
         // 使用默认值
         topo->region_count = 1;
         topo->regions[0].base = 0x100000;
-        topo->regions[0].length = 0x3FF00000;  // 假设1GB
-        topo->regions[0].type = MEM_TYPE_USABLE;
-        topo->regions[0].acpi_attr = 0;
-        topo->total_usable = topo->regions[0].length;
-        topo->total_physical = topo->regions[0].length + 0x100000;
+        topo->regions[0].size = 0x3FF00000;  // 假设1GB
+        topo->total_usable = topo->regions[0].size;
+        topo->total_physical = topo->regions[0].size + 0x100000;
         
         log_info("内存: 总计 %lu MB, 可用 %lu MB\n",
                  topo->total_physical / (1024 * 1024),
@@ -118,9 +245,7 @@ void detect_memory_topology(memory_topology_t* topo) {
         
         mem_region_t* region = &topo->regions[topo->region_count];
         region->base = entry->base;
-        region->length = entry->length;
-        region->type = entry->type;
-        region->acpi_attr = entry->flags;
+        region->size = entry->length;
         
         // 统计
         if (entry->type == HIK_MEM_TYPE_USABLE) {
@@ -143,20 +268,10 @@ void detect_memory_topology(memory_topology_t* topo) {
     
     for (u32 i = 0; i < topo->region_count; i++) {
         mem_region_t* region = &topo->regions[i];
-        const char* type_str;
         
-        switch (region->type) {
-            case MEM_TYPE_USABLE: type_str = "可用"; break;
-            case MEM_TYPE_RESERVED: type_str = "保留"; break;
-            case MEM_TYPE_ACPI: type_str = "ACPI"; break;
-            case MEM_TYPE_NVS: type_str = "NVS"; break;
-            case MEM_TYPE_UNUSABLE: type_str = "不可用"; break;
-            default: type_str = "未知"; break;
-        }
-        
-        log_info("  区域 %u: 0x%016lx - 0x%016lx (%10lu KB) %s\n",
-                 i, region->base, region->base + region->length - 1,
-                 region->length / 1024, type_str);
+        log_info("  区域 %u: 0x%016lx - 0x%016lx (%10lu KB)\n",
+                 i, region->base, region->base + region->size - 1,
+                 region->size / 1024);
     }
 }
 
@@ -166,8 +281,8 @@ void detect_memory_topology(memory_topology_t* topo) {
 void detect_pci_devices(device_list_t* devices) {
     devices->pci_count = 0;
     
-    // 扫描所有PCI总线
-    for (u8 bus = 0; bus < 256; bus++) {
+    // 扫描PCI总线（限制为前8条总线，避免过长的扫描）
+    for (u8 bus = 0; bus < 8; bus++) {
         for (u8 device = 0; device < 32; device++) {
             for (u8 function = 0; function < 8; function++) {
                 // 读取厂商ID和设备ID
@@ -181,12 +296,12 @@ void detect_pci_devices(device_list_t* devices) {
                     continue;
                 }
                 
-                pci_device_t* dev = &devices->pci_devices[devices->pci_count];
+                device_t* dev = &devices->devices[devices->pci_count];
                 dev->vendor_id = vendor_id;
                 dev->device_id = device_id;
-                dev->bus = bus;
-                dev->device = device;
-                dev->function = function;
+                dev->pci.bus = bus;
+                dev->pci.device = device;
+                dev->pci.function = function;
                 
                 // 读取类代码
                 u32 class_rev = pci_read_config(bus, device, function, 8);
@@ -196,7 +311,7 @@ void detect_pci_devices(device_list_t* devices) {
                 // 读取BAR
                 for (int i = 0; i < 6; i++) {
                     u32 bar = pci_read_config(bus, device, function, 0x10 + i * 4);
-                    dev->bar[i] = bar;
+                    dev->pci.bar[i] = bar;
                     
                     // 确定BAR大小（完整实现）
                     if (bar & 0x1) { 
@@ -208,40 +323,28 @@ void detect_pci_devices(device_list_t* devices) {
                         
                         // 计算大小
                         size = (~(size & 0xFFFC)) + 1;
-                        dev->bar_size[i] = size;
+                        dev->pci.bar_size[i] = size;
                     } else if (bar) { 
                         // 内存空间
                         u32 size = 0;
-                        u32 bar_addr = bar & 0xFFFFFFF0;
                         pci_write_config(bus, device, function, 0x10 + i * 4, 0xFFFFFFFF);
                         size = pci_read_config(bus, device, function, 0x10 + i * 4);
                         pci_write_config(bus, device, function, 0x10 + i * 4, bar);
                         
                         // 计算大小
                         size = (~(size & 0xFFFFFFF0)) + 1;
-                        dev->bar_size[i] = size;
+                        dev->pci.bar_size[i] = size;
                     } else {
-                        dev->bar_size[i] = 0;
+                        dev->pci.bar_size[i] = 0;
                     }
                 }
                 
                 // 读取IRQ线
                 u8 irq_line = pci_read_config_byte(bus, device, function, 0x3C);
-                dev->irq_line = irq_line;
+                dev->irq = irq_line;
                 
                 // 设置设备名称（完整实现）
-                const char* vendor_name = pci_vendor_to_string(vendor_id);
-                const char* device_name = pci_device_to_string(vendor_id, device_id);
-                
-                if (vendor_name && device_name) {
-                    snprintf(dev->name, sizeof(dev->name), 
-                            "%s %s (PCI %02x:%02x.%x)",
-                            vendor_name, device_name, bus, device, function);
-                } else {
-                    snprintf(dev->name, sizeof(dev->name), 
-                            "PCI %02x:%02x.%x (%04x:%04x)",
-                            bus, device, function, vendor_id, device_id);
-                }
+                format_device_name(dev->name, sizeof(dev->name), 0, 0, bus, device, function, vendor_id, device_id);
                 
                 devices->pci_count++;
                 
@@ -255,7 +358,7 @@ void detect_pci_devices(device_list_t* devices) {
     
     log_info("发现 %u 个PCI设备\n", devices->pci_count);
     for (u32 i = 0; i < devices->pci_count; i++) {
-        pci_device_t* dev = &devices->pci_devices[i];
+        device_t* dev = &devices->devices[i];
         log_info("  %s\n", dev->name);
     }
 }
@@ -271,12 +374,12 @@ void detect_acpi_info(hardware_probe_result_t* result) {
         log_warning("无法获取ACPI RSDP，使用默认值\n");
         
         // 使用默认值
-        result->apic_base = 0xFEE00000;
-        result->ioapic_base = 0xFEC00000;
+        result->local_irq.base_address = 0xFEE00000;
+        result->io_irq.base_address = 0xFEC00000;
         result->smp_enabled = false;
         
-        log_info("APIC基地址: 0x%016lx (默认)\n", result->apic_base);
-        log_info("IOAPIC基地址: 0x%016lx (默认)\n", result->ioapic_base);
+        log_info("APIC基地址: 0x%016lx (默认)\n", result->local_irq.base_address);
+        log_info("IOAPIC基地址: 0x%016lx (默认)\n", result->io_irq.base_address);
         log_info("SMP: 禁用 (默认)\n");
         return;
     }
@@ -313,8 +416,8 @@ void detect_acpi_info(hardware_probe_result_t* result) {
     u32 rsdt_length = *((u32*)&rsdt[4]);
     
     for (u32 offset = 36; offset < rsdt_length; offset += 4) {
-        u32* entry = (u32*)&rsdt[offset];
-        u8* table = (u8*)(*entry);
+        u32 entry_addr = *((u32*)&rsdt[offset]);
+        u8* table = (u8*)(u64)entry_addr;
         
         // 检查签名
         if (memcmp(table, "APIC", 4) == 0) {
@@ -337,7 +440,7 @@ void detect_acpi_info(hardware_probe_result_t* result) {
                     u64 ioapic_address = *((u64*)&table[madt_offset + 4]);
                     u32 gsi_base = *((u32*)&table[madt_offset + 12]);
                     
-                    result->ioapic_base = ioapic_address;
+                    result->io_irq.base_address = ioapic_address;
                     log_info("IOAPIC: 地址=0x%016llx, GSI基地=%u\n", 
                              ioapic_address, gsi_base);
                 }
@@ -350,42 +453,4 @@ void detect_acpi_info(hardware_probe_result_t* result) {
             break;
         }
     }
-    
-    log_info("SMP: %s\n", result->smp_enabled ? "启用" : "禁用");
-}
-
-/**
- * 综合探测
- */
-void probe_all_hardware(hardware_probe_result_t* result) {
-    log_info("========== 硬件探测开始 ==========\n");
-    
-    detect_cpu_info(&result->cpu);
-    detect_memory_topology(&result->memory);
-    detect_pci_devices(&result->devices);
-    detect_acpi_info(result);
-    
-    log_info("========== 硬件探测完成 ==========\n");
-}
-
-/**
- * 获取硬件探测结果
- */
-hardware_probe_result_t* get_hardware_probe_result(void) {
-    return &hw_probe_result;
-}
-
-/* PCI配置空间访问辅助函数 */
-static inline u32 pci_read_config(u8 bus, u8 device, u8 function, u8 offset) {
-    u32 address = (1 << 31) | (bus << 16) | (device << 11) | 
-                  (function << 8) | (offset & 0xFC);
-    outb(0xCF8, address >> 8);
-    outb(0xCF9, address);
-    return inb(0xCFC) | (inb(0xCFC + 1) << 8) | 
-           (inb(0xCFC + 2) << 16) | (inb(0xCFC + 3) << 24);
-}
-
-static inline u8 pci_read_config_byte(u8 bus, u8 device, u8 function, u8 offset) {
-    u32 value = pci_read_config(bus, device, function, offset & 0xFC);
-    return (value >> ((offset & 3) * 8)) & 0xFF;
 }

@@ -28,6 +28,55 @@ CORE0_SRCS       = $(wildcard $(CORE0_DIR)/*.c)
 PRIVILEGED1_SRCS = $(wildcard $(PRIVILEGED1_DIR)/*.c)
 ARCH_SRCS        = $(wildcard $(ARCH_DIR)/*.c)
 LIB_SRCS         = $(wildcard $(LIB_DIR)/*.c)
+
+# 编译时配置选项
+CONFIG_DEBUG ?= 0
+CONFIG_TRACE ?= 0
+CONFIG_KASLR ?= 1
+CONFIG_SMEP ?= 1
+CONFIG_SMAP ?= 1
+CONFIG_AUDIT ?= 1
+CONFIG_PERF ?= 1
+
+# 编译器标志
+CFLAGS = -Wall -Wextra -Werror \
+         -nostdlib -ffreestanding \
+         -fno-stack-protector -fno-stack-clash-protection \
+         -fno-omit-frame-pointer \
+         -mno-red-zone -mcmodel=kernel -m64 \
+         -I$(SRC_DIR)/Core-0 \
+         -I$(SRC_DIR)/Privileged-1 \
+         -I$(SRC_DIR)/Core-0/include \
+         -I$(SRC_DIR)/Core-0/lib
+
+# 编译时配置标志
+ifeq ($(CONFIG_DEBUG),1)
+    CFLAGS += -DCONFIG_DEBUG=1 -g
+endif
+
+ifeq ($(CONFIG_TRACE),1)
+    CFLAGS += -DCONFIG_TRACE=1
+endif
+
+ifeq ($(CONFIG_KASLR),1)
+    CFLAGS += -DCONFIG_KASLR=1
+endif
+
+ifeq ($(CONFIG_SMEP),1)
+    CFLAGS += -DCONFIG_SMEP=1
+endif
+
+ifeq ($(CONFIG_SMAP),1)
+    CFLAGS += -DCONFIG_SMAP=1
+endif
+
+ifeq ($(CONFIG_AUDIT),1)
+    CFLAGS += -DCONFIG_AUDIT=1
+endif
+
+ifeq ($(CONFIG_PERF),1)
+    CFLAGS += -DCONFIG_PERF=1
+endif
 ARCH_ASM         = $(wildcard $(ARCH_DIR)/*.S)
 
 ALL_SRCS = $(CORE0_SRCS) $(PRIVILEGED1_SRCS) $(ARCH_SRCS) $(LIB_SRCS)
@@ -48,7 +97,7 @@ CFLAGS = -Wall -Wextra -Werror -nostdlib -ffreestanding \
          -I$(CORE0_DIR) -I$(PRIVILEGED1_DIR) -I$(CORE0_DIR)/include -I$(CORE0_DIR)/lib
 
 # 链接选项
-LDFLAGS = -nostdlib -T linker.ld -z max-page-size=0x1000
+LDFLAGS = -nostdlib -T linker.ld -z max-page-size=0x1000 --allow-multiple-definition
 
 # 默认目标
 all: $(BIN_DIR)/$(PROJECT).elf $(BIN_DIR)/$(PROJECT).bin

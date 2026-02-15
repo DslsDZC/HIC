@@ -10,8 +10,13 @@
 #include "domain.h"
 #include "hal.h"
 
-/* 全局线程表 */
-extern thread_t *g_threads[MAX_THREADS];
+/* 前向声明 */
+typedef struct thread thread_t;
+
+/* NULL 定义 */
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
 
 /* 线程状态 */
 typedef enum {
@@ -23,7 +28,7 @@ typedef enum {
 } thread_state_t;
 
 /* 线程控制块 */
-typedef struct thread {
+struct thread {
     thread_id_t    thread_id;     /* 线程ID */
     domain_id_t    domain_id;     /* 所属域 */
     thread_state_t state;         /* 线程状态 */
@@ -40,7 +45,7 @@ typedef struct thread {
     /* 调度信息 */
     u64    time_slice;            /* 时间片 */
     u64    cpu_time_used;         /* 已用CPU时间 */
-    u64    last_run_time;         /* 上次运行时间戳 */
+    u64    last_run_time;         /* 上次执行时间戳 */
     
     /* 队列链接 */
     struct thread *next;          /* 下一个线程 */
@@ -55,7 +60,7 @@ typedef struct thread {
 #define THREAD_FLAG_KERNEL    (1U << 0)  /* 内核线程 */
 #define THREAD_FLAG_USER      (1U << 1)  /* 用户线程 */
     
-} thread_t;
+};
 
 /* 线程管理接口 */
 void thread_system_init(void);
@@ -74,9 +79,15 @@ void thread_yield(void);
 hik_status_t thread_block(thread_id_t thread_id);
 hik_status_t thread_wakeup(thread_id_t thread_id);
 
+/* 全局线程表 */
+extern thread_t g_threads[MAX_THREADS];
+
 /* 调度器接口（由core实现） */
+void scheduler_init(void);
 void schedule(void);
 void scheduler_tick(void);
+thread_id_t scheduler_pick_next(void);
+void context_switch_to(thread_id_t next_thread);
 
 /* 当前线程 */
 extern thread_t *g_current_thread;
@@ -88,63 +99,16 @@ extern thread_t *g_current_thread;
 /**
  * 检查线程是否活跃
  */
-bool thread_is_active(thread_id_t thread)
-{
-    if (thread >= MAX_THREADS) {
-        return false;
-    }
-    
-    /* 假设有全局线程表 */
-    extern thread_t *g_threads[MAX_THREADS];
-    thread_t *t = &g_threads[thread];
-    
-    return t != NULL && (t->state == THREAD_STATE_READY || 
-                           t->state == THREAD_STATE_RUNNING ||
-                           t->state == THREAD_STATE_BLOCKED ||
-                           t->state == THREAD_STATE_WAITING);
-}
+bool thread_is_active(thread_id_t thread);
 
 /**
  * 获取线程等待时间
  */
-u64 get_thread_wait_time(thread_id_t thread)
-{
-    if (thread >= MAX_THREADS) {
-        return 0;
-    }
-    
-    /* 假设有全局线程表 */
-    extern thread_t *g_threads[MAX_THREADS];
-    thread_t *t = &g_threads[thread];
-    
-    if (t == NULL || t->state != THREAD_STATE_BLOCKED && 
-        t->state != THREAD_STATE_WAITING) {
-        return 0;
-    }
-    
-    /* 返回等待时间（当前时间 - 上次运行时间） */
-    extern u64 get_system_time_ns(void);
-    return get_system_time_ns() - t->last_run_time;
-}
+u64 get_thread_wait_time(thread_id_t thread);
 
 /**
  * 获取线程等待的资源
  */
-cap_id_t get_thread_wait_resource(thread_id_t thread)
-{
-    if (thread >= MAX_THREADS) {
-        return INVALID_CAP_ID;
-    }
-    
-    extern thread_t *g_threads[MAX_THREADS];
-    thread_t *t = &g_threads[thread];
-    
-    if (t == NULL || t->state != THREAD_STATE_BLOCKED) {
-        return INVALID_CAP_ID;
-    }
-    
-    /* 返回等待的能力ID */
-    return (cap_id_t)(u64)t->wait_data;
-}
+cap_id_t get_thread_wait_resource(thread_id_t thread);
 
 #endif /* HIK_KERNEL_THREAD_H */

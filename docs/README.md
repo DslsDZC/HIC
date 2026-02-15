@@ -162,7 +162,7 @@ make all
 
 - 作者: DslsDZC
 - Email: dsls.dzc@gmail.com
-- GitHub: https://github.com/yourusername/hik
+- GitHub: https://github.com/DslsDZC/HIK
 
 ## 版本
 

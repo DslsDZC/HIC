@@ -7,6 +7,9 @@
 #include "lib/mem.h"
 #include "hal.h"
 
+/* 全局定时器计数 */
+extern u64 g_timer_ticks;
+
 /* 获取系统时间（纳秒） */
 u64 get_system_time_ns(void)
 {
@@ -16,6 +19,26 @@ u64 get_system_time_ns(void)
     /* 假设时间戳是纳秒级，如果是其他单位需要转换 */
     /* 这里假设TSC频率约为3GHz，转换为纳秒 */
     return timestamp / 3;  /* 简化：TSC周期/3 ≈ 纳秒 */
+}
+
+/* 定时器更新函数 */
+void timer_update(void)
+{
+    /* 更新定时器状态 */
+    static u64 timer_ticks = 0;
+    timer_ticks++;
+    
+    /* 触发调度器tick */
+    extern void scheduler_tick(void);
+    scheduler_tick();
+    
+    /* 检查是否有超时的线程需要唤醒 */
+    extern void thread_check_timeouts(void);
+    thread_check_timeouts();
+    
+    /* 更新性能统计 */
+    extern void perf_measure_timer(u64);
+    perf_measure_timer(timer_ticks);
 }
 
 /* 全局性能计数器 */
@@ -49,7 +72,20 @@ void perf_measure_context_switch(u64 cycles)
     g_perf_counter.context_switch_total_cycles += cycles;
 }
 
-/* 打印性能统计 */
+/* 测量定时器 */
+void perf_measure_timer(u64 ticks)
+{
+    g_timer_ticks += ticks;
+}
+
+/* 更新性能统计 */
+void perf_update_stats(void)
+{
+    /* 定期更新统计信息 */
+    /* 可以在这里添加周期性的统计更新逻辑 */
+}
+
+/* 性能统计输出 */
 void perf_print_stats(void)
 {
     console_puts("\n========== 性能统计 ==========\n");

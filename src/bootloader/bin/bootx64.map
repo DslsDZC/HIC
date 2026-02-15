@@ -1,0 +1,527 @@
+
+Discarded input sections
+
+ .rdata$.refptr.memset
+                0x0000000000000000       0x10 obj/uefi_stdlib.o
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+                0x0000000180000000                __image_base__ = 0x180000000
+                0x0000000000000000                __dll__ = 0x0
+                0x0000000180000000                __ImageBase = 0x180000000
+                0x0000000000001000                __section_alignment__ = 0x1000
+                0x0000000000000200                __file_alignment__ = 0x200
+                0x0000000000000004                __major_os_version__ = 0x4
+                0x0000000000000000                __minor_os_version__ = 0x0
+                0x0000000000000000                __major_image_version__ = 0x0
+                0x0000000000000000                __minor_image_version__ = 0x0
+                0x0000000000000005                __major_subsystem_version__ = 0x5
+                0x0000000000000002                __minor_subsystem_version__ = 0x2
+                0x000000000000000a                __subsystem__ = 0xa
+                0x0000000000200000                __size_of_stack_reserve__ = 0x200000
+                0x0000000000001000                __size_of_stack_commit__ = 0x1000
+                0x0000000000100000                __size_of_heap_reserve__ = 0x100000
+                0x0000000000001000                __size_of_heap_commit__ = 0x1000
+                0x0000000000000000                __loader_flags__ = 0x0
+                0x0000000000000160                __dll_characteristics__ = 0x160
+LOAD obj/uefi_main.o
+LOAD obj/uefi_bootlog.o
+LOAD obj/uefi_stdlib.o
+LOAD obj/uefi_string.o
+LOAD obj/uefi_console.o
+LOAD obj/uefi_efi_guids.o
+                0x00000000000002a0                . = SIZEOF_HEADERS
+                0x0000000000001000                . = ALIGN (__section_alignment__)
+
+.text           0x0000000180001000     0x4400
+ *(SORT_NONE(.init))
+ *(.text)
+ .text          0x0000000180001000     0x19a0 obj/uefi_main.o
+                0x0000000180001022                UefiMain
+                0x0000000180001423                load_platform_config
+                0x0000000180001756                parse_platform_config
+                0x000000018000182b                load_kernel_image
+                0x0000000180001b0e                prepare_boot_info
+                0x0000000180001d2e                get_memory_map
+                0x0000000180002045                find_acpi_tables
+                0x0000000180002180                load_kernel_segments
+                0x000000018000238a                exit_boot_services
+                0x00000001800024b9                jump_to_kernel
+                0x000000018000278a                efi_main
+ .text          0x00000001800029a0      0x290 obj/uefi_bootlog.o
+                0x00000001800029ef                bootlog_init
+                0x0000000180002a27                bootlog_event
+                0x0000000180002b24                bootlog_error
+                0x0000000180002b93                bootlog_info
+                0x0000000180002c02                bootlog_get_buffer
+                0x0000000180002c0f                bootlog_get_index
+                0x0000000180002c1b                bootlog_get_start_time
+ .text          0x0000000180002c30      0x2d0 obj/uefi_stdlib.o
+                0x0000000180002cb4                crc32
+                0x0000000180002d2c                malloc
+                0x0000000180002da0                free
+                0x0000000180002ddc                calloc
+                0x0000000180002e36                realloc
+                0x0000000180002e9f                atoi
+ .text          0x0000000180002f00     0x1100 obj/uefi_string.o
+                0x0000000180002f00                memcpy
+                0x0000000180002f5a                memset
+                0x0000000180002f9f                memcmp
+                0x0000000180003013                strlen
+                0x0000000180003047                strcmp
+                0x0000000180003096                strstr
+                0x0000000180003163                strncmp
+                0x00000001800031d0                strcpy
+                0x0000000180003213                strcat
+                0x0000000180003268                wcslen
+                0x000000018000329d                wcscmp
+                0x00000001800032ee                wcscpy
+                0x0000000180003325                utf16_to_utf8
+                0x00000001800034b7                utf8_to_utf16
+                0x000000018000369d                isdigit
+                0x00000001800036be                isxdigit
+                0x00000001800036f7                isspace
+                0x0000000180003730                toupper
+                0x0000000180003750                tolower
+                0x0000000180003770                strtoull
+                0x00000001800038c7                strtoll
+                0x0000000180003961                snprintf
+                0x0000000180003d23                sscanf
+ .text          0x0000000180004000     0x1390 obj/uefi_console.o
+                0x0000000180004000                console_init
+                0x0000000180004140                console_putchar
+                0x00000001800042e0                console_puts
+                0x000000018000431a                console_printf
+                0x0000000180004755                console_set_color
+                0x0000000180004778                console_clear
+                0x00000001800047de                console_set_cursor
+                0x0000000180004822                console_get_cursor
+                0x0000000180004857                log_set_level
+                0x00000001800049a8                log_error
+                0x00000001800049f1                log_warn
+                0x0000000180004a3a                log_info
+                0x0000000180004a83                log_debug
+                0x0000000180004acc                log_trace
+                0x0000000180004b15                serial_init
+                0x0000000180004be1                serial_putchar
+                0x0000000180004c2d                serial_puts
+                0x0000000180004c71                serial_printf
+ .text          0x0000000180005390        0x0 obj/uefi_efi_guids.o
+ *(SORT_BY_NAME(.text$*))
+ *(.text.*)
+ *(.gnu.linkonce.t.*)
+ *(.glue_7t)
+ *(.glue_7)
+                0x0000000180005390                . = ALIGN (0x8)
+ *(SORT_NONE(.fini))
+ *(.gcc_exc)
+                [!provide]                        PROVIDE (etext = .)
+ *(.gcc_except_table)
+
+.data           0x0000000180006000      0x200
+                0x0000000180006000                __data_start__ = .
+ *(.data)
+ .data          0x0000000180006000       0x80 obj/uefi_main.o
+ .data          0x0000000180006080        0x0 obj/uefi_bootlog.o
+ .data          0x0000000180006080        0x0 obj/uefi_stdlib.o
+ .data          0x0000000180006080        0x0 obj/uefi_string.o
+ .data          0x0000000180006080       0x10 obj/uefi_console.o
+ .data          0x0000000180006090       0x50 obj/uefi_efi_guids.o
+                0x0000000180006090                gEfiLoadedImageProtocolGuid
+                0x00000001800060a0                gEfiSimpleFileSystemProtocolGuid
+                0x00000001800060b0                gEfiFileInfoGuid
+                0x00000001800060c0                gEfiAcpi20TableGuid
+                0x00000001800060d0                gEfiAcpiTableGuid
+ *(.data2)
+ *(SORT_BY_NAME(.data$*))
+ *(.jcr)
+                0x00000001800060e0                __data_end__ = .
+ *(.data_cygwin_nocopy)
+
+.rdata          0x0000000180007000      0xc00
+ *(.rdata)
+ .rdata         0x0000000180007000      0x740 obj/uefi_main.o
+ .rdata         0x0000000180007740       0x50 obj/uefi_bootlog.o
+ .rdata         0x0000000180007790       0x20 obj/uefi_string.o
+ .rdata         0x00000001800077b0       0x40 obj/uefi_console.o
+ *(SORT_BY_NAME(.rdata$*))
+ .rdata$.refptr.bootlog_error
+                0x00000001800077f0       0x10 obj/uefi_main.o
+                0x00000001800077f0                .refptr.bootlog_error
+ .rdata$.refptr.bootlog_event
+                0x0000000180007800       0x10 obj/uefi_main.o
+                0x0000000180007800                .refptr.bootlog_event
+ .rdata$.refptr.bootlog_get_buffer
+                0x0000000180007810       0x10 obj/uefi_main.o
+                0x0000000180007810                .refptr.bootlog_get_buffer
+ .rdata$.refptr.bootlog_get_index
+                0x0000000180007820       0x10 obj/uefi_main.o
+                0x0000000180007820                .refptr.bootlog_get_index
+ .rdata$.refptr.bootlog_info
+                0x0000000180007830       0x10 obj/uefi_main.o
+                0x0000000180007830                .refptr.bootlog_info
+ .rdata$.refptr.bootlog_init
+                0x0000000180007840       0x10 obj/uefi_main.o
+                0x0000000180007840                .refptr.bootlog_init
+ .rdata$.refptr.console_init
+                0x0000000180007850       0x10 obj/uefi_main.o
+                0x0000000180007850                .refptr.console_init
+ .rdata$.refptr.console_printf
+                0x0000000180007860       0x10 obj/uefi_main.o
+                0x0000000180007860                .refptr.console_printf
+ .rdata$.refptr.console_puts
+                0x0000000180007870       0x10 obj/uefi_bootlog.o
+                0x0000000180007870                .refptr.console_puts
+ .rdata$.refptr.gBS
+                0x0000000180007880       0x10 obj/uefi_stdlib.o
+                0x0000000180007880                .refptr.gBS
+ .rdata$.refptr.gEfiAcpi20TableGuid
+                0x0000000180007890       0x10 obj/uefi_main.o
+                0x0000000180007890                .refptr.gEfiAcpi20TableGuid
+ .rdata$.refptr.gEfiAcpiTableGuid
+                0x00000001800078a0       0x10 obj/uefi_main.o
+                0x00000001800078a0                .refptr.gEfiAcpiTableGuid
+ .rdata$.refptr.gEfiFileInfoGuid
+                0x00000001800078b0       0x10 obj/uefi_main.o
+                0x00000001800078b0                .refptr.gEfiFileInfoGuid
+ .rdata$.refptr.gEfiLoadedImageProtocolGuid
+                0x00000001800078c0       0x10 obj/uefi_main.o
+                0x00000001800078c0                .refptr.gEfiLoadedImageProtocolGuid
+ .rdata$.refptr.gEfiSimpleFileSystemProtocolGuid
+                0x00000001800078d0       0x10 obj/uefi_main.o
+                0x00000001800078d0                .refptr.gEfiSimpleFileSystemProtocolGuid
+ .rdata$.refptr.gST
+                0x00000001800078e0       0x10 obj/uefi_bootlog.o
+                0x00000001800078e0                .refptr.gST
+ .rdata$.refptr.log_debug
+                0x00000001800078f0       0x10 obj/uefi_main.o
+                0x00000001800078f0                .refptr.log_debug
+ .rdata$.refptr.log_error
+                0x0000000180007900       0x10 obj/uefi_main.o
+                0x0000000180007900                .refptr.log_error
+ .rdata$.refptr.log_info
+                0x0000000180007910       0x10 obj/uefi_main.o
+                0x0000000180007910                .refptr.log_info
+ .rdata$.refptr.log_warn
+                0x0000000180007920       0x10 obj/uefi_main.o
+                0x0000000180007920                .refptr.log_warn
+ .rdata$.refptr.memcmp
+                0x0000000180007930       0x10 obj/uefi_main.o
+                0x0000000180007930                .refptr.memcmp
+ .rdata$.refptr.memcpy
+                0x0000000180007940       0x10 obj/uefi_main.o
+                0x0000000180007940                .refptr.memcpy
+ .rdata$.refptr.memset
+                0x0000000180007950       0x10 obj/uefi_main.o
+                0x0000000180007950                .refptr.memset
+ .rdata$.refptr.serial_init
+                0x0000000180007960       0x10 obj/uefi_main.o
+                0x0000000180007960                .refptr.serial_init
+ .rdata$.refptr.strcpy
+                0x0000000180007970       0x10 obj/uefi_main.o
+                0x0000000180007970                .refptr.strcpy
+ .rdata$.refptr.strlen
+                0x0000000180007980       0x10 obj/uefi_bootlog.o
+                0x0000000180007980                .refptr.strlen
+ .rdata$.refptr.strstr
+                0x0000000180007990       0x10 obj/uefi_main.o
+                0x0000000180007990                .refptr.strstr
+ .rdata$zzz     0x00000001800079a0       0x20 obj/uefi_main.o
+ .rdata$zzz     0x00000001800079c0       0x20 obj/uefi_bootlog.o
+ .rdata$zzz     0x00000001800079e0       0x20 obj/uefi_stdlib.o
+ .rdata$zzz     0x0000000180007a00       0x20 obj/uefi_string.o
+ .rdata$zzz     0x0000000180007a20       0x20 obj/uefi_console.o
+ .rdata$zzz     0x0000000180007a40       0x20 obj/uefi_efi_guids.o
+                0x0000000180007a60                . = ALIGN (0x4)
+                0x0000000180007a60                __rt_psrelocs_start = .
+ *(.rdata_runtime_pseudo_reloc)
+                0x0000000180007a60                __rt_psrelocs_end = .
+                0x0000000180007a60                . = ALIGN (0x8)
+                0x0000000180007a60                __DELAY_IMPORT_DIRECTORY_start__ = .
+ SORT_BY_NAME(*)(.didat$2)
+ SORT_BY_NAME(*)(.didat$3)
+                0x0000000180007a60                __DELAY_IMPORT_DIRECTORY_end__ = .
+                0x0000000180007a60                . = (. + (__DELAY_IMPORT_DIRECTORY_end__ - __DELAY_IMPORT_DIRECTORY_start__)?0x20:0x0)
+                0x0000000180007a60                . = ALIGN (0x8)
+ SORT_BY_NAME(*)(.didat$4)
+ SORT_BY_NAME(*)(.didat$6)
+ SORT_BY_NAME(*)(.didat$7)
+                0x0000000180007a60                . = ALIGN (0x8)
+                0x0000000180007a60                ___CTOR_LIST__ = .
+                0x0000000180007a60                __CTOR_LIST__ = .
+                0x0000000180007a60        0x4 LONG 0xffffffffffffffff
+                0x0000000180007a64        0x4 LONG 0xffffffffffffffff
+ *(.ctors)
+ *(.ctor)
+ *(SORT_BY_NAME(.ctors.*))
+                0x0000000180007a68        0x4 LONG 0x0
+                0x0000000180007a6c        0x4 LONG 0x0
+                0x0000000180007a70                ___DTOR_LIST__ = .
+                0x0000000180007a70                __DTOR_LIST__ = .
+                0x0000000180007a70        0x4 LONG 0xffffffffffffffff
+                0x0000000180007a74        0x4 LONG 0xffffffffffffffff
+ *(.dtors)
+ *(.dtor)
+ *(SORT_BY_NAME(.dtors.*))
+                0x0000000180007a78        0x4 LONG 0x0
+                0x0000000180007a7c        0x4 LONG 0x0
+                0x0000000180007a80                ___crt_xc_start__ = .
+ *(SORT_BY_NAME(.CRT$XC*))
+                0x0000000180007a80                ___crt_xc_end__ = .
+                0x0000000180007a80                ___crt_xi_start__ = .
+ *(SORT_BY_NAME(.CRT$XI*))
+                0x0000000180007a80                ___crt_xi_end__ = .
+                0x0000000180007a80                ___crt_xl_start__ = .
+ *(SORT_BY_NAME(.CRT$XL*))
+                0x0000000180007a80                ___crt_xp_start__ = .
+ *(SORT_BY_NAME(.CRT$XP*))
+                0x0000000180007a80                ___crt_xp_end__ = .
+                0x0000000180007a80                ___crt_xt_start__ = .
+ *(SORT_BY_NAME(.CRT$XT*))
+                0x0000000180007a80                ___crt_xt_end__ = .
+                0x0000000180007a80                ___crt_xd_start__ = .
+ *(SORT_BY_NAME(.CRT$XD*))
+                0x0000000180007a80                ___crt_xd_end__ = .
+                0x0000000180007a60                ___RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x0000000180007a60                __RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x0000000180007a60                ___RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+                0x0000000180007a60                __RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+
+.eh_frame
+ *(.eh_frame*)
+
+.pdata
+ *(.pdata*)
+
+.xdata
+ *(.xdata*)
+
+.bss            0x0000000180008000     0x1090
+                0x0000000180008000                __bss_start__ = .
+ *(.bss)
+ .bss           0x0000000180008000       0x30 obj/uefi_main.o
+                0x0000000180008000                gST
+                0x0000000180008008                gBS
+ *fill*         0x0000000180008030       0x10 
+ .bss           0x0000000180008040      0xc20 obj/uefi_bootlog.o
+ .bss           0x0000000180008c60      0x420 obj/uefi_stdlib.o
+ .bss           0x0000000180009080        0x0 obj/uefi_string.o
+ .bss           0x0000000180009080       0x10 obj/uefi_console.o
+ .bss           0x0000000180009090        0x0 obj/uefi_efi_guids.o
+ *(COMMON)
+                0x0000000180009090                __bss_end__ = .
+
+.edata          0x000000018000a000      0x800
+ *(.edata)
+ .edata         0x000000018000a000      0x67d dll stuff
+
+/DISCARD/
+ *(.debug$S)
+ *(.debug$T)
+ *(.debug$F)
+ *(.drectve)
+ *(.note.GNU-stack)
+ *(.gnu.lto_*)
+ *(.gnu_object_only)
+
+.idata          0x000000018000b000      0x200
+ SORT_BY_NAME(*)(.idata$2)
+ SORT_BY_NAME(*)(.idata$3)
+                0x000000018000b000        0x4 LONG 0x0
+                0x000000018000b004        0x4 LONG 0x0
+                0x000000018000b008        0x4 LONG 0x0
+                0x000000018000b00c        0x4 LONG 0x0
+                0x000000018000b010        0x4 LONG 0x0
+                0x000000018000b018                . = ALIGN (0x8)
+ *fill*         0x000000018000b014        0x4 
+ SORT_BY_NAME(*)(.idata$4)
+                0x000000018000b018                __IAT_start__ = .
+ SORT_BY_NAME(*)(.idata$5)
+                0x000000018000b018                __IAT_end__ = .
+ SORT_BY_NAME(*)(.idata$6)
+ SORT_BY_NAME(*)(.idata$7)
+
+.didat
+ SORT_BY_NAME(*)(.didat$5)
+
+.tls            0x000000018000c000        0x0
+                0x000000018000c000                ___tls_start__ = .
+ *(.tls$AAA)
+ *(.tls)
+ *(.tls$)
+ *(SORT_BY_NAME(.tls$*))
+ *(.tls$ZZZ)
+                0x000000018000c000                ___tls_end__ = .
+
+.endjunk        0x000000018000c000        0x0
+                [!provide]                        PROVIDE (end = .)
+                [!provide]                        PROVIDE (_end = .)
+                0x000000018000c000                __end__ = .
+
+.rsrc
+ *(.rsrc)
+ *(.rsrc$*)
+
+.reloc          0x000000018000c000      0x200
+ *(.reloc)
+ .reloc         0x000000018000c000       0x40 dll stuff
+
+.stab
+ *(.stab)
+
+.stabstr
+ *(.stabstr)
+
+.debug_aranges
+ *(.debug_aranges)
+
+.zdebug_aranges
+ *(.zdebug_aranges)
+
+.debug_pubnames
+ *(.debug_pubnames)
+
+.zdebug_pubnames
+ *(.zdebug_pubnames)
+
+.debug_info
+ *(.debug_info .gnu.linkonce.wi.*)
+
+.zdebug_info
+ *(.zdebug_info .zdebug.gnu.linkonce.wi.*)
+
+.debug_abbrev
+ *(.debug_abbrev)
+
+.zdebug_abbrev
+ *(.zdebug_abbrev)
+
+.debug_line
+ *(.debug_line)
+
+.zdebug_line
+ *(.zdebug_line)
+
+.debug_frame
+ *(.debug_frame*)
+
+.zdebug_frame
+ *(.zdebug_frame*)
+
+.debug_str
+ *(.debug_str)
+
+.zdebug_str
+ *(.zdebug_str)
+
+.debug_loc
+ *(.debug_loc)
+
+.zdebug_loc
+ *(.zdebug_loc)
+
+.debug_macinfo
+ *(.debug_macinfo)
+
+.zdebug_macinfo
+ *(.zdebug_macinfo)
+
+.debug_weaknames
+ *(.debug_weaknames)
+
+.zdebug_weaknames
+ *(.zdebug_weaknames)
+
+.debug_funcnames
+ *(.debug_funcnames)
+
+.zdebug_funcnames
+ *(.zdebug_funcnames)
+
+.debug_typenames
+ *(.debug_typenames)
+
+.zdebug_typenames
+ *(.zdebug_typenames)
+
+.debug_varnames
+ *(.debug_varnames)
+
+.zdebug_varnames
+ *(.zdebug_varnames)
+
+.debug_pubtypes
+ *(.debug_pubtypes)
+
+.zdebug_pubtypes
+ *(.zdebug_pubtypes)
+
+.debug_ranges
+ *(.debug_ranges)
+
+.zdebug_ranges
+ *(.zdebug_ranges)
+
+.debug_types
+ *(.debug_types .gnu.linkonce.wt.*)
+
+.zdebug_types
+ *(.zdebug_types .gnu.linkonce.wt.*)
+
+.debug_addr
+ *(.debug_addr)
+
+.zdebug_addr
+ *(.zdebug_addr)
+
+.debug_line_str
+ *(.debug_line_str)
+
+.zdebug_line_str
+ *(.zdebug_line_str)
+
+.debug_loclists
+ *(.debug_loclists)
+
+.zdebug_loclists
+ *(.zdebug_loclists)
+
+.debug_macro
+ *(.debug_macro)
+
+.zdebug_macro
+ *(.zdebug_macro)
+
+.debug_names
+ *(.debug_names)
+
+.zdebug_names
+ *(.zdebug_names)
+
+.debug_rnglists
+ *(.debug_rnglists)
+
+.zdebug_rnglists
+ *(.zdebug_rnglists)
+
+.debug_str_offsets
+ *(.debug_str_offsets)
+
+.zdebug_str_offsets
+ *(.zdebug_str_offsets)
+
+.debug_sup
+ *(.debug_sup)
+
+.debug_gdb_scripts
+ *(.debug_gdb_scripts)
+
+.zdebug_gdb_scripts
+ *(.zdebug_gdb_scripts)
+OUTPUT(bin/bootx64.efi pei-x86-64)
+LOAD dll stuff

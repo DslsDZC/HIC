@@ -304,8 +304,8 @@ A: 可以使用QEMU的调试功能，或者添加串口输出进行调试。
 
 - 查看 [常见问题](./36-FAQ.md)
 - 查看 [故障排查](./38-Troubleshooting.md)
-- 提交 [Issue](https://github.com/yourusername/hik/issues)
-- 加入 [讨论区](https://github.com/yourusername/hik/discussions)
+- 提交 [Issue](https://github.com/DslsDZC/HIK/issues)
+- 加入 [讨论区](https://github.com/DslsDZC/HIK/discussions)
 
 ---
 

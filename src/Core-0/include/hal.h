@@ -3,6 +3,12 @@
  * 
  * 本文件提供架构无关的接口，用于核心代码
  * 核心代码应该只包含此文件，不应直接包含arch.h
+ * 
+ * 架构隔离原则：
+ * 1. 架构无关代码只包含此文件
+ * 2. 此文件不包含arch.h
+ * 3. 所有架构特定操作通过函数调用
+ * 4. 架构检测在hal.c中完成
  */
 
 #ifndef HIK_HAL_H
@@ -10,32 +16,55 @@
 
 #include "types.h"
 
+/* 架构类型枚举 */
+typedef enum {
+    HAL_ARCH_UNKNOWN = 0,
+    HAL_ARCH_X86_64,
+    HAL_ARCH_ARM64,
+    HAL_ARCH_RISCV64,
+    HAL_ARCH_MAX
+} hal_arch_type_t;
+
+/* 架构无关的上下文结构（完整实现） */
+typedef struct hal_context {
+    /* 通用寄存器 */
+    u64 general_regs[16];
+
+    /* 特殊寄存器 */
+    u64 pc;                  /* 程序计数器 */
+    u64 sp;                  /* 栈指针 */
+    u64 flags;               /* 标志寄存器 */
+
+    /* 架构特定扩展 */
+    u64 arch_specific[32];
+
+    /* 状态信息 */
+    u32 state;
+    u32 privilege_level;
+} hal_context_t;
+
+/* 获取当前架构类型 */
+hal_arch_type_t hal_get_arch_type(void);
+
 /* ==================== 内存屏障接口 ==================== */
 
 /**
  * 完整内存屏障
  * 确保所有读写操作都完成
  */
-static inline void hal_memory_barrier(void) {
-    __asm__ volatile("" ::: "memory");  /* 编译器屏障 */
-    /* 架构特定屏障由arch.h提供 */
-}
+void hal_memory_barrier(void);
 
 /**
  * 读屏障
  * 确保所有读操作完成
  */
-static inline void hal_read_barrier(void) {
-    __asm__ volatile("" ::: "memory");
-}
+void hal_read_barrier(void);
 
 /**
  * 写屏障
  * 确保所有写操作完成
  */
-static inline void hal_write_barrier(void) {
-    __asm__ volatile("" ::: "memory");
-}
+void hal_write_barrier(void);
 
 /* ==================== 中断控制接口 ==================== */
 
@@ -43,37 +72,24 @@ static inline void hal_write_barrier(void) {
  * 禁用中断
  * 返回之前的中断状态
  */
-static inline bool hal_disable_interrupts(void) {
-    extern bool arch_disable_interrupts_save(void);
-    return arch_disable_interrupts_save();
-}
+bool hal_disable_interrupts(void);
 
 /**
  * 启用中断
  */
-static inline void hal_enable_interrupts(void) {
-    extern void arch_enable_interrupts_restore(bool state);
-    arch_enable_interrupts_restore(false);
-}
+void hal_enable_interrupts(void);
 
 /**
  * 恢复中断状态
  */
-static inline void hal_restore_interrupts(bool state) {
-    extern void arch_enable_interrupts_restore(bool state);
-    arch_enable_interrupts_restore(state);
-}
+void hal_restore_interrupts(bool state);
 
 /* ==================== 时间接口 ==================== */
 
 /**
- * 获取当前时间戳
  * 返回纳秒级时间戳
  */
-static inline u64 hal_get_timestamp(void) {
-    extern u64 arch_get_timestamp(void);
-    return arch_get_timestamp();
-}
+u64 hal_get_timestamp(void);
 
 /**
  * 延迟微秒
@@ -85,10 +101,12 @@ void hal_udelay(u32 us);
 /**
  * 检查是否在内核态
  */
-static inline bool hal_is_kernel_mode(void) {
-    extern u32 arch_get_privilege_level(void);
-    return arch_get_privilege_level() == 0;
-}
+bool hal_is_kernel_mode(void);
+
+/**
+ * 获取当前特权级
+ */
+u32 hal_get_privilege_level(void);
 
 /* ==================== 页大小接口 ==================== */
 
@@ -115,16 +133,12 @@ static inline bool hal_is_page_aligned(u64 addr) {
 /**
  * 物理地址到虚拟地址映射（恒等映射）
  */
-static inline void* hal_phys_to_virt(phys_addr_t phys) {
-    return (void*)phys;
-}
+void* hal_phys_to_virt(phys_addr_t phys);
 
 /**
  * 虚拟地址到物理地址映射（恒等映射）
  */
-static inline phys_addr_t hal_virt_to_phys(void* virt) {
-    return (phys_addr_t)virt;
-}
+phys_addr_t hal_virt_to_phys(void* virt);
 
 /* ==================== 上下文接口 ==================== */
 
@@ -138,12 +152,27 @@ void hal_context_switch(void* prev, void* next);
  */
 void hal_context_init(void* context, void* entry_point, void* stack_top);
 
+/**
+ * 保存上下文
+ */
+void hal_save_context(void* context);
+
+/**
+ * 恢复上下文
+ */
+void hal_restore_context(void* context);
+
 /* ==================== 系统调用接口 ==================== */
 
 /**
  * 执行系统调用
  */
 void hal_syscall_invoke(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4);
+
+/**
+ * 系统调用返回
+ */
+void hal_syscall_return(u64 ret_val);
 
 /* ==================== 设备接口 ==================== */
 
@@ -157,6 +186,33 @@ u8 hal_inb(u16 port);
  */
 void hal_outb(u16 port, u8 value);
 
+/**
+ * 读取IO端口（16位）
+ */
+u16 hal_inw(u16 port);
+
+/**
+ * 写入IO端口（16位）
+ */
+void hal_outw(u16 port, u16 value);
+
+/**
+ * 读取IO端口（32位）
+ */
+u32 hal_inl(u16 port);
+
+/**
+ * 写入IO端口（32位）
+ */
+void hal_outl(u16 port, u32 value);
+
+/* ==================== 时间接口 ==================== */
+
+/**
+ * 延迟微秒
+ */
+void hal_udelay(u32 us);
+
 /* ==================== 错误处理接口 ==================== */
 
 /**
@@ -165,31 +221,48 @@ void hal_outb(u16 port, u8 value);
 void hal_trigger_exception(u32 exc_num);
 
 /**
- * 停机
+ * 停止CPU
  */
-static inline void hal_halt(void) {
-    extern void arch_halt(void);
-    arch_halt();
-}
+void hal_halt(void);
+
+/**
+ * 空转等待
+ */
+void hal_idle(void);
 
 /* ==================== 调试接口 ==================== */
 
 /**
  * 断点
  */
-static inline void hal_breakpoint(void) {
-#if defined(__x86_64__)
-    __asm__ volatile("int3");
-#elif defined(__aarch64__)
-    __asm__ volatile("brk 0");
-#elif defined(__riscv)
-    __asm__ volatile("ebreak");
-#endif
-}
+void hal_breakpoint(void);
 
 /**
  * 栈回溯（调试用）
  */
 void hal_stack_trace(void);
+
+/* ==================== 架构检测和初始化 ==================== */
+
+/**
+ * 初始化HAL层
+ * 在内核启动时调用，检测架构并初始化相关功能
+ */
+void hal_init(void);
+
+/**
+ * 获取架构名称
+ */
+const char* hal_get_arch_name(void);
+
+/**
+ * 获取页大小
+ */
+u64 hal_get_page_size(void);
+
+/**
+ * 检查当前架构是否支持IO端口
+ */
+bool hal_supports_io_ports(void);
 
 #endif /* HIK_HAL_H */

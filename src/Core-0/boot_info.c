@@ -9,9 +9,37 @@
 #include "string.h"
 #include "hardware_probe.h"
 #include "module_loader.h"
+#include <stdarg.h>
+#include <stddef.h>
+
+/* 简化的 sscanf 实现 */
+static int simple_sscanf(const char *str, const char *fmt, ...) {
+    /* 支持基本格式 */
+    va_list args;
+    va_start(args, fmt);
+    
+    if (strcmp(fmt, "%lu%c") == 0) {
+        unsigned long *val = va_arg(args, unsigned long*);
+        char *ch = va_arg(args, char*);
+        
+        const char *p = str;
+        *val = 0;
+        while (*p >= '0' && *p <= '9') {
+            *val = *val * 10 + (*p - '0');
+            p++;
+        }
+        if (ch) *ch = *p;
+        
+        va_end(args);
+        return 2;
+    }
+    
+    va_end(args);
+    return 0;
+}
 
 /* 全局启动状态 */
-static boot_state_t g_boot_state = {0};
+boot_state_t g_boot_state = {0};
 
 /**
  * 内核入口点
@@ -21,7 +49,7 @@ void kernel_entry(hik_boot_info_t* boot_info) {
     g_boot_state.boot_info = boot_info;
     
     // 初始化控制台（如果未初始化）
-    console_init();
+    console_init(CONSOLE_TYPE_SERIAL);
     
     log_info("========== HIK内核启动 ==========\n");
     log_info("版本: %s\n", HIK_VERSION);
@@ -37,19 +65,23 @@ void kernel_entry(hik_boot_info_t* boot_info) {
     // 处理启动信息
     boot_info_process(boot_info);
     
-    // 运行时硬件探测
-    log_info("开始运行时硬件探测...\n");
-    probe_all_hardware(&g_boot_state.hw);
+    // 静态硬件探测
+    log_info("开始静态硬件探测...\n");    // 硬件信息由Bootloader提供，内核只接收和使用
+log_info("Bootloader提供硬件信息:\n");
+log_info("  CPU核心: %u\n", g_boot_state.hw.cpu.logical_cores);
+log_info("  总内存: %lu MB\n", g_boot_state.hw.memory.total_physical / (1024 * 1024));
+log_info("  设备数量: %u\n", g_boot_state.hw.devices.device_count);
+
+// 模块自动加载驱动
+module_auto_load_drivers(&g_boot_state.hw.devices);
     
     // 初始化内存管理器
     log_info("初始化内存管理器...\n");
     boot_info_init_memory(boot_info);
     
-    // 初始化ACPI
-    if (boot_info->flags & HIK_BOOT_FLAG_ACPI_ENABLED) {
-        log_info("初始化ACPI...\n");
-        boot_info_init_acpi(boot_info);
-    }
+    // 硬件信息由Bootloader提供，内核只接收和使用
+    // 不在内核中进行硬件探测
+    log_info("使用Bootloader提供的硬件信息\n");
     
     // 解析命令行
     if (boot_info->cmdline[0] != '\0') {
@@ -233,12 +265,12 @@ void boot_info_init_acpi(hik_boot_info_t* boot_info) {
     /* 实际实现需要解析ACPI表（MADT, DSDT等） */
     
     /* 完整实现：解析ACPI RSDP和相关表 */
-    if (!boot_info || !boot_info->acpi_rsdp) {
+    if (!boot_info || !boot_info->rsdp) {
         log_warning("ACPI RSDP指针无效\n");
         return;
     }
     
-    acpi_rsdp_t* rsdp = (acpi_rsdp_t*)boot_info->acpi_rsdp;
+    acpi_rsdp_t* rsdp = (acpi_rsdp_t*)boot_info->rsdp;
     
     /* 验证RSDP签名 */
     if (memcmp(rsdp->signature, "RSD PTR ", 8) != 0) {
@@ -263,11 +295,11 @@ void boot_info_init_acpi(hik_boot_info_t* boot_info) {
     /* 解析RSDT/XSDT */
     if (rsdp->revision == 0) {
         /* ACPI 1.0: 使用RSDT */
-        acpi_rsdt_t* rsdt = (acpi_rsdt_t*)(phys_to_virt(rsdp->rsdt_address));
+        acpi_rsdt_t* rsdt = (acpi_rsdt_t*)(hal_phys_to_virt(rsdp->rsdt_address));
         boot_info_parse_acpi_tables(rsdt, ACPI_SIG_RSDT);
     } else {
         /* ACPI 2.0+: 使用XSDT */
-        acpi_xsdt_t* xsdt = (acpi_xsdt_t*)(phys_to_virt(rsdp->xsdt_address));
+        acpi_xsdt_t* xsdt = (acpi_xsdt_t*)(hal_phys_to_virt(rsdp->xsdt_address));
         boot_info_parse_acpi_tables(xsdt, ACPI_SIG_XSDT);
     }
     
@@ -275,6 +307,71 @@ void boot_info_init_acpi(hik_boot_info_t* boot_info) {
     boot_info->acpi_valid = true;
     
     log_info("ACPI初始化完成\n");
+}
+
+/**
+ * 解析ACPI表
+ */
+void boot_info_parse_acpi_tables(void *sdt, const char *signature) {
+    if (!sdt || !signature) {
+        return;
+    }
+    
+    acpi_sdt_header_t *header = (acpi_sdt_header_t *)sdt;
+    
+    /* 验证表签名 */
+    if (memcmp(header->signature, signature, 4) != 0) {
+        log_warning("ACPI表签名不匹配: 期望 %.4s, 实际 %.4s\n", signature, header->signature);
+        return;
+    }
+    
+    /* 验证表校验和 */
+    u8 checksum = 0;
+    u8 *bytes = (u8 *)header;
+    for (u32 i = 0; i < header->length; i++) {
+        checksum += bytes[i];
+    }
+    
+    if (checksum != 0) {
+        log_warning("ACPI表校验和错误: %.4s\n", signature);
+        return;
+    }
+    
+    log_info("ACPI表 %.4s: 长度=%d, 版本=%d\n", 
+             signature, header->length, header->revision);
+    
+    /* 解析表中的条目 */
+    if (strcmp(signature, ACPI_SIG_RSDT) == 0) {
+        acpi_rsdt_t *rsdt = (acpi_rsdt_t *)sdt;
+        u32 entry_count = (rsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u32);
+        
+        log_info("RSDT包含 %u 个表\n", entry_count);
+        
+        for (u32 i = 0; i < entry_count; i++) {
+            u32 entry_addr = rsdt->entry_pointers[i];
+            acpi_sdt_header_t *entry = (acpi_sdt_header_t *)hal_phys_to_virt(entry_addr);
+            
+            if (entry) {
+                log_info("  表 %u: %.4s @ 0x%p\n", i, entry->signature, entry);
+                /* 可以递归解析子表 */
+            }
+        }
+    } else if (strcmp(signature, ACPI_SIG_XSDT) == 0) {
+        acpi_xsdt_t *xsdt = (acpi_xsdt_t *)sdt;
+        u32 entry_count = (xsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u64);
+        
+        log_info("XSDT包含 %u 个表\n", entry_count);
+        
+        for (u32 i = 0; i < entry_count; i++) {
+            u64 entry_addr = xsdt->entry_pointers[i];
+            acpi_sdt_header_t *entry = (acpi_sdt_header_t *)hal_phys_to_virt(entry_addr);
+            
+            if (entry) {
+                log_info("  表 %u: %.4s @ 0x%p\n", i, entry->signature, entry);
+                /* 可以递归解析子表 */
+            }
+        }
+    }
 }
 
 /**
@@ -308,7 +405,7 @@ void boot_info_parse_cmdline(const char* cmdline) {
         char param[128];
         u64 len = p - start;
         if (len >= sizeof(param)) len = sizeof(param) - 1;
-        memcopy(param, start, len);
+        memmove(param, start, len);
         param[len] = '\0';
         
         /* 处理参数 */
@@ -338,7 +435,7 @@ void boot_info_parse_cmdline(const char* cmdline) {
             const char* mem_str = param + 4;
             char unit = '\0';
             
-            if (sscanf(mem_str, "%lu%c", &mem_limit, &unit) == 2) {
+            if (simple_sscanf(mem_str, "%lu%c", &mem_limit, &unit) == 2) {
                 if (unit == 'G' || unit == 'g') {
                     mem_limit *= 1024 * 1024 * 1024;
                 } else if (unit == 'M' || unit == 'm') {
@@ -359,7 +456,7 @@ void boot_info_parse_cmdline(const char* cmdline) {
             int baud = 115200;
             char device[16];
             
-            if (sscanf(param + 8, "%[^,],%d", device, &baud) == 2) {
+            if (simple_sscanf(param + 8, "%[^,],%d", device, &baud) == 2) {
                 /* 串口控制台 */
                 if (strcmp(device, "ttyS0") == 0) {
                     port = 0x3F8;
@@ -406,9 +503,8 @@ void boot_info_print_summary(void) {
     log_info("  视频支持: %s\n",
             (g_boot_state.boot_info->flags & HIK_BOOT_FLAG_VIDEO_ENABLED) ? "是" : "否");
     
-    // 运行时探测的信息
-    log_info("\n运行时探测:\n");
-    log_info("  CPU: %s\n", g_boot_state.hw.cpu.brand_string);
+    // 静态探测的信息
+    log_info("\n静态探测:\n");    log_info("  CPU: %s\n", g_boot_state.hw.cpu.brand_string);
     log_info("  逻辑核心: %u, 物理核心: %u\n",
             g_boot_state.hw.cpu.logical_cores,
             g_boot_state.hw.cpu.physical_cores);
@@ -429,7 +525,7 @@ void boot_info_print_summary(void) {
 /**
  * 内核主循环
  */
-static void kernel_main_loop(void) {
+void kernel_main_loop(void) {
     log_info("进入内核主循环...\n");
     
     /* 完整实现：调度器和事件循环 */

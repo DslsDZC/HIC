@@ -7,6 +7,8 @@
 #include "capability.h"
 #include "pagetable.h"
 #include "hal.h"
+#include "thread.h"
+#include "audit.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
@@ -17,12 +19,12 @@ static domain_id_t g_current_domain = HIK_DOMAIN_CORE;
 static struct {
     domain_id_t domain;
     u64 return_address;
-    arch_context_t context;
+    hal_context_t context;
 } g_call_stack[16];
 static u32 g_call_stack_depth = 0;
 
 /* 域上下文保存 */
-static arch_context_t g_domain_contexts[HIK_DOMAIN_MAX];
+static hal_context_t g_domain_contexts[HIK_DOMAIN_MAX];
 
 /* 域页表 */
 static page_table_t* g_domain_pagetables[HIK_DOMAIN_MAX];
@@ -32,7 +34,7 @@ void domain_switch_init(void)
 {
     /* 初始化域上下文 */
     for (domain_id_t i = 0; i < HIK_DOMAIN_MAX; i++) {
-        memzero(&g_domain_contexts[i], sizeof(arch_context_t));
+        memzero(&g_domain_contexts[i], sizeof(hal_context_t));
         g_domain_pagetables[i] = NULL;
     }
     
@@ -51,6 +53,8 @@ hik_status_t domain_switch(domain_id_t from, domain_id_t to,
                            cap_id_t endpoint_cap, u64 syscall_num,
                            u64* args, u32 arg_count)
 {
+    (void)arg_count;  /* 避免未使用参数警告 */
+    (void)args;       /* 避免未使用参数警告 */
     /* 验证参数 */
     if (from >= HIK_DOMAIN_MAX || to >= HIK_DOMAIN_MAX) {
         return HIK_ERROR_INVALID_PARAM;
@@ -105,8 +109,9 @@ hik_status_t domain_switch(domain_id_t from, domain_id_t to,
 }
 
 /* 从域切换返回（完整实现） */
-void domain_switch_return(hik_status_t result)
+void __attribute__((unused)) domain_switch_return(hik_status_t result)
 {
+    (void)result;  /* 避免未使用参数警告 */
     if (g_call_stack_depth == 0) {
         /* 调用栈为空，返回Core-0 */
         g_current_domain = HIK_DOMAIN_CORE;
@@ -136,29 +141,29 @@ void domain_switch_return(hik_status_t result)
 }
 
 /* 保存当前域上下文 */
-void domain_switch_save_context(domain_id_t domain, arch_context_t* ctx)
+void __attribute__((unused)) domain_switch_save_context(domain_id_t domain, hal_context_t* ctx)
 {
     if (domain < HIK_DOMAIN_MAX && ctx) {
-        memcopy(&g_domain_contexts[domain], ctx, sizeof(arch_context_t));
+        memcopy(&g_domain_contexts[domain], ctx, sizeof(hal_context_t));
     }
 }
 
 /* 恢复域上下文 */
-void domain_switch_restore_context(domain_id_t domain, arch_context_t* ctx)
+void __attribute__((unused)) domain_switch_restore_context(domain_id_t domain, hal_context_t* ctx)
 {
     if (domain < HIK_DOMAIN_MAX && ctx) {
-        memcopy(ctx, &g_domain_contexts[domain], sizeof(arch_context_t));
+        memcopy(ctx, &g_domain_contexts[domain], sizeof(hal_context_t));
     }
 }
 
 /* 获取当前域ID */
-domain_id_t domain_switch_get_current(void)
+__attribute__((unused)) domain_id_t domain_switch_get_current(void)
 {
     return g_current_domain;
 }
 
 /* 设置当前域ID */
-void domain_switch_set_current(domain_id_t domain)
+__attribute__((unused)) void domain_switch_set_current(domain_id_t domain)
 {
     if (domain < HIK_DOMAIN_MAX) {
         g_current_domain = domain;
@@ -166,7 +171,7 @@ void domain_switch_set_current(domain_id_t domain)
 }
 
 /* 设置域页表 */
-hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
+__attribute__((unused)) hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
 {
     if (domain >= HIK_DOMAIN_MAX) {
         return HIK_ERROR_INVALID_PARAM;
@@ -177,11 +182,49 @@ hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* paget
 }
 
 /* 获取域页表 */
-page_table_t* domain_switch_get_pagetable(domain_id_t domain)
+__attribute__((unused)) page_table_t* domain_switch_get_pagetable(domain_id_t domain)
 {
     if (domain >= HIK_DOMAIN_MAX) {
         return NULL;
     }
     
     return g_domain_pagetables[domain];
+}
+
+/* 上下文切换到指定线程 */
+void __attribute__((unused)) context_switch_to(thread_id_t next_thread)
+{
+    if (next_thread == INVALID_THREAD) {
+        console_puts("[SCHED] Invalid thread ID\n");
+        return;
+    }
+    
+    extern thread_t g_threads[MAX_THREADS];
+    extern thread_t *g_current_thread;
+    
+    if (next_thread >= MAX_THREADS) {
+        console_puts("[SCHED] Thread ID out of range\n");
+        return;
+    }
+    
+    thread_t *next = &g_threads[next_thread];
+    if (next == NULL) {
+        console_puts("[SCHED] Thread not found\n");
+        return;
+    }
+    
+    /* 保存当前线程上下文 */
+    if (g_current_thread != NULL) {
+        if (g_current_thread->state == THREAD_STATE_RUNNING) {
+            g_current_thread->state = THREAD_STATE_READY;
+        }
+    }
+    
+    /* 切换到新线程 */
+    g_current_thread = next;
+    g_current_thread->state = THREAD_STATE_RUNNING;
+    g_current_thread->last_run_time = hal_get_timestamp();
+    
+    /* 执行实际的上下文切换（调用 schedule 中的实现） */
+    schedule();
 }

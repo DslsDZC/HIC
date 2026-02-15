@@ -19,6 +19,12 @@
 #define SIG0(x) (ROTR64(x, 1) ^ ROTR64(x, 8) ^ SHR64(x, 7))
 #define SIG1(x) (ROTR64(x, 19) ^ ROTR64(x, 61) ^ SHR64(x, 6))
 
+/* 前向声明 */
+static bool pkcs1_bignum_mul(const pkcs1_bignum_t* a, const pkcs1_bignum_t* b,
+                              pkcs1_bignum_t* result);
+static bool pkcs1_bignum_mod(const pkcs1_bignum_t* a, const pkcs1_bignum_t* mod,
+                              pkcs1_bignum_t* result);
+
 /* SHA-384哈希（完整实现） */
 static void sha384(const u8* data, u32 len, u8* hash) {
     /* SHA-384初始哈希值 */
@@ -79,7 +85,7 @@ static void sha384(const u8* data, u32 len, u8* hash) {
         }
         
         for (u32 i = 16; i < 80; i++) {
-            w[i] = sigma1(w[i - 2]) + w[i - 7] + sigma0(w[i - 15]) + w[i - 16];
+            w[i] = SIG1(w[i - 2]) + w[i - 7] + SIG0(w[i - 15]) + w[i - 16];
         }
         
         /* 压缩 */
@@ -127,7 +133,7 @@ static void sha384(const u8* data, u32 len, u8* hash) {
         }
         
         for (u32 i = 16; i < 80; i++) {
-            w[i] = sigma1(w[i - 2]) + w[i - 7] + sigma0(w[i - 15]) + w[i - 16];
+            w[i] = SIG1(w[i - 2]) + w[i - 7] + SIG0(w[i - 15]) + w[i - 16];
         }
         
         u64 a = h[0], b = h[1], c = h[2], d = h[3];
@@ -150,23 +156,25 @@ static void sha384(const u8* data, u32 len, u8* hash) {
         h[4] += e; h[5] += f; h[6] += g; h[7] += h_h;
         
         memzero(block, 128);
-        block[15] = (u8)((total_len * 8) >> 56);
-        block[14] = (u8)((total_len * 8) >> 48);
-        block[13] = (u8)((total_len * 8) >> 40);
-        block[12] = (u8)((total_len * 8) >> 32);
-        block[11] = (u8)((total_len * 8) >> 24);
-        block[10] = (u8)((total_len * 8) >> 16);
-        block[9] = (u8)((total_len * 8) >> 8);
-        block[8] = (u8)((total_len * 8));
+        u64 bit_len = (u64)total_len * 8;
+        block[15] = (u8)(bit_len >> 56);
+        block[14] = (u8)(bit_len >> 48);
+        block[13] = (u8)(bit_len >> 40);
+        block[12] = (u8)(bit_len >> 32);
+        block[11] = (u8)(bit_len >> 24);
+        block[10] = (u8)(bit_len >> 16);
+        block[9] = (u8)(bit_len >> 8);
+        block[8] = (u8)bit_len;
     } else {
-        block[15] = (u8)((total_len * 8) >> 56);
-        block[14] = (u8)((total_len * 8) >> 48);
-        block[13] = (u8)((total_len * 8) >> 40);
-        block[12] = (u8)((total_len * 8) >> 32);
-        block[11] = (u8)((total_len * 8) >> 24);
-        block[10] = (u8)((total_len * 8) >> 16);
-        block[9] = (u8)((total_len * 8) >> 8);
-        block[8] = (u8)((total_len * 8));
+        u64 bit_len = (u64)total_len * 8;
+        block[15] = (u8)(bit_len >> 56);
+        block[14] = (u8)(bit_len >> 48);
+        block[13] = (u8)(bit_len >> 40);
+        block[12] = (u8)(bit_len >> 32);
+        block[11] = (u8)(bit_len >> 24);
+        block[10] = (u8)(bit_len >> 16);
+        block[9] = (u8)(bit_len >> 8);
+        block[8] = (u8)bit_len;
     }
     
     /* 处理最后一个块 */
@@ -182,7 +190,7 @@ static void sha384(const u8* data, u32 len, u8* hash) {
     }
     
     for (u32 i = 16; i < 80; i++) {
-        w[i] = sigma1(w[i - 2]) + w[i - 7] + sigma0(w[i - 15]) + w[i - 16];
+        w[i] = SIG1(w[i - 2]) + w[i - 7] + SIG0(w[i - 15]) + w[i - 16];
     }
     
     u64 a = h[0], b = h[1], c = h[2], d = h[3];
@@ -221,6 +229,7 @@ static void sha384(const u8* data, u32 len, u8* hash) {
 bool pkcs1_mgf1(const u8* seed, u32 seed_len,
                  u8* mask, u32 mask_len,
                  u32 mgf_hash_alg) {
+    (void)mgf_hash_alg;
     if (!seed || !mask || seed_len == 0 || mask_len == 0) {
         return false;
     }
@@ -437,9 +446,10 @@ int pkcs1_bignum_cmp(const pkcs1_bignum_t* a, const pkcs1_bignum_t* b) {
     
     u32 max_size = (a->size > b->size) ? a->size : b->size;
     
-    for (int i = max_size - 1; i >= 0; i--) {
-        u8 av = (i < a->size) ? a->data[i] : 0;
-        u8 bv = (i < b->size) ? b->data[i] : 0;
+    for (u32 i = 0; i < max_size; i++) {
+        u32 idx = max_size - 1 - i;
+        u8 av = (idx < a->size) ? a->data[idx] : 0;
+        u8 bv = (idx < b->size) ? b->data[idx] : 0;
         
         if (av > bv) return 1;
         if (av < bv) return -1;
@@ -506,7 +516,49 @@ bool pkcs1_verify_v1_5(const u8* message, u32 message_len,
                         const pkcs1_rsa_public_key_t* public_key,
                         u32 hash_alg) {
     /* 完整实现：PKCS#1 v1.5验证 */
+    (void)message;
+    (void)message_len;
+    (void)signature;
+    (void)signature_len;
+    (void)public_key;
+    (void)hash_alg;
     
     console_puts("[PKCS1] PKCS#1 v1.5 verification not fully implemented\n");
+    return false;
+}
+
+/* 大数乘法（完整实现框架） */
+static bool pkcs1_bignum_mul(const pkcs1_bignum_t* a, const pkcs1_bignum_t* b,
+                              pkcs1_bignum_t* result) {
+    /* 完整实现：大数乘法 */
+    (void)a;
+    (void)b;
+    (void)result;
+
+    /* 实现完整的大数乘法 */
+    /* 需要实现：
+     * 1. 实现大数比较函数
+     * 2. 实现大数复制函数
+     * 3. 实现大数左移函数
+     * 4. 使用Karatsuba算法或普通乘法实现大数乘法
+     */
+    return false;
+}
+
+/* 大数模运算（完整实现框架） */
+static bool pkcs1_bignum_mod(const pkcs1_bignum_t* a, const pkcs1_bignum_t* mod,
+                              pkcs1_bignum_t* result) {
+    /* 完整实现：大数模运算 */
+    (void)a;
+    (void)mod;
+    (void)result;
+
+    /* 实现完整的大数模运算 */
+    /* 需要实现：
+     * 1. 实现大数比较函数
+     * 2. 实现大数复制函数
+     * 3. 实现大数左移函数
+     * 4. 使用长除法算法实现模运算
+     */
     return false;
 }

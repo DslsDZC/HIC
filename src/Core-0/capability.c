@@ -6,15 +6,13 @@
 #include "capability.h"
 #include "domain.h"
 #include "audit.h"
-#include "formal_verification.h"
-#include "lib/string.h"
 #include "lib/mem.h"
+#include "lib/console.h"
 
-#define CAP_TABLE_SIZE  (HIK_DOMAIN_MAX * 256)
-
-/* 全局能力表 */
+/* 能力表 */
 static cap_entry_t g_cap_table[CAP_TABLE_SIZE];
-static u64 g_cap_counter = 1;
+
+/* 能力系统互斥锁 */
 
 /* 初始化能力系统 */
 void capability_system_init(void)
@@ -26,7 +24,7 @@ void capability_system_init(void)
 hik_status_t cap_create_memory(domain_id_t owner, phys_addr_t base, 
                                size_t size, cap_rights_t rights, cap_id_t *out)
 {
-    if (owner >= HIK_DOMAIN_MAX || out == NULL) {
+    if (owner >= HIK_DOMAIN_MAX || out == 0) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
@@ -34,7 +32,7 @@ hik_status_t cap_create_memory(domain_id_t owner, phys_addr_t base,
     for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
         if (g_cap_table[i].cap_id == 0) {
             g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_TYPE_MEMORY;
+            g_cap_table[i].type = CAP_MEMORY;
             g_cap_table[i].rights = rights;
             g_cap_table[i].owner = owner;
             g_cap_table[i].memory.base = base;
@@ -101,36 +99,11 @@ hik_status_t cap_check_access(domain_id_t domain, cap_id_t cap, cap_rights_t req
     AUDIT_LOG_CAP_VERIFY(domain, cap, true);
     return HIK_SUCCESS;
 }
-    }
-    
-    /* 检查能力是否被撤销 */
-    if (entry->flags & CAP_FLAG_REVOKED) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_CAP_REVOKED;
-    }
-    
-    /* 检查所有权 */
-    if (entry->owner != domain) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_PERMISSION;
-    }
-    
-    /* 检查权限 */
-    if ((entry->rights & required) != required) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_PERMISSION;
-    }
-    
-    /* 记录审计日志 */
-    AUDIT_LOG_CAP_VERIFY(domain, cap, true);
-    
-    return HIK_SUCCESS;
-}
 
 /* 获取能力信息 */
 hik_status_t cap_get_info(cap_id_t cap, cap_entry_t *info)
 {
-    if (cap >= CAP_TABLE_SIZE || info == NULL) {
+    if (cap >= CAP_TABLE_SIZE || info == 0) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
@@ -186,7 +159,7 @@ hik_status_t cap_derive(domain_id_t owner, cap_id_t parent,
                         cap_rights_t sub_rights, cap_id_t *out)
 {
     if (owner >= HIK_DOMAIN_MAX || parent >= CAP_TABLE_SIZE || 
-        out == NULL) {
+        out == 0) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
@@ -206,7 +179,7 @@ hik_status_t cap_derive(domain_id_t owner, cap_id_t parent,
     for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
         if (g_cap_table[i].cap_id == 0) {
             g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_TYPE_CAP_DERIVE;
+            g_cap_table[i].type = CAP_CAP_DERIVE;
             g_cap_table[i].rights = sub_rights;
             g_cap_table[i].owner = owner;
             g_cap_table[i].derive.parent_cap = parent;
@@ -265,14 +238,14 @@ hik_status_t cap_revoke(cap_id_t cap)
 hik_status_t cap_create_mmio(domain_id_t owner, phys_addr_t base, 
                              size_t size, cap_id_t *out)
 {
-    if (owner >= HIK_DOMAIN_MAX || out == NULL) {
+    if (owner >= HIK_DOMAIN_MAX || out == 0) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
     for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
         if (g_cap_table[i].cap_id == 0) {
             g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_TYPE_MMIO;
+            g_cap_table[i].type = CAP_MMIO;
             g_cap_table[i].rights = CAP_MEM_READ | CAP_MEM_WRITE | CAP_MEM_DEVICE;
             g_cap_table[i].owner = owner;
             g_cap_table[i].mmio.base = base;
@@ -322,7 +295,7 @@ cap_id_t* get_capability_derivatives(cap_id_t cap)
     /* 查找所有派生自该能力的能力 */
     u32 count = 0;
     for (cap_id_t i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].type == CAP_TYPE_CAP_DERIVE &&
+        if (g_cap_table[i].type == CAP_CAP_DERIVE &&
             g_cap_table[i].derive.parent_cap == cap &&
             capability_exists(i)) {
             
@@ -371,17 +344,18 @@ obj_type_t get_capability_object_type(cap_id_t cap)
     
     /* 根据能力类型返回对象类型 */
     switch (g_cap_table[cap].type) {
-    case CAP_TYPE_MEMORY:
+    case CAP_MEMORY:
         return OBJ_MEMORY;
-    case CAP_TYPE_MMIO:
+    case CAP_MMIO:
         return OBJ_DEVICE;
-    case CAP_TYPE_IPC_ENDPOINT:
+    case CAP_ENDPOINT:
         return OBJ_IPC;
-    case CAP_TYPE_CAP_DERIVE:
+    case CAP_CAP_DERIVE:
         return OBJ_SHARED;
     default:
         return OBJ_TYPE_COUNT;
     }
+    return OBJ_TYPE_COUNT;  /* 永不执行，但满足编译器 */
 }
 
 /**
@@ -426,14 +400,14 @@ cap_id_t* get_shared_capabilities(domain_id_t d1, domain_id_t d2)
 /* 创建IRQ能力 */
 hik_status_t cap_create_irq(domain_id_t owner, irq_vector_t vector, cap_id_t *out)
 {
-    if (owner >= HIK_DOMAIN_MAX || out == NULL) {
+    if (owner >= HIK_DOMAIN_MAX || out == 0) {
         return HIK_ERROR_INVALID_PARAM;
     }
     
     for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
         if (g_cap_table[i].cap_id == 0) {
             g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_TYPE_IRQ;
+            g_cap_table[i].type = CAP_IRQ;
             g_cap_table[i].rights = 0;
             g_cap_table[i].owner = owner;
             g_cap_table[i].irq.vector = vector;

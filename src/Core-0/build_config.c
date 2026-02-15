@@ -4,7 +4,9 @@
  */
 
 #include "build_config.h"
+#include "boot_info.h"
 #include "yaml.h"
+#include "hal.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 #include "lib/string.h"
@@ -31,18 +33,19 @@ hik_status_t build_config_load_yaml(const char *filename)
     /* 在内核初始化阶段，platform.yaml由bootloader加载到内存 */
     /* 通过boot_info获取YAML数据地址和大小 */
     
-    boot_info_t* boot_info = boot_info_get();
-    if (!boot_info || boot_info->config_data == 0) {
+    extern boot_state_t g_boot_state;
+    
+    if (!g_boot_state.boot_info || g_boot_state.boot_info->config_data == 0) {
         console_puts("[BUILD] ERROR: No configuration data from bootloader\n");
         return HIK_ERROR_NOT_FOUND;
     }
     
-    const char* yaml_data = (const char*)boot_info->config_data;
-    size_t yaml_size = boot_info->config_size;
+    const char* yaml_data = (const char*)g_boot_state.boot_info->config_data;
+    size_t yaml_size = g_boot_state.boot_info->config_size;
     
     if (yaml_size == 0 || yaml_size > 1024 * 1024) { /* 最大1MB */
         console_puts("[BUILD] ERROR: Invalid configuration size\n");
-        return HIK_ERROR_INVALID_FORMAT;
+        return HIK_ERROR_INVALID_PARAM;
     }
     
     /* 使用YAML解析器加载配置 */
@@ -64,14 +67,13 @@ hik_status_t build_config_parse_and_validate(void)
     console_puts("[BUILD] Parsing and validating configuration...\n");
     
     /* 验证架构 */
-    if (g_build_config.target_architecture != ARCH_X86_64) {
+    if (g_build_config.target_architecture != HAL_ARCH_X86_64) {
         console_puts("[BUILD] ERROR: Unsupported architecture\n");
         return HIK_ERROR_INVALID_PARAM;
     }
     
     /* 验证构建模式 */
-    if (g_build_config.build_mode != BUILD_MODE_STATIC &&
-        g_build_config.build_mode != BUILD_MODE_DYNAMIC) {
+    if (g_build_config.build_mode != BUILD_MODE_STATIC) {
         console_puts("[BUILD] ERROR: Invalid build mode\n");
         return HIK_ERROR_INVALID_PARAM;
     }

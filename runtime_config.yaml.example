@@ -1,0 +1,181 @@
+# HIK内核运行时配置示例
+# 通过引导层传递给内核，实现无需重新编译即可调整内核行为
+
+# ===== 系统配置 =====
+system:
+  # 日志级别: error(0), warn(1), info(2), debug(3), trace(4)
+  log_level: info
+  
+  # 调度策略: fifo, rr(轮转), priority(优先级)
+  scheduler_policy: priority
+  
+  # 内存分配策略: firstfit, bestfit, buddy
+  memory_policy: buddy
+  
+  # 安全级别: minimal, standard, strict
+  security_level: standard
+
+# ===== 调度器配置 =====
+scheduler:
+  # 时间片长度(毫秒)
+  time_slice_ms: 10
+  
+  # 最大线程数
+  max_threads: 256
+  
+  # 空闲超时(毫秒)
+  idle_timeout_ms: 1000
+
+# ===== 内存配置 =====
+memory:
+  # 堆大小(MB)
+  heap_size_mb: 128
+  
+  # 栈大小(KB)
+  stack_size_kb: 8
+  
+  # 页面缓存百分比
+  page_cache_percent: 20
+  
+  # 启用交换
+  enable_swap: false
+
+# ===== 安全配置 =====
+security:
+  # 启用安全启动
+  enable_secure_boot: true
+  
+  # 启用内核地址空间布局随机化
+  enable_kaslr: true
+  
+  # 启用SMEP (禁止从用户态执行内核代码)
+  enable_smap: true
+  
+  # 启用SMAP (禁止内核访问用户态内存)
+  enable_smep: true
+  
+  # 启用审计日志
+  enable_audit: true
+
+# ===== 性能配置 =====
+performance:
+  # 启用性能计数器
+  enable_perf_counters: true
+  
+  # 启用快速路径优化
+  enable_fast_path: true
+  
+  # 快速路径阈值
+  fast_path_threshold: 100
+
+# ===== 调试配置 =====
+debug:
+  # 启用调试
+  enable_debug: false
+  
+  # 启用跟踪
+  enable_trace: false
+  
+  # 启用详细输出
+  enable_verbose: false
+  
+  # 调试端口 (十六进制)
+  debug_port: 0x3F8
+
+# ===== 设备配置 =====
+device:
+  # 启用PCI
+  enable_pci: true
+  
+  # 启用ACPI
+  enable_acpi: true
+  
+  # 启用串口
+  enable_serial: true
+  
+  # 串口波特率
+  serial_baud: 115200
+
+# ===== 能力系统配置 =====
+capability:
+  # 最大能力数量
+  max_capabilities: 65536
+  
+  # 启用能力派生
+  enable_capability_derivation: true
+
+# ===== 域配置 =====
+domain:
+  # 最大域数量
+  max_domains: 16
+  
+  # 域栈大小(KB)
+  domain_stack_size_kb: 16
+
+# ===== 中断配置 =====
+interrupt:
+  # 最大中断数
+  max_irqs: 256
+  
+  # 启用中断公平性
+  enable_irq_fairness: true
+
+# ===== 模块配置 =====
+module:
+  # 启用模块加载
+  enable_module_loading: false
+  
+  # 最大模块数
+  max_modules: 32
+
+# ===== 使用说明 =====
+
+# 运行时配置说明：
+#
+# 1. 运行时配置通过引导层传递给内核
+# 2. 可以在启动时调整，无需重新编译
+# 3. 适用于：日志级别、调试选项、参数调整
+#
+# 使用方法：
+#
+# 方法1：通过boot.conf传递
+#   编辑 src/bootloader/boot.conf
+#   添加: runtime_config = /path/to/runtime_config.yaml
+#
+# 方法2：通过命令行参数传递
+#   编辑 bootloader 的命令行参数
+#   添加: --log_level=debug --enable_debug=true
+#
+# 方法3：通过platform.yaml传递
+#   将配置项包含在 platform.yaml 中
+#
+# 配置项格式：
+#
+# 布尔值: true 或 false
+# 整数: 123 或 0x1A2B
+# 字符串: "hello world"
+# 枚举: 从给定的选项中选择
+
+# 配置优先级：
+# 1. 命令行参数 (最高优先级)
+# 2. platform.yaml 配置文件
+# 3. boot.conf 指定的配置文件
+# 4. 默认配置 (最低优先级)
+
+# 配置验证：
+#
+# 内核启动时会自动验证配置的一致性
+# 如果配置不合法，会使用默认值并输出警告
+
+# 配置更新：
+#
+# 某些配置项可以在运行时修改（通过系统调用）
+# 某些配置项修改后需要重启才能生效
+# 某些配置项是只读的，无法修改
+
+# 查看当前配置：
+#
+# 在内核启动时，如果启用了 debug 模式，
+# 会自动打印当前配置信息
+#
+# 也可以通过系统调用查询当前配置

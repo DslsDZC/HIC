@@ -6,7 +6,7 @@
 #ifndef HIK_ARCH_ARM64_ASM_H
 #define HIK_ARCH_ARM64_ASM_H
 
-#include "../include/types.h"
+#include "types.h"
 
 /* ARM64特权级 */
 #define ARM64_EL0  0  /* 用户态 */

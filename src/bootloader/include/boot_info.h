@@ -67,7 +67,7 @@ typedef struct {
     void *device_tree;
     uint64_t device_tree_size;
     
-    // 模块信息（用于动态模块加载）
+    // 模块信息（用于静态模块加载）
     struct {
         void *base;
         uint64_t size;
@@ -108,7 +108,21 @@ typedef struct {
         void *log_buffer;              // 日志缓冲区
         uint64_t log_size;
     } debug;
-    
+
+    // 配置数据（从boot.conf传递）
+    struct {
+        void *config_data;             // 配置文件数据指针
+        uint64_t config_size;          // 配置文件大小
+        uint64_t config_hash;          // 配置文件哈希（用于验证）
+    } config;
+
+    // 平台配置数据（来自platform.yaml）
+    struct {
+        void *platform_data;            // platform.yaml数据指针
+        uint64_t platform_size;         // platform.yaml文件大小
+        uint64_t platform_hash;         // platform.yaml哈希值
+    } platform;
+
 } hik_boot_info_t;
 
 // 标志位定义
@@ -117,6 +131,8 @@ typedef struct {
 #define HIK_BOOT_FLAG_VIDEO_ENABLED (1ULL << 2)
 #define HIK_BOOT_FLAG_DEBUG_ENABLED (1ULL << 3)
 #define HIK_BOOT_FLAG_RECOVERY_MODE (1ULL << 4)
+#define HIK_BOOT_FLAG_FAST_BOOT     (1ULL << 5)
+#define HIK_BOOT_FLAG_QUIET_BOOT    (1ULL << 6)
 
 // 引导信息总大小
 #define HIK_BOOT_INFO_SIZE  4096

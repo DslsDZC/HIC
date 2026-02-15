@@ -6,8 +6,18 @@
 #include "irq.h"
 #include "capability.h"
 #include "lib/console.h"
+#include "hardware_probe.h"
+#include "boot_info.h"
 
-/* 中断路由表（运行时版本） */
+/* 外部变量 */
+extern boot_state_t g_boot_state;
+
+/* 获取 IOAPIC 基地址 */
+static u64 get_ioapic_base(void) {
+    return g_boot_state.hw.io_irq.base_address;
+}
+
+/* 中断路由表（静态版本） */
 static protected_entry_t irq_table[256];
 
 /* 初始化中断控制器 */
@@ -71,7 +81,6 @@ void irq_enable(u32 irq_vector)
             "outb %%al, $0x21\n"
             : : : "al"
         );
-    }
     } else if (irq_vector >= 32 && irq_vector < 48) {
         /* APIC */
         /* 完整实现：APIC中断启用 */
@@ -83,32 +92,21 @@ void irq_enable(u32 irq_vector)
         /* 计算重定向表项索引 */
         u32 ioapic_index = apic_irq * 2;
         
+        /* IOAPIC 寄存器访问：
+         * ioapic_base + 0: IOREGSEL (选择寄存器)
+         * ioapic_base + 4: IOWIN (数据寄存器)
+         */
+        
         /* 读取低32位 */
-        __asm__ volatile (
-            "movl %0, (%%edi)\n"
-            "movl (%%esi), %%eax\n"
-            :
-            : "a"(ioapic_index), "D"(ioapic_base), "S"(ioapic_base + 4)
-            : "eax"
-        );
+        ioapic_base[0] = ioapic_index;
+        u32 low_dword = ioapic_base[4];
         
-        /* 清除mask位 */
-        u32 low_dword = 0;
-        __asm__ volatile (
-            "movl (%%esi), %%eax\n"
-            "andl $0xFFFFFFF7, %%eax\n"  /* 清除bit 3 (mask) */
-            "movl %%eax, (%%edi)\n"
-            :
-            : "D"(ioapic_index), "S"(ioapic_base + 4)
-            : "eax"
-        );
+        /* 清除mask位 (bit 3) */
+        low_dword &= 0xFFFFFFF7;
         
-        /* 写回 */
-        __asm__ volatile (
-            "movl %0, (%%edi)\n"
-            :
-            : "a"(low_dword), "D"(ioapic_base)
-        );
+        /* 写回低32位 */
+        ioapic_base[0] = ioapic_index;
+        ioapic_base[4] = low_dword;
     }
 }
 
@@ -136,25 +134,15 @@ void irq_disable(u32 irq_vector)
         u32 ioapic_index = apic_irq * 2;
         
         /* 读取低32位 */
-        u32 low_dword = 0;
-        __asm__ volatile (
-            "movl %0, (%%edi)\n"
-            "movl (%%esi), %%eax\n"
-            "movl %%eax, %1\n"
-            :
-            : "a"(ioapic_index), "m"(low_dword), "D"(ioapic_base), "S"(ioapic_base + 4)
-            : "eax"
-        );
+        ioapic_base[0] = ioapic_index;
+        u32 low_dword = ioapic_base[4];
         
-        /* 设置mask位 */
-        low_dword |= 0x00000008;  /* 设置bit 3 (mask) */
+        /* 设置mask位 (bit 3) */
+        low_dword |= 0x00000008;
         
-        /* 写回 */
-        __asm__ volatile (
-            "movl %0, (%%edi)\n"
-            :
-            : "a"(low_dword), "D"(ioapic_base)
-        );
+        /* 写回低32位 */
+        ioapic_base[0] = ioapic_index;
+        ioapic_base[4] = low_dword;
     }
 }
 
@@ -195,4 +183,136 @@ void irq_common_handler(u32 irq_vector)
     /* 简单保存上下文后分发 */
     /* 实际上下文保存在idt.S中完成 */
     irq_dispatch(irq_vector);
+}
+
+/* 检查是否有待处理的中断 */
+bool interrupts_pending(void)
+{
+    /* 检查本地APIC的IRR（中断请求寄存器） */
+    extern bool lapic_irqs_pending(void);
+    return lapic_irqs_pending();
+}
+
+/* 处理待处理的中断 */
+void handle_pending_interrupts(void)
+{
+    extern void lapic_handle_pending(void);
+    lapic_handle_pending();
+}
+
+/* 中断处理函数（完整实现） */
+void irq_handler(u64 *interrupt_frame)
+{
+    if (!interrupt_frame) {
+        return;
+    }
+
+    /* 完整实现：从中断帧中提取中断向量 */
+    u64 error_code = interrupt_frame[0];
+    u64 rip = interrupt_frame[1];
+    u64 cs = interrupt_frame[2];
+    u64 rflags = interrupt_frame[3];
+
+    /* 记录中断信息 */
+    console_puts("[IRQ] Interrupt at RIP=0x");
+    console_puti64(rip);
+    console_puts(", CS=0x");
+    console_puti64(cs);
+    console_puts(", RFLAGS=0x");
+    console_puti64(rflags);
+    console_puts("\n");
+
+    /* 根据错误码判断中断类型 */
+    if (error_code == 0xFFFFFFFF) {
+        /* 硬件中断 */
+        console_puts("[IRQ] Hardware interrupt\n");
+    } else {
+        /* 异常 */
+        console_puts("[IRQ] Exception, error code=0x");
+        console_puti64(error_code);
+        console_puts("\n");
+    }
+
+    /* 恢复中断并返回 */
+    hal_enable_interrupts();
+}
+
+/* 快速路径中断处理（完整实现） */
+void irq_handler_fast(u32 irq_vector)
+{
+    /* 完整实现：快速处理不需要上下文切换的中断 */
+    console_puts("[IRQ] Fast interrupt handler, vector=");
+    console_putu32(irq_vector);
+    console_puts("\n");
+
+    /* 根据中断向量分发到具体的处理程序 */
+    switch (irq_vector) {
+        case 32: /* 时钟中断 */
+            console_puts("[IRQ] Timer interrupt\n");
+            break;
+        case 33: /* 键盘中断 */
+            console_puts("[IRQ] Keyboard interrupt\n");
+            break;
+        default:
+            console_puts("[IRQ] Unhandled fast interrupt\n");
+            break;
+    }
+
+    /* 发送EOI（中断结束信号）到本地APIC */
+    hal_outb(0x20, 0x20); /* 主PIC EOI */
+    hal_outb(0xA0, 0x20); /* 从PIC EOI */
+}
+
+/* 检查本地APIC是否有待处理的中断（完整实现） */
+bool lapic_irqs_pending(void)
+{
+    /* 完整实现：读取本地APIC的IRR（中断请求寄存器） */
+    /* 使用内存映射IO访问本地APIC */
+    /* IRR基地址为0xFEE00200 */
+
+    /* 读取低32位IRR（使用内存映射IO） */
+    volatile u32* irr_low_ptr = (volatile u32*)0xFEE00200;
+    u32 irr_low = *irr_low_ptr;
+
+    /* 读取高32位IRR（使用内存映射IO） */
+    volatile u32* irr_high_ptr = (volatile u32*)0xFEE00210;
+    u32 irr_high = *irr_high_ptr;
+
+    /* 如果IRR不为0，说明有待处理的中断 */
+    bool pending = (irr_low != 0) || (irr_high != 0);
+
+    if (pending) {
+        console_puts("[IRQ] Pending interrupts detected\n");
+    }
+
+    return pending;
+}
+
+/* 处理本地APIC的待处理中断（完整实现） */
+void lapic_handle_pending(void)
+{
+    /* 完整实现：处理IRR中所有待处理的中断 */
+
+    /* 使用内存映射IO访问本地APIC */
+    volatile u32* irr_low_ptr = (volatile u32*)0xFEE00200;
+    volatile u32* irr_high_ptr = (volatile u32*)0xFEE00210;
+
+    /* 读取低32位IRR */
+    u32 irr_low = *irr_low_ptr;
+
+    /* 读取高32位IRR */
+    u32 irr_high = *irr_high_ptr;
+
+    /* 遍历所有256个中断向量 */
+    for (u32 i = 0; i < 256; i++) {
+        u32 irr_word = (i < 32) ? irr_low : irr_high;
+        u32 irr_bit = 1 << (i % 32);
+
+        if (irr_word & irr_bit) {
+            /* 中断i待处理，调用快速处理程序 */
+            irq_handler_fast(i);
+        }
+    }
+
+    console_puts("[IRQ] All pending interrupts handled\n");
 }

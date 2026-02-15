@@ -122,4 +122,14 @@ static inline void hang(void)
 extern void context_switch(void *prev, void *next);
 extern void interrupt_handler_stub(void);
 
+/* 上下文保存和恢复函数声明 */
+extern void arch_save_context(void *ctx);
+extern void arch_restore_context(void *ctx);
+
+/* GDT加载函数 */
+extern void gdt_load(void *gdt_ptr);
+
+/* 延迟函数声明 */
+void hal_udelay(u32 us);
+
 #endif /* HIK_ARCH_X86_64_ASM_H */

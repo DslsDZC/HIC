@@ -16,6 +16,7 @@
 #define HIK_VERSION_MAJOR 0
 #define HIK_VERSION_MINOR 1
 #define HIK_VERSION_PATCH 0
+#define HIK_VERSION "0.1.0"
 
 /* 内核入口点 */
 extern void kernel_main(void *info);
