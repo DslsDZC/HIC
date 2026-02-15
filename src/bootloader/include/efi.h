@@ -126,45 +126,179 @@ struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
                              struct _EFI_FILE_PROTOCOL **root_volume);
 };
 
+// 前向声明
+
+typedef struct _EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
+
+typedef struct _EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
+
+typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
+
+
+
 // 加载映像协议 (UEFI 2.0规范)
-#pragma pack(push, 8)
+
 typedef struct {
+
     uint32_t revision;
+
     EFI_HANDLE parent_handle;
-    struct _EFI_SYSTEM_TABLE *system_table;
+
+    EFI_SYSTEM_TABLE *system_table;
+
+    
+
+    // 映像源位置
+
     EFI_HANDLE device_handle;
+
     void *file_path;
-    void *load_options;
+
+    void *reserved;
+
+    
+
+    // 加载选项
+
     uint32_t load_options_size;
+
+    void *load_options;
+
+    
+
+    // 映像加载位置
+
     void *image_base;
+
     uint64_t image_size;
+
     EFI_MEMORY_TYPE image_code_type;
+
     EFI_MEMORY_TYPE image_data_type;
-    uint64_t unload;
+
+    
+
+    // 卸载函数
+
+    void *unload;
+
 } EFI_LOADED_IMAGE_PROTOCOL;
-#pragma pack(pop)
 
-// 简单文本输出协议
-typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
-struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
-    EFI_STATUS (*Reset)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN extended_verification);
-    EFI_STATUS (*OutputString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
-    EFI_STATUS (*TestString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
-    EFI_STATUS (*QueryMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode, UINTN *columns, UINTN *rows);
-    EFI_STATUS (*SetMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode);
-    EFI_STATUS (*SetAttribute)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN attribute);
-    EFI_STATUS (*ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this);
-    EFI_STATUS (*SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN column, UINTN row);
-    EFI_STATUS (*EnableCursor)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN visible);
-    VOID *mode;
-};
 
-// 简单文本输入协议
-typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
-struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
-    EFI_STATUS (*Reset)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, BOOLEAN extended_verification);
-    EFI_STATUS (*ReadKeyStroke)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, void *key);
-};
+
+// 简单文本输出协议 (UEFI 2.11规范)
+
+
+
+typedef struct {
+
+
+
+    INT32 max_mode;
+
+
+
+    INT32 mode;
+
+
+
+    INT32 attribute;
+
+
+
+    INT32 cursor_column;
+
+
+
+    INT32 cursor_row;
+
+
+
+    BOOLEAN cursor_visible;
+
+
+
+} SIMPLE_TEXT_OUTPUT_MODE;
+
+
+
+
+
+
+
+typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
+
+
+
+    EFI_STATUS (*Reset)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN extended_verification);
+
+
+
+    EFI_STATUS (*OutputString)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
+
+
+
+    EFI_STATUS (*TestString)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
+
+
+
+    EFI_STATUS (*QueryMode)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode, UINTN *columns, UINTN *rows);
+
+
+
+    EFI_STATUS (*SetMode)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode);
+
+
+
+    EFI_STATUS (*SetAttribute)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN attribute);
+
+
+
+    EFI_STATUS (*ClearScreen)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this);
+
+
+
+    EFI_STATUS (*SetCursorPosition)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN column, UINTN row);
+
+
+
+    EFI_STATUS (*EnableCursor)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN visible);
+
+
+
+    SIMPLE_TEXT_OUTPUT_MODE *mode;
+
+
+
+} EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+
+
+
+
+
+
+
+// 简单文本输入协议 (UEFI 2.11规范)
+
+
+
+typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
+
+
+
+    EFI_STATUS (*Reset)(struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, BOOLEAN extended_verification);
+
+
+
+    EFI_STATUS (*ReadKeyStroke)(struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, void *key);
+
+
+
+    void *wait_for_key;
+
+
+
+} EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 
 // EFI启动服务
 typedef struct _EFI_BOOT_SERVICES {
@@ -178,7 +312,8 @@ typedef struct _EFI_BOOT_SERVICES {
                                   UINTN *map_key, UINTN *descriptor_size, uint32_t *descriptor_version);
     EFI_STATUS (*HandleProtocol)(EFI_HANDLE handle, EFI_GUID *protocol, void **interface);
     EFI_STATUS (*ExitBootServices)(EFI_HANDLE image_handle, UINTN map_key);
-    void *reserved[50];
+    void (*Stall)(UINTN microseconds);
+    void *reserved[49];
 } EFI_BOOT_SERVICES;
 
 // EFI配置表

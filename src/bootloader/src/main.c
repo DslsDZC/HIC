@@ -101,56 +101,40 @@ static void *allocate_pool_aligned(UINTN size, UINTN alignment)
 EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
     EFI_STATUS status;
-    UINTN index;
-    EFI_INPUT_KEY key;
     INTN countdown;
-    
-    console_puts("[BOOTLOADER AUDIT] Stage 0: UefiMain Entry\n");
     
     gImageHandle = ImageHandle;
     gST = SystemTable;
     gBS = SystemTable->boot_services;
     
-    console_puts("[BOOTLOADER AUDIT] Stage 0: Checking pointers\n");
-    if (gST == NULL) {
-        console_puts("[BOOTLOADER AUDIT] Stage 0: ERROR - gST is NULL\n");
-        return EFI_INVALID_PARAMETER;
-    }
-    console_puts("[BOOTLOADER AUDIT] Stage 0: gST is OK\n");
-    
-    if (gBS == NULL) {
-        console_puts("[BOOTLOADER AUDIT] Stage 0: ERROR - gBS is NULL\n");
-        return EFI_INVALID_PARAMETER;
-    }
-    console_puts("[BOOTLOADER AUDIT] Stage 0: gBS is OK\n");
-    
-    if (gImageHandle == NULL) {
-        console_puts("[BOOTLOADER AUDIT] Stage 0: ERROR - ImageHandle is NULL\n");
-        return EFI_INVALID_PARAMETER;
-    }
-    console_puts("[BOOTLOADER AUDIT] Stage 0: ImageHandle is OK\n");
-    
     /* 初始化控制台 */
-    console_puts("[BOOTLOADER AUDIT] Stage 0: Calling console_init\n");
     console_init();
-    console_puts("[BOOTLOADER AUDIT] Stage 0: console_init returned\n");
     
     /* 初始化引导日志 */
-    console_puts("[BOOTLOADER AUDIT] Stage 0: Calling bootlog_init\n");
     bootlog_init();
     bootlog_event(BOOTLOG_UEFI_INIT, NULL, 0);
-    console_puts("[BOOTLOADER AUDIT] Stage 0: bootlog_init returned\n");
     
-    /* 输出 hello world */
-    console_puts("[BOOTLOADER AUDIT] Stage 0: Outputting messages\n");
-    console_puts("[BOOTLOADER AUDIT] Stage 1: EFI Entry\n");
-    console_puts("[BOOTLOADER AUDIT] Stage 1: gST=VALID\n");
-    console_puts("[BOOTLOADER AUDIT] Stage 1: gBS=VALID\n");
-    console_puts("[BOOTLOADER AUDIT] Stage 1: ConOut=VALID\n");
+    /* 输出启动信息 */
     console_puts("HIK UEFI Bootloader v0.1\n");
     console_puts("Starting HIK Hierarchical Isolation Kernel...\n");
     console_puts("\n");
     bootlog_info("UEFI initialized");
+    
+    /* 获取加载的镜像信息 */
+    console_puts("[BOOTLOADER AUDIT] Stage 1: Getting Loaded Image Protocol\n");
+    status = gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, 
+                                 (void **)&gLoadedImage);
+    if (EFI_ERROR(status)) {
+        console_puts("[BOOTLOADER AUDIT] ERROR: Cannot get loaded image protocol\n");
+        return status;
+    }
+    console_puts("[BOOTLOADER AUDIT] Stage 1: Loaded Image Protocol OK\n");
+    
+    /* 验证gLoadedImage */
+    if (gLoadedImage == NULL) {
+        console_puts("[BOOTLOADER AUDIT] ERROR: gLoadedImage is NULL\n");
+        return EFI_INVALID_PARAMETER;
+    }
     
     /* 3秒倒计时自动进入内核 */
     console_puts("[BOOTLOADER] Auto-boot in 3 seconds...\n");
@@ -158,86 +142,50 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         char msg[64];
         snprintf(msg, sizeof(msg), "[BOOTLOADER] Booting in %d seconds...\n", countdown);
         console_puts(msg);
-        
-        /* 等待1秒，但检查是否有按键 */
-        status = gBS->WaitForEvent(1, &gST->con_in->wait_for_key, &index);
-        if (!EFI_ERROR(status)) {
-            /* 有按键事件 */
-            status = gST->con_in->ReadKeyStroke(gST->con_in, &key);
-            if (!EFI_ERROR(status)) {
-                /* 用户按了键，立即进入内核 */
-                console_puts("[BOOTLOADER] Key pressed, booting immediately...\n");
-                break;
-            }
-        }
+        gBS->Stall(1000000);
     }
     console_puts("[BOOTLOADER] Starting kernel boot...\n");
     
-    /* 获取加载的镜像信息 */
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Getting Loaded Image Protocol\n");
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Calling HandleProtocol\n");
-    status = gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, 
-                                 (void **)&gLoadedImage);
-    console_puts("[BOOTLOADER AUDIT] Stage 2: HandleProtocol returned\n");
-    if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - Cannot get loaded image protocol\n");
-        return status;
-    }
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Loaded Image Protocol OK\n");
-    
     /* 加载平台配置 */
-    console_puts("[BOOTLOADER AUDIT] Stage 3: Loading Platform Config\n");
     status = load_platform_config();
     if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 3: WARNING - Failed to load platform config\n");
-    } else {
-        console_puts("[BOOTLOADER AUDIT] Stage 3: Platform config loaded\n");
+        console_puts("[BOOTLOADER AUDIT] WARNING: Failed to load platform config\n");
     }
     
     /* 加载内核映像 */
-    console_puts("[BOOTLOADER AUDIT] Stage 4: Loading Kernel Image\n");
     void *kernel_data = NULL;
     uint64_t kernel_size = 0;
     status = load_kernel_image(&kernel_data, &kernel_size);
     if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 4: ERROR - Failed to load kernel image\n");
+        console_puts("[BOOTLOADER AUDIT] ERROR: Failed to load kernel image\n");
         return status;
     }
-    console_puts("[BOOTLOADER AUDIT] Stage 4: Kernel Image Loaded\n");
     
     /* 准备启动信息 */
-    console_puts("[BOOTLOADER AUDIT] Stage 5: Preparing Boot Info\n");
     hik_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
     if (!boot_info) {
-        console_puts("[BOOTLOADER AUDIT] Stage 5: ERROR - Failed to prepare boot info\n");
+        console_puts("[BOOTLOADER AUDIT] ERROR: Failed to prepare boot info\n");
         return EFI_OUT_OF_RESOURCES;
     }
-    console_puts("[BOOTLOADER AUDIT] Stage 5: Boot Info Prepared\n");
     
     /* 加载内核段 */
-    console_puts("[BOOTLOADER AUDIT] Stage 6: Loading Kernel Segments\n");
     status = load_kernel_segments(kernel_data, kernel_size, boot_info);
     if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 6: ERROR - Failed to load kernel segments\n");
+        console_puts("[BOOTLOADER AUDIT] ERROR: Failed to load kernel segments\n");
         return status;
     }
-    console_puts("[BOOTLOADER AUDIT] Stage 6: Kernel Segments Loaded\n");
     
     /* 退出启动服务 */
-    console_puts("[BOOTLOADER AUDIT] Stage 7: Exiting Boot Services\n");
     status = exit_boot_services(boot_info);
     if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 7: ERROR - Failed to exit boot services\n");
+        console_puts("[BOOTLOADER AUDIT] ERROR: Failed to exit boot services\n");
         return status;
     }
-    console_puts("[BOOTLOADER AUDIT] Stage 7: Boot Services Exited\n");
     
     /* 跳转到内核 */
-    console_puts("[BOOTLOADER AUDIT] Stage 8: Jumping to Kernel\n");
     bootlog_event(BOOTLOG_JUMP_TO_KERNEL, NULL, 0);
     jump_to_kernel(boot_info);
     
-    /* 永远不会到达这里 */
     return EFI_SUCCESS;
 }
 

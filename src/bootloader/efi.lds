@@ -25,9 +25,4 @@ SECTIONS
         *(.note.gnu.build-id)
         *(.eh_frame)
     }
-    /* 设置UEFI子系统类型 */
-    . = 0;
-    .pe_header : {
-        LONG(0x0000000a);  /* Subsystem: EFI Application */
-    }
 }

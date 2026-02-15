@@ -45,11 +45,12 @@ BIOS_OBJS += $(patsubst $(SRC_DIR)/%.S,$(OBJ_DIR)/bios_%.o,$(BIOS_ASM_SRCS))
 UEFI_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
              -fno-stack-protector -fno-stack-clash-protection \
              -fno-omit-frame-pointer -fno-pic -fno-pie \
-             -fno-asynchronous-unwind-tables \
-             -mno-red-zone -mcmodel=large -m64 \
+             -fno-asynchronous-unwind-tables -O0 \
+             -mno-red-zone -mcmodel=small -m64 \
+             -fshort-wchar -mno-ms-bitfields \
              -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
-UEFI_LDFLAGS = -nostdlib -shared -e efi_main \
+UEFI_LDFLAGS = -nostdlib -shared -e UefiMain \
                --subsystem=10 \
                -Map $(BIN_DIR)/$(UEFI_PROJECT).map
 

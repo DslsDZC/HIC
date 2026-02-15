@@ -36,7 +36,7 @@ class BuildConfigDialog(Gtk.Dialog):
     
     def __init__(self, parent, build_system):
         super().__init__(
-            title="构建配置",
+            title="HIK内核配置",
             transient_for=parent,
             flags=0
         )
@@ -47,7 +47,7 @@ class BuildConfigDialog(Gtk.Dialog):
         self.add_button("应用", Gtk.ResponseType.APPLY)
         self.add_button("确定", Gtk.ResponseType.OK)
         
-        self.set_default_size(600, 500)
+        self.set_default_size(700, 550)
         self.set_border_width(10)
         
         # 创建配置界面
@@ -55,12 +55,41 @@ class BuildConfigDialog(Gtk.Dialog):
         
         # 加载当前配置
         self.load_config()
+        
+        # 显示欢迎信息
+        self.show_welcome_info()
     
     def create_config_ui(self):
         """创建配置界面"""
+        # 主容器
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.get_content_area().pack_start(main_box, True, True, 0)
+        
+        # 欢迎信息区域
+        self.welcome_frame = Gtk.Frame()
+        welcome_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        welcome_box.set_margin_top(10)
+        welcome_box.set_margin_bottom(10)
+        welcome_box.set_margin_start(10)
+        welcome_box.set_margin_end(10)
+        
+        welcome_label = Gtk.Label()
+        welcome_label.set_markup("<b>🎯 欢迎使用HIK内核配置工具</b>")
+        welcome_label.set_halign(Gtk.Align.START)
+        welcome_box.pack_start(welcome_label, False, False, 0)
+        
+        info_label = Gtk.Label()
+        info_label.set_markup("<small>通过这些选项来自定义内核的行为和特性。修改后需要重新编译才能生效。</small>")
+        info_label.set_halign(Gtk.Align.START)
+        info_label.set_wrap(True)
+        welcome_box.pack_start(info_label, False, False, 0)
+        
+        self.welcome_frame.add(welcome_box)
+        main_box.pack_start(self.welcome_frame, False, False, 0)
+        
         # 创建笔记本（标签页）
         notebook = Gtk.Notebook()
-        self.get_content_area().pack_start(notebook, True, True, 0)
+        main_box.pack_start(notebook, True, True, 0)
         
         # 创建各个配置页
         self.create_debug_page(notebook)
@@ -73,6 +102,13 @@ class BuildConfigDialog(Gtk.Dialog):
         self.create_domain_page(notebook)
         self.create_interrupt_page(notebook)
         self.create_module_page(notebook)
+    
+    def show_welcome_info(self):
+        """显示欢迎信息"""
+    
+    def show_welcome_info(self):
+        """显示欢迎信息"""
+        pass  # 欢迎信息已在create_config_ui中添加
     
     def create_check_button(self, parent, label_text, tooltip_text):
         """创建复选框"""
@@ -106,24 +142,36 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>调试配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>调试配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>调试功能和日志输出</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # 调试支持
         self.config_vars['CONFIG_DEBUG'] = self.create_check_button(
-            box, "启用调试支持", "启用调试符号和调试信息"
+            box, "启用调试支持", "添加调试符号和调试信息，方便使用调试器"
         )
         
         # 跟踪功能
         self.config_vars['CONFIG_TRACE'] = self.create_check_button(
-            box, "启用跟踪功能", "启用函数调用跟踪"
+            box, "启用跟踪功能", "记录函数调用跟踪信息，用于性能分析"
         )
         
         # 详细输出
         self.config_vars['CONFIG_VERBOSE'] = self.create_check_button(
-            box, "启用详细输出", "启用详细的编译输出"
+            box, "启用详细输出", "显示详细的编译和运行信息"
         )
         
         notebook.append_page(box, Gtk.Label.new("调试"))
@@ -136,45 +184,64 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>安全配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>安全配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>内核安全防护机制和访问控制</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # KASLR
         self.config_vars['CONFIG_KASLR'] = self.create_check_button(
-            box, "启用KASLR", "内核地址空间布局随机化"
+            box, "启用KASLR", "内核地址空间布局随机化，增加攻击难度"
         )
         
         # SMEP
         self.config_vars['CONFIG_SMEP'] = self.create_check_button(
-            box, "启用SMEP", "禁止从用户态执行内核代码"
+            box, "启用SMEP", "禁止从用户态执行内核代码，防止权限提升"
         )
         
         # SMAP
         self.config_vars['CONFIG_SMAP'] = self.create_check_button(
-            box, "启用SMAP", "禁止内核访问用户态内存"
+            box, "启用SMAP", "禁止内核访问用户态内存，防止数据泄露"
         )
         
         # 审计日志
         self.config_vars['CONFIG_AUDIT'] = self.create_check_button(
-            box, "启用审计日志", "启用安全审计日志"
+            box, "启用审计日志", "记录安全相关事件，便于安全审计"
         )
         
         # 安全级别
         security_levels = Gtk.ListStore(str)
+        level_descriptions = {
+            "minimal": "最低安全",
+            "standard": "标准安全",
+            "strict": "严格安全"
+        }
         for level in ["minimal", "standard", "strict"]:
-            security_levels.append([level])
+            security_levels.append([level_descriptions.get(level, level)])
         
         combo = Gtk.ComboBox.new_with_model(security_levels)
         renderer = Gtk.CellRendererText()
         combo.pack_start(renderer, True)
         combo.add_attribute(renderer, "text", 0)
         
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         label = Gtk.Label.new("安全级别:")
         label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
-        box.pack_start(combo, False, False, 0)
+        hbox.pack_start(label, False, False, 0)
+        hbox.pack_start(combo, True, True, 0)
+        box.pack_start(hbox, False, False, 0)
         
         self.config_vars['CONFIG_SECURITY_LEVEL'] = combo
         
@@ -188,19 +255,31 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>性能配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>性能配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>性能优化和监控选项</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # 性能计数器
         self.config_vars['CONFIG_PERF'] = self.create_check_button(
-            box, "启用性能计数器", "启用CPU性能计数器"
+            box, "启用性能计数器", "启用CPU性能计数器，用于性能分析"
         )
         
         # 快速路径
         self.config_vars['CONFIG_FAST_PATH'] = self.create_check_button(
-            box, "启用快速路径", "启用快速路径优化"
+            box, "启用快速路径", "优化常见操作路径，提升响应速度"
         )
         
         notebook.append_page(box, Gtk.Label.new("性能"))
@@ -213,27 +292,66 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>内存配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>内存配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>内存分配和管理策略</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # 堆大小
-        self.config_vars['CONFIG_HEAP_SIZE_MB'] = self.create_spin_button(
-            box, "堆大小 (MB):", 16, 4096, 128
+        self.config_vars['CONFIG_HEAP_SIZE_MB'] = self.create_spin_button_with_hint(
+            box, "堆大小 (MB):", 16, 4096, 128, "建议值: 128-512MB，根据可用内存调整"
         )
         
         # 栈大小
-        self.config_vars['CONFIG_STACK_SIZE_KB'] = self.create_spin_button(
-            box, "栈大小 (KB):", 4, 64, 8
+        self.config_vars['CONFIG_STACK_SIZE_KB'] = self.create_spin_button_with_hint(
+            box, "栈大小 (KB):", 4, 64, 8, "建议值: 8-16KB，大多数应用足够"
         )
         
         # 页面缓存
-        self.config_vars['CONFIG_PAGE_CACHE_PERCENT'] = self.create_spin_button(
-            box, "页面缓存百分比:", 0, 50, 20
+        self.config_vars['CONFIG_PAGE_CACHE_PERCENT'] = self.create_spin_button_with_hint(
+            box, "页面缓存 (%):", 0, 50, 20, "建议值: 20-30%，提升文件系统性能"
         )
         
         notebook.append_page(box, Gtk.Label.new("内存"))
+    
+    def create_spin_button_with_hint(self, parent, label_text, min_val, max_val, default_val, hint_text):
+        """创建带提示的数字输入框"""
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        label = Gtk.Label.new(label_text)
+        label.set_halign(Gtk.Align.START)
+        hbox.pack_start(label, False, False, 0)
+        
+        spin = Gtk.SpinButton()
+        spin.set_range(min_val, max_val)
+        spin.set_value(default_val)
+        spin.set_numeric(True)
+        hbox.pack_start(spin, True, True, 0)
+        
+        vbox.pack_start(hbox, False, False, 0)
+        
+        # 添加提示文本
+        hint_label = Gtk.Label()
+        hint_label.set_markup(f"<small><i>{hint_text}</i></small>")
+        hint_label.set_halign(Gtk.Align.START)
+        hint_label.set_wrap(True)
+        vbox.pack_start(hint_label, False, False, 0)
+        
+        parent.pack_start(vbox, False, False, 0)
+        return spin
     
     def create_feature_page(self, notebook):
         """创建功能配置页"""
@@ -243,24 +361,36 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>功能配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>功能配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>硬件支持和功能模块</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # PCI支持
         self.config_vars['CONFIG_PCI'] = self.create_check_button(
-            box, "启用PCI支持", "启用PCI设备支持"
+            box, "启用PCI支持", "支持PCI设备，如网卡、显卡等"
         )
         
         # ACPI支持
         self.config_vars['CONFIG_ACPI'] = self.create_check_button(
-            box, "启用ACPI支持", "启用ACPI电源管理"
+            box, "启用ACPI支持", "支持ACPI电源管理和硬件配置"
         )
         
         # 串口支持
         self.config_vars['CONFIG_SERIAL'] = self.create_check_button(
-            box, "启用串口支持", "启用串口控制台"
+            box, "启用串口支持", "支持串口控制台输出，便于调试"
         )
         
         notebook.append_page(box, Gtk.Label.new("功能"))
@@ -348,10 +478,22 @@ class BuildConfigDialog(Gtk.Dialog):
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>模块配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>模块配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>内核模块加载和管理</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # 模块加载
         self.config_vars['CONFIG_MODULE_LOADING'] = self.create_check_button(
@@ -359,49 +501,69 @@ class BuildConfigDialog(Gtk.Dialog):
         )
         
         # 最大模块数
-        self.config_vars['CONFIG_MAX_MODULES'] = self.create_spin_button(
-            box, "最大模块数:", 1, 128, 32
+        self.config_vars['CONFIG_MAX_MODULES'] = self.create_spin_button_with_hint(
+            box, "最大模块数:", 0, 256, 32, "建议值: 16-64，根据需求调整"
         )
         
         notebook.append_page(box, Gtk.Label.new("模块"))
         
-        def create_scheduler_page(self, notebook):        """创建调度器配置页"""
+    def create_scheduler_page(self, notebook):
+        """创建调度器配置页"""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         box.set_margin_top(10)
         box.set_margin_bottom(10)
         box.set_margin_start(10)
         box.set_margin_end(10)
         
-        label = Gtk.Label()
-        label.set_markup("<b>调度器配置</b>")
-        label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
+        # 标题和描述
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        title_label = Gtk.Label()
+        title_label.set_markup("<b>调度器配置</b>")
+        title_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(title_label, False, False, 0)
+        
+        desc_label = Gtk.Label()
+        desc_label.set_markup("<small>线程调度和任务管理策略</small>")
+        desc_label.set_halign(Gtk.Align.START)
+        title_box.pack_start(desc_label, True, True, 0)
+        box.pack_start(title_box, False, False, 0)
+        
+        # 分隔线
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        box.pack_start(separator, False, False, 5)
         
         # 调度策略
         policies = Gtk.ListStore(str)
+        policy_descriptions = {
+            "fifo": "FIFO - 先进先出",
+            "rr": "轮转调度",
+            "priority": "优先级调度"
+        }
         for policy in ["fifo", "rr", "priority"]:
-            policies.append([policy])
+            policies.append([policy_descriptions.get(policy, policy)])
         
         combo = Gtk.ComboBox.new_with_model(policies)
         renderer = Gtk.CellRendererText()
         combo.pack_start(renderer, True)
         combo.add_attribute(renderer, "text", 0)
         
-        label = Gtk.Label("调度策略:")
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        label = Gtk.Label.new("调度策略:")
         label.set_halign(Gtk.Align.START)
-        box.pack_start(label, False, False, 0)
-        box.pack_start(combo, False, False, 0)
+        hbox.pack_start(label, False, False, 0)
+        hbox.pack_start(combo, True, True, 0)
+        box.pack_start(hbox, False, False, 0)
         
         self.config_vars['CONFIG_SCHEDULER_POLICY'] = combo
         
         # 时间片
-        self.config_vars['CONFIG_TIME_SLICE_MS'] = self.create_spin_button(
-            box, "时间片长度 (毫秒):", 1, 1000, 10
+        self.config_vars['CONFIG_TIME_SLICE_MS'] = self.create_spin_button_with_hint(
+            box, "时间片 (毫秒):", 1, 1000, 10, "建议值: 10-50ms，影响响应速度"
         )
         
         # 最大线程数
-        self.config_vars['CONFIG_MAX_THREADS'] = self.create_spin_button(
-            box, "最大线程数:", 1, 1024, 256
+        self.config_vars['CONFIG_MAX_THREADS'] = self.create_spin_button_with_hint(
+            box, "最大线程数:", 1, 1024, 256, "建议值: 128-512，根据CPU核心数调整"
         )
         
         notebook.append_page(box, Gtk.Label.new("调度器"))
