@@ -1,5 +1,5 @@
 OUTPUT_FORMAT("pe-x86-64")
-ENTRY(efi_main)
+ENTRY(UefiMain)
 SECTIONS
 {
     . = 0;

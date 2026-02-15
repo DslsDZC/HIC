@@ -1,15 +1,22 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """
 HIK系统构建系统 - 文本GUI模式
 使用curses库实现文本用户界面
 遵循TD/滚动更新.md文档
 """
 
-import curses
 import subprocess
 import os
 import sys
 from typing import List, Callable, Optional
+
+# Set TERM and TERMINFO environment variables before importing curses
+if not os.environ.get('TERM'):
+    os.environ['TERM'] = 'xterm-256color'
+if not os.environ.get('TERMINFO'):
+    os.environ['TERMINFO'] = '/usr/share/terminfo'
+
+import curses
 
 # 颜色对
 COLOR_PAIR_DEFAULT = 1
@@ -69,14 +76,22 @@ class BuildTUI:
     def create_main_menu(self):
         """创建主菜单"""
         self.current_menu = [
+            MenuItem("配置构建选项", self.config_build, "配置编译时参数"),
+            MenuItem("配置运行时选项", self.config_runtime, "配置运行时参数"),
+            MenuItem("---", self.no_action, ""),
             MenuItem("命令行模式构建", self.build_console, "使用命令行模式编译整个系统"),
             MenuItem("文本GUI模式构建", self.build_tui, "使用文本GUI模式编译系统"),
             MenuItem("图形化GUI模式构建", self.build_gui, "使用图形化GUI模式编译系统"),
             MenuItem("清理构建文件", self.clean_build, "清理所有构建生成的文件"),
             MenuItem("安装依赖 (Arch Linux)", self.install_deps, "安装编译所需的依赖包"),
+            MenuItem("---", self.no_action, ""),
             MenuItem("显示帮助", self.show_help, "显示构建系统帮助信息"),
             MenuItem("退出", self.exit_program, "退出构建系统"),
         ]
+    
+    def no_action(self):
+        """无操作（分隔符）"""
+        pass
     
     def log(self, message: str, level: str = "info"):
         """添加日志消息"""
@@ -137,11 +152,16 @@ class BuildTUI:
         self.log("开始文本GUI模式构建...")
         self.status_message = "正在构建..."
         
-        # 检查ncurses
-        if not self.run_command(["which", "ncurses6-config"]):
-            self.log("错误: 需要安装 ncurses", "error")
-            self.status_message = "缺少依赖"
-            return
+        # 检查ncurses支持（TUI界面本身需要curses，所以如果运行到这里说明curses可用）
+        # 但为了构建其他可能需要ncurses的组件，我们还是检查一下
+        try:
+            import subprocess
+            result = subprocess.run(["pkg-config", "--exists", "ncursesw"], 
+                                  capture_output=True, timeout=5)
+            if result.returncode != 0:
+                self.log("警告: ncurses开发库可能未安装", "warning")
+        except Exception:
+            self.log("警告: 无法检查ncurses开发库", "warning")
         
         # 清理
         if not self.run_command(["make", "clean"]):
@@ -203,6 +223,106 @@ class BuildTUI:
             self.log("注意: 内核交叉编译工具链需要手动安装", "warning")
         else:
             self.status_message = "安装失败"
+    
+    def config_build(self):
+        """配置编译时选项"""
+        self.log("=== 编译时配置 ===", "info")
+        self.log("正在加载编译配置...", "info")
+        
+        config_file = os.path.join(ROOT_DIR, "..", "build_config.mk")
+        
+        if not os.path.exists(config_file):
+            self.log("错误: 配置文件不存在", "error")
+            return
+        
+        # 读取配置
+        config = {}
+        with open(config_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('CONFIG_') and '=' in line:
+                    key, value = line.split('=', 1)
+                    config[key.strip()] = value.strip().rstrip('?')
+        
+        # 显示关键配置项
+        self.log("\n当前编译配置:", "info")
+        
+        # 调试配置
+        self.log(f"  [调试] 调试支持: {'启用' if config.get('CONFIG_DEBUG') == '1' else '禁用'}", "info")
+        self.log(f"  [调试] 跟踪功能: {'启用' if config.get('CONFIG_TRACE') == '1' else '禁用'}", "info")
+        self.log(f"  [调试] 详细输出: {'启用' if config.get('CONFIG_VERBOSE') == '1' else '禁用'}", "info")
+        
+        # 安全配置
+        self.log(f"  [安全] KASLR: {'启用' if config.get('CONFIG_KASLR') == '1' else '禁用'}", "info")
+        self.log(f"  [安全] SMEP: {'启用' if config.get('CONFIG_SMEP') == '1' else '禁用'}", "info")
+        self.log(f"  [安全] SMAP: {'启用' if config.get('CONFIG_SMAP') == '1' else '禁用'}", "info")
+        self.log(f"  [安全] 审计日志: {'启用' if config.get('CONFIG_AUDIT') == '1' else '禁用'}", "info")
+        
+        # 性能配置
+        self.log(f"  [性能] 性能计数器: {'启用' if config.get('CONFIG_PERF') == '1' else '禁用'}", "info")
+        self.log(f"  [性能] 快速路径: {'启用' if config.get('CONFIG_FAST_PATH') == '1' else '禁用'}", "info")
+        
+        # 内存配置
+        self.log(f"  [内存] 堆大小: {config.get('CONFIG_HEAP_SIZE_MB', '128')} MB", "info")
+        self.log(f"  [内存] 栈大小: {config.get('CONFIG_STACK_SIZE_KB', '8')} KB", "info")
+        self.log(f"  [内存] 页面缓存: {config.get('CONFIG_PAGE_CACHE_PERCENT', '20')}%", "info")
+        
+        # 调度器配置
+        self.log(f"  [调度] 调度策略: {config.get('CONFIG_SCHEDULER_POLICY', 'priority')}", "info")
+        self.log(f"  [调度] 时间片: {config.get('CONFIG_TIME_SLICE_MS', '10')} ms", "info")
+        self.log(f"  [调度] 最大线程: {config.get('CONFIG_MAX_THREADS', '256')}", "info")
+        
+        # 功能配置
+        self.log(f"\n  [功能] PCI支持: {'启用' if config.get('CONFIG_PCI') == '1' else '禁用'}", "info")
+        self.log(f"  [功能] ACPI支持: {'启用' if config.get('CONFIG_ACPI') == '1' else '禁用'}", "info")
+        self.log(f"  [功能] 串口支持: {'启用' if config.get('CONFIG_SERIAL') == '1' else '禁用'}", "info")
+        
+        # 能力系统配置
+        self.log(f"\n  [能力系统] 最大能力数: {config.get('CONFIG_MAX_CAPABILITIES', '65536')}", "info")
+        self.log(f"  [能力系统] 能力派生: {'启用' if config.get('CONFIG_CAPABILITY_DERIVATION') == '1' else '禁用'}", "info")
+        
+        # 域配置
+        self.log(f"\n  [域] 最大域数: {config.get('CONFIG_MAX_DOMAINS', '16')}", "info")
+        self.log(f"  [域] 域栈大小: {config.get('CONFIG_DOMAIN_STACK_SIZE_KB', '16')} KB", "info")
+        
+        # 中断配置
+        self.log(f"\n  [中断] 最大中断数: {config.get('CONFIG_MAX_IRQS', '256')}", "info")
+        self.log(f"  [中断] 中断公平性: {'启用' if config.get('CONFIG_IRQ_FAIRNESS') == '1' else '禁用'}", "info")
+        
+        # 模块配置
+        self.log(f"\n  [模块] 模块加载: {'启用' if config.get('CONFIG_MODULE_LOADING') == '1' else '禁用'}", "info")
+        self.log(f"  [模块] 最大模块数: {config.get('CONFIG_MAX_MODULES', '32')}", "info")
+        
+        self.log("\n提示: 编辑 build_config.mk 文件来修改这些配置", "warning")
+        self.log("修改后需要重新编译才能生效", "warning")
+        self.status_message = "配置已显示"
+    
+    def config_runtime(self):
+        """配置运行时选项"""
+        self.log("=== 运行时配置 ===", "info")
+        
+        runtime_config = os.path.join(ROOT_DIR, "..", "runtime_config.yaml.example")
+        
+        if not os.path.exists(runtime_config):
+            self.log("错误: 运行时配置示例文件不存在", "error")
+            return
+        
+        self.log("运行时配置示例位置: runtime_config.yaml.example", "info")
+        self.log("\n主要运行时配置项:", "info")
+        self.log("  [系统] 日志级别: error, warn, info, debug, trace", "info")
+        self.log("  [系统] 调度策略: fifo, rr, priority", "info")
+        self.log("  [系统] 内存策略: firstfit, bestfit, buddy", "info")
+        self.log("  [系统] 安全级别: minimal, standard, strict", "info")
+        self.log("\n  [调度] 时间片: 毫秒单位", "info")
+        self.log("  [调度] 最大线程数", "info")
+        self.log("\n  [内存] 堆大小 (MB)", "info")
+        self.log("  [内存] 栈大小 (KB)", "info")
+        self.log("  [内存] 页面缓存百分比", "info")
+        self.log("\n  [安全] 安全启动, KASLR, SMEP, SMAP, 审计", "info")
+        self.log("\n  [性能] 性能计数器, 快速路径", "info")
+        self.log("\n提示: 复制 runtime_config.yaml.example 为 runtime_config.yaml", "warning")
+        self.log("修改后无需重新编译，通过引导层传递给内核", "warning")
+        self.status_message = "配置已显示"
     
     def show_help(self):
         """显示帮助"""
@@ -315,7 +435,29 @@ def main(stdscr):
 
 
 if __name__ == "__main__":
+    # Check for --help argument before initializing curses
+    if len(sys.argv) > 1 and '--help' in sys.argv or '-h' in sys.argv:
+        print(f"{PROJECT} 构建系统 v{VERSION} - 文本GUI模式")
+        print("\n使用说明:")
+        print("  ↑↓      选择菜单项")
+        print("  Enter   执行选中的操作")
+        print("  q       退出程序")
+        print("\n构建选项:")
+        print("  配置构建选项        - 配置编译时参数")
+        print("  配置运行时选项      - 配置运行时参数")
+        print("  命令行模式构建      - 使用命令行模式编译整个系统")
+        print("  文本GUI模式构建     - 使用文本GUI模式编译系统")
+        print("  图形化GUI模式构建   - 使用图形化GUI模式编译系统")
+        print("  清理构建文件        - 清理所有构建生成的文件")
+        print("  安装依赖            - 安装编译所需的依赖包 (Arch Linux)")
+        print("  显示帮助            - 显示构建系统帮助信息")
+        print("  退出                - 退出构建系统")
+        sys.exit(0)
+    
     try:
+        # Set TERM environment variable if not set
+        if not os.environ.get('TERM'):
+            os.environ['TERM'] = 'xterm-256color'
         curses.wrapper(main)
     except KeyboardInterrupt:
         print("\n程序已中断")

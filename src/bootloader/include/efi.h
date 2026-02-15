@@ -119,16 +119,19 @@ typedef struct {
 } EFI_FILE_INFO;
 
 // 简单文件系统协议
-typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
+typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     uint64_t revision;
-    EFI_STATUS (*OpenVolume)(struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *this,
-                             EFI_FILE_PROTOCOL **root_volume);
-} EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
+    EFI_STATUS (*OpenVolume)(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *this,
+                             struct _EFI_FILE_PROTOCOL **root_volume);
+};
 
-// 加载映像协议
+// 加载映像协议 (UEFI 2.0规范)
+#pragma pack(push, 8)
 typedef struct {
     uint32_t revision;
     EFI_HANDLE parent_handle;
+    struct _EFI_SYSTEM_TABLE *system_table;
     EFI_HANDLE device_handle;
     void *file_path;
     void *load_options;
@@ -137,21 +140,31 @@ typedef struct {
     uint64_t image_size;
     EFI_MEMORY_TYPE image_code_type;
     EFI_MEMORY_TYPE image_data_type;
-    EFI_HANDLE image_handle;
+    uint64_t unload;
 } EFI_LOADED_IMAGE_PROTOCOL;
+#pragma pack(pop)
 
 // 简单文本输出协议
-typedef struct {
-    uint64_t reset;
-    uint64_t output_string;
-    uint64_t test_string;
-} EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
+struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
+    EFI_STATUS (*Reset)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN extended_verification);
+    EFI_STATUS (*OutputString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
+    EFI_STATUS (*TestString)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
+    EFI_STATUS (*QueryMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode, UINTN *columns, UINTN *rows);
+    EFI_STATUS (*SetMode)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode);
+    EFI_STATUS (*SetAttribute)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN attribute);
+    EFI_STATUS (*ClearScreen)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this);
+    EFI_STATUS (*SetCursorPosition)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN column, UINTN row);
+    EFI_STATUS (*EnableCursor)(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN visible);
+    VOID *mode;
+};
 
 // 简单文本输入协议
-typedef struct {
-    uint64_t reset;
-    uint64_t read_key_stroke;
-} EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
+typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
+struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
+    EFI_STATUS (*Reset)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, BOOLEAN extended_verification);
+    EFI_STATUS (*ReadKeyStroke)(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, void *key);
+};
 
 // EFI启动服务
 typedef struct _EFI_BOOT_SERVICES {

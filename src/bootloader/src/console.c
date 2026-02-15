@@ -6,6 +6,10 @@
 #include <stdarg.h>
 #include "console.h"
 #include "string.h"
+#include "efi.h"
+
+// 外部全局变量（在main.c中定义）
+extern EFI_SYSTEM_TABLE *gST;
 
 // VGA文本模式显示
 #define VGA_WIDTH  80
@@ -26,8 +30,6 @@ static log_level_t g_log_level = LOG_LEVEL_INFO;
 static uint16_t g_serial_port = 0x3F8;  // COM1
 
 // 静态函数前置声明
-static void update_cursor(void);
-static void scroll(void);
 static void outb(uint16_t port, uint8_t value);
 static uint8_t inb(uint16_t port);
 static void int_to_str(int64_t value, char *buffer, int base);
@@ -40,111 +42,43 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args);
  */
 void console_init(void)
 {
-    // 清屏
-    console_clear();
-    
-    // 初始化串口
-    serial_init(g_serial_port);
-}
-
-/**
- * 更新光标位置
- */
-static void update_cursor(void)
-{
-    uint16_t pos = g_cursor_y * VGA_WIDTH + g_cursor_x;
-    
-    // 写入光标位置寄存器
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, (uint8_t)(pos & 0xFF));
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
-}
-
-/**
- * 滚动屏幕
- */
-static void scroll(void)
-{
-    uint16_t *vga = (uint16_t *)VGA_MEMORY;
-    
-    // 向上滚动一行
-    for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++) {
-        vga[i] = vga[i + VGA_WIDTH];
+    // 直接使用UEFI ConOut，不依赖其他初始化
+    if (gST && gST->con_out) {
+        gST->con_out->ClearScreen(gST->con_out);
     }
-    
-    // 清空最后一行
-    for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++) {
-        vga[i] = (uint16_t)(g_current_attr << 8);
-    }
-    
-    g_cursor_y = VGA_HEIGHT - 1;
 }
 
 /**
  * 输出字符到控制台
+ * 使用UEFI ConOut协议
  */
 void console_putchar(char c)
 {
-    uint16_t *vga = (uint16_t *)VGA_MEMORY;
-    
-    // 处理特殊字符
-    switch (c) {
-        case '\n':
-            g_cursor_x = 0;
-            g_cursor_y++;
-            break;
-            
-        case '\r':
-            g_cursor_x = 0;
-            break;
-            
-        case '\t':
-            g_cursor_x = (g_cursor_x + 8) & ~7;
-            break;
-            
-        case '\b':
-            if (g_cursor_x > 0) {
-                g_cursor_x--;
-                vga[g_cursor_y * VGA_WIDTH + g_cursor_x] = 
-                    (uint16_t)(g_current_attr << 8);
-            }
-            break;
-            
-        default:
-            // 输出字符
-            if (c >= 32 && c < 127) {
-                vga[g_cursor_y * VGA_WIDTH + g_cursor_x] = 
-                    (uint16_t)c | ((uint16_t)g_current_attr << 8);
-                g_cursor_x++;
-            }
-            break;
+    // 使用UEFI ConOut协议
+    if (gST && gST->con_out) {
+        CHAR16 str[2];
+        str[0] = (CHAR16)c;
+        str[1] = 0;
+        gST->con_out->OutputString(gST->con_out, str);
     }
-    
-    // 处理换行
-    if (g_cursor_x >= VGA_WIDTH) {
-        g_cursor_x = 0;
-        g_cursor_y++;
-    }
-    
-    // 处理滚动
-    if (g_cursor_y >= VGA_HEIGHT) {
-        scroll();
-    }
-    
-    update_cursor();
-    
-    // 同时输出到串口
-    serial_putchar(g_serial_port, c);
 }
 
 /**
  * 输出字符串
+ * 使用UEFI ConOut协议
  */
 void console_puts(const char *str)
 {
-    while (*str) {
-        console_putchar(*str++);
+    // 使用UEFI ConOut协议
+    if (gST && gST->con_out) {
+        // 转换为CHAR16字符串
+        CHAR16 utf16[256];
+        int i = 0;
+        while (*str && i < 255) {
+            utf16[i++] = (CHAR16)*str++;
+        }
+        utf16[i] = 0;
+        gST->con_out->OutputString(gST->con_out, utf16);
     }
 }
 
@@ -200,7 +134,8 @@ void console_printf(const char *fmt, ...)
                 
                 case 'p': {
                     uint64_t value = va_arg(args, uint64_t);
-                    console_puts("0x");
+                    console_putchar('0');
+                    console_putchar('x');
                     uint64_to_str(value, buffer, 16);
                     console_puts(buffer);
                     break;
@@ -266,32 +201,34 @@ void console_set_color(console_color_t fg, console_color_t bg)
 
 /**
  * 清屏
+ * 使用UEFI ConOut协议
  */
 void console_clear(void)
 {
-    uint16_t *vga = (uint16_t *)VGA_MEMORY;
-    
-    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
-        vga[i] = (uint16_t)(g_current_attr << 8);
+    // 使用UEFI ConOut清屏
+    if (gST && gST->con_out) {
+        gST->con_out->ClearScreen(gST->con_out);
     }
-    
-    g_cursor_x = 0;
-    g_cursor_y = 0;
-    update_cursor();
 }
 
 /**
  * 设置光标位置
+ * 在UEFI环境中，光标位置由ConOut协议管理
  */
 void console_set_cursor(int x, int y)
 {
+    if (gST && gST->con_out) {
+        // 使用UEFI ConOut协议设置光标位置
+        gST->con_out->SetCursorPosition(gST->con_out, x, y);
+    }
+    
+    // 保存局部变量用于其他功能
     if (x >= 0 && x < VGA_WIDTH) {
         g_cursor_x = x;
     }
     if (y >= 0 && y < VGA_HEIGHT) {
         g_cursor_y = y;
     }
-    update_cursor();
 }
 
 /**
@@ -342,10 +279,10 @@ static void log_output(log_level_t level, const char *prefix, const char *fmt, v
     console_puts(prefix);
     console_set_color(CON_COLOR_WHITE, CON_COLOR_BLACK);
     
-    // 输出格式化字符串
-    char buffer[256];
-    vsnprintf(buffer, sizeof(buffer), fmt, args);
-    console_puts(buffer);
+    // 输出格式化字符串（使用静态缓冲区避免栈溢出）
+    static char log_buffer[256];
+    vsnprintf(log_buffer, sizeof(log_buffer), fmt, args);
+    console_puts(log_buffer);
     console_putchar('\n');
 }
 
@@ -541,6 +478,11 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
     size_t written = 0;
     char temp[32];
     
+    // 清零temp缓冲区
+    for (int i = 0; i < 32; i++) {
+        temp[i] = 0;
+    }
+    
     while (*fmt && written < size - 1) {
         if (*fmt == '%') {
             fmt++;
@@ -550,8 +492,11 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                 case 'i': {
                     int value = va_arg(args, int);
                     int_to_str(value, temp, 10);
-                    for (char *p = temp; *p && written < size - 1; p++) {
-                        buffer[written++] = *p;
+                    {
+                        const char *p = temp;
+                        while (*p && written < size - 1) {
+                            buffer[written++] = *p++;
+                        }
                     }
                     break;
                 }
@@ -559,8 +504,11 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                 case 'u': {
                     unsigned int value = va_arg(args, unsigned int);
                     uint_to_str(value, temp, 10);
-                    for (char *p = temp; *p && written < size - 1; p++) {
-                        buffer[written++] = *p;
+                    {
+                        const char *p = temp;
+                        while (*p && written < size - 1) {
+                            buffer[written++] = *p++;
+                        }
                     }
                     break;
                 }
@@ -568,8 +516,11 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                 case 'x': {
                     unsigned int value = va_arg(args, unsigned int);
                     uint_to_str(value, temp, 16);
-                    for (char *p = temp; *p && written < size - 1; p++) {
-                        buffer[written++] = *p;
+                    {
+                        const char *p = temp;
+                        while (*p && written < size - 1) {
+                            buffer[written++] = *p++;
+                        }
                     }
                     break;
                 }
@@ -580,8 +531,11 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                         fmt++;
                         uint64_t value = va_arg(args, uint64_t);
                         uint64_to_str(value, temp, 10);
-                        for (char *p = temp; *p && written < size - 1; p++) {
-                            buffer[written++] = *p;
+                        {
+                            const char *p = temp;
+                            while (*p && written < size - 1) {
+                                buffer[written++] = *p++;
+                            }
                         }
                     }
                     break;
@@ -589,8 +543,15 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                 case 's': {
                     char *str = va_arg(args, char *);
                     if (str) {
-                        while (*str && written < size - 1) {
-                            buffer[written++] = *str++;
+                        const char *p = str;
+                        while (*p && written < size - 1) {
+                            buffer[written++] = *p++;
+                        }
+                    } else {
+                        const char *null_str = "(null)";
+                        const char *p = null_str;
+                        while (*p && written < size - 1) {
+                            buffer[written++] = *p++;
                         }
                     }
                     break;

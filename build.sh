@@ -22,14 +22,26 @@ echo ""
 if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "用法: ./build.sh [选项]"
     echo ""
-    echo "选项:"
+    echo "构建选项:"
     echo "  bootloader   - 仅构建引导程序"
     echo "  kernel       - 仅构建内核"
     echo "  clean        - 清理构建文件"
     echo "  install      - 安装构建产物"
+    echo ""
+    echo "界面选项:"
     echo "  gui          - 运行GUI构建界面"
     echo "  tui          - 运行TUI构建界面"
     echo "  cli          - 运行CLI构建界面"
+    echo ""
+    echo "配置选项:"
+    echo "  cli --config        - 显示当前编译配置"
+    echo "  cli --config-runtime - 显示运行时配置说明"
+    echo ""
+    echo "环境选项:"
+    echo "  setup-venv   - 设置Python虚拟环境"
+    echo "  clean-venv   - 清理Python虚拟环境"
+    echo ""
+    echo "其他:"
     echo "  help         - 显示此帮助信息"
     echo ""
     echo "无参数时：构建引导程序和内核"
@@ -38,6 +50,22 @@ fi
 
 # 创建output目录
 mkdir -p "${SCRIPT_DIR}/output"
+
+# 检查和设置Python虚拟环境
+setup_venv() {
+    local venv_dir="${SCRIPT_DIR}/scripts/venv"
+    local requirements_file="${SCRIPT_DIR}/scripts/requirements.txt"
+    
+    if [ ! -d "$venv_dir" ]; then
+        echo -e "${YELLOW}创建Python虚拟环境...${RESET}"
+        /usr/bin/python3 -m venv "$venv_dir"
+        
+        if [ -f "$requirements_file" ]; then
+            echo -e "${YELLOW}安装Python依赖...${RESET}"
+            "$venv_dir/bin/pip" install -r "$requirements_file" --quiet
+        fi
+    fi
+}
 
 # 根据参数执行不同操作
 case "$1" in
@@ -87,20 +115,37 @@ case "$1" in
     
     gui)
         echo -e "${YELLOW}运行GUI构建界面...${RESET}"
-        cd "${SCRIPT_DIR}"
-        python3 scripts/build_gui.py
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/build_gui.py"
         ;;
     
     tui)
         echo -e "${YELLOW}运行TUI构建界面...${RESET}"
-        cd "${SCRIPT_DIR}"
-        python3 scripts/build_tui.py
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/build_tui.py"
         ;;
     
     cli)
         echo -e "${YELLOW}运行CLI构建界面...${RESET}"
-        cd "${SCRIPT_DIR}"
-        python3 scripts/build_system.py
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/build_system.py"
+        ;;
+    
+    setup-venv)
+        echo -e "${YELLOW}设置Python虚拟环境...${RESET}"
+        setup_venv
+        echo -e "${GREEN}虚拟环境设置完成${RESET}"
+        echo "虚拟环境位置: ${SCRIPT_DIR}/scripts/venv"
+        ;;
+    
+    clean-venv)
+        echo -e "${YELLOW}清理Python虚拟环境...${RESET}"
+        if [ -d "${SCRIPT_DIR}/scripts/venv" ]; then
+            rm -rf "${SCRIPT_DIR}/scripts/venv"
+            echo -e "${GREEN}虚拟环境已清理${RESET}"
+        else
+            echo -e "${YELLOW}虚拟环境不存在${RESET}"
+        fi
         ;;
     
     "")

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
 HIK系统构建系统
@@ -12,6 +12,7 @@ HIK系统构建系统
 import os
 import sys
 import subprocess
+import argparse
 import hashlib
 import struct
 import json
@@ -410,6 +411,104 @@ class BuildSystem:
         with open(log_file, "w", encoding="utf-8") as f:
             f.write("\n".join(self.build_log))
         self.log(f"构建日志保存完成: {log_file}")
+    
+    def show_config(self):
+        """显示当前编译配置"""
+        config_file = self.config["root_dir"].parent / "build_config.mk"
+        
+        if not config_file.exists():
+            self.log("配置文件不存在: build_config.mk", "ERROR")
+            return
+        
+        self.log("=" * 60)
+        self.log("当前编译配置")
+        self.log("=" * 60)
+        
+        # 读取并解析配置
+        config = {}
+        with open(config_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('CONFIG_') and '=' in line:
+                    # 分离配置项和注释
+                    parts = line.split('#', 1)
+                    config_line = parts[0].strip()
+                    
+                    if '=' in config_line:
+                        key, value = config_line.split('=', 1)
+                        # 清理键和值
+                        key = key.strip().replace('?', '').strip()
+                        value = value.strip().replace('?', '').strip()
+                        config[key] = value
+        
+        # 按分类显示配置
+        categories = {
+            "调试配置": ["CONFIG_DEBUG", "CONFIG_TRACE", "CONFIG_VERBOSE"],
+            "安全配置": ["CONFIG_KASLR", "CONFIG_SMEP", "CONFIG_SMAP", "CONFIG_AUDIT", "CONFIG_SECURITY_LEVEL"],
+            "性能配置": ["CONFIG_PERF", "CONFIG_FAST_PATH"],
+            "功能配置": ["CONFIG_PCI", "CONFIG_ACPI", "CONFIG_SERIAL"],
+            "内存配置": ["CONFIG_HEAP_SIZE_MB", "CONFIG_STACK_SIZE_KB", "CONFIG_PAGE_CACHE_PERCENT"],
+            "调度器配置": ["CONFIG_SCHEDULER_POLICY", "CONFIG_TIME_SLICE_MS", "CONFIG_MAX_THREADS"],
+            "能力系统配置": ["CONFIG_MAX_CAPABILITIES", "CONFIG_CAPABILITY_DERIVATION"],
+            "域配置": ["CONFIG_MAX_DOMAINS", "CONFIG_DOMAIN_STACK_SIZE_KB"],
+            "中断配置": ["CONFIG_MAX_IRQS", "CONFIG_IRQ_FAIRNESS"],
+            "模块配置": ["CONFIG_MODULE_LOADING", "CONFIG_MAX_MODULES"]
+        }
+        
+        for category, keys in categories.items():
+            self.log(f"\n【{category}】", "INFO")
+            for key in keys:
+                if key in config:
+                    value = config[key]
+                    # 美化显示布尔值
+                    if value in ['0', '1']:
+                        display_value = "启用" if value == '1' else "禁用"
+                    else:
+                        display_value = value
+                    self.log(f"  {key}: {display_value}", "INFO")
+        
+        self.log("\n" + "=" * 60)
+        self.log("提示: 修改配置后需要重新编译才能生效", "INFO")
+        self.log("使用 ./build.sh gui 可通过图形界面修改配置", "INFO")
+    
+    def show_runtime_config(self):
+        """显示运行时配置说明"""
+        runtime_config = self.config["root_dir"].parent / "runtime_config.yaml.example"
+        
+        if not runtime_config.exists():
+            self.log("运行时配置示例文件不存在", "ERROR")
+            return
+        
+        self.log("=" * 60)
+        self.log("运行时配置说明")
+        self.log("=" * 60)
+        self.log(f"配置文件位置: {runtime_config}")
+        self.log("")
+        self.log("主要配置项:")
+        self.log("  system:")
+        self.log("    log_level: 日志级别 (error, warn, info, debug, trace)")
+        self.log("    scheduler_policy: 调度策略 (fifo, rr, priority)")
+        self.log("    memory_policy: 内存策略 (firstfit, bestfit, buddy)")
+        self.log("    security_level: 安全级别 (minimal, standard, strict)")
+        self.log("")
+        self.log("  scheduler:")
+        self.log("    time_slice_ms: 时间片长度(毫秒)")
+        self.log("    max_threads: 最大线程数")
+        self.log("")
+        self.log("  memory:")
+        self.log("    heap_size_mb: 堆大小(MB)")
+        self.log("    stack_size_kb: 栈大小(KB)")
+        self.log("    page_cache_percent: 页面缓存百分比")
+        self.log("")
+        self.log("  security:")
+        self.log("    enable_secure_boot: 启用安全启动")
+        self.log("    enable_kaslr: 启用KASLR")
+        self.log("    enable_smap: 启用SMAP")
+        self.log("    enable_smep: 启用SMEP")
+        self.log("    enable_audit: 启用审计日志")
+        self.log("")
+        self.log("提示: 运行时配置无需重新编译，通过引导层传递给内核", "INFO")
+        self.log("=" * 60)
 
 
 def main():
@@ -426,6 +525,8 @@ def main():
   %(prog)s --target kernel    # 仅构建内核
   %(prog)s --target uefi bios # 构建UEFI和BIOS引导程序
   %(prog)s --clean            # 清理构建文件
+  %(prog)s --config           # 显示当前编译配置
+  %(prog)s --config-runtime   # 显示运行时配置说明
   %(prog)s --help             # 显示帮助
         """
     )
@@ -442,10 +543,31 @@ def main():
         action="store_true",
         help="清理构建文件"
     )
+    
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="显示当前编译配置"
+    )
+    
+    parser.add_argument(
+        "--config-runtime",
+        action="store_true",
+        help="显示运行时配置说明"
+    )
 
     args = parser.parse_args()
 
     build_system = BuildSystem()
+
+    # 显示配置模式
+    if args.config:
+        build_system.show_config()
+        return 0
+    
+    if args.config_runtime:
+        build_system.show_runtime_config()
+        return 0
 
     # 清理模式
     if args.clean:
@@ -474,76 +596,4 @@ def main():
 
 
 if __name__ == "__main__":
-    build_system = BuildSystem()
-    
-    # 解析命令行参数
-    parser = argparse.ArgumentParser(description="HIK系统构建系统")
-    parser.add_argument("--target", "-t",
-                       choices=["uefi", "bios", "kernel"],
-                       help="构建目标 (uefi, bios, kernel)")
-    parser.add_argument("--clean", "-c",
-                       action="store_true",
-                       help="清理构建文件")
-    parser.add_argument("--all", "-a",
-                       action="store_true",
-                       help="构建所有目标")
-    
-    args = parser.parse_args()
-    
-    try:
-        if args.clean:
-            # 清理构建
-            bootloader_dir = build_system.config["root_dir"].parent / "src" / "bootloader"
-            kernel_dir = build_system.config["root_dir"]
-            
-            subprocess.run(["make", "clean"], cwd=bootloader_dir, capture_output=True)
-            subprocess.run(["make", "clean"], cwd=kernel_dir, capture_output=True)
-            
-            build_system.log("清理完成")
-            sys.exit(0)
-        
-        if args.target:
-            # 构建指定目标
-            if args.target == "uefi":
-                if not build_system.build_bootloader("uefi"):
-                    sys.exit(1)
-            elif args.target == "bios":
-                if not build_system.build_bootloader("bios"):
-                    sys.exit(1)
-            elif args.target == "kernel":
-                if not build_system.build_kernel():
-                    sys.exit(1)
-        elif args.all:
-            # 构建所有目标
-            targets = ["uefi", "bios", "kernel"]
-            success = True
-            for target in targets:
-                if target in ["uefi", "bios"]:
-                    if not build_system.build_bootloader(target):
-                        success = False
-                elif target == "kernel":
-                    if not build_system.build_kernel():
-                        success = False
-            
-            if not success:
-                sys.exit(1)
-        else:
-            # 默认：显示帮助
-            parser.print_help()
-            sys.exit(0)
-        
-        # 创建输出结构
-        build_system.create_output_structure()
-        
-        # 生成报告
-        build_system.generate_report()
-        
-        build_system.log("构建完成!")
-        sys.exit(0)
-        
-    except KeyboardInterrupt:
-        build_system.log("构建被用户中断", "WARNING")
-        sys.exit(130)
-    except Exception as e:
-        build_system.log(f"构建失败: {e}", "ERROR")
-        sys.exit(1)
+    sys.exit(main())

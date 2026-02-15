@@ -1,7 +1,9 @@
 #!/bin/bash
 # 批量生成剩余的 HIK Wiki 文档
 
-WIKI_DIR="/home/DslsDZC/HIK/docs/Wiki"
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WIKI_DIR="$SCRIPT_DIR"
 
 # 创建剩余的文档
 docs=(

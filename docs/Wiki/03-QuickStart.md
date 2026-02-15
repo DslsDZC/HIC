@@ -46,8 +46,8 @@ make
 ### 方式1：使用根目录Makefile（推荐）
 
 ```bash
-# 在项目根目录
-cd /home/DslsDZC/HIK
+# 在项目根目录（假设项目路径为 $HIK_ROOT）
+cd $HIK_ROOT
 
 # 构建所有组件
 make all
@@ -63,7 +63,7 @@ make all && make install
 
 ```bash
 # 在项目根目录
-cd /home/DslsDZC/HIK
+cd $HIK_ROOT
 
 # 构建所有组件
 ./build.sh
@@ -73,7 +73,7 @@ cd /home/DslsDZC/HIK
 
 ```bash
 # 在项目根目录
-cd /home/DslsDZC/HIK
+cd $HIK_ROOT
 
 # 运行构建系统（自动选择GUI/TUI/CLI）
 python3 scripts/build_system.py
