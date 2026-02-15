@@ -293,17 +293,17 @@ static int bios_load_kernel(const char *path)
     // 验证内核映像
     hik_image_header_t *header = (hik_image_header_t *)kernel_base;
     
-    if (header->magic != HIK_IMAGE_MAGIC) {
-        log_error("Invalid kernel image magic: 0x%08x (expected 0x%08x)\n", 
-                 header->magic, HIK_IMAGE_MAGIC);
-        return -1;
+    if (header->magic[0] != 'H' || header->magic[1] != 'I' || 
+        header->magic[2] != 'K' || header->magic[3] != '_' ||
+        header->magic[4] != 'I' || header->magic[5] != 'M' ||
+        header->magic[6] != 'G' || header->magic[7] != '\0') {
+        log_error("Invalid kernel magic: 0x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                 header->magic[0], header->magic[1], header->magic[2], header->magic[3],
+                 header->magic[4], header->magic[5], header->magic[6], header->magic[7]);
+        return 0;
     }
     
-    if (header->version != HIK_IMAGE_VERSION) {
-        log_error("Unsupported kernel image version: %u (expected %u)\n", 
-                 header->version, HIK_IMAGE_VERSION);
-        return -1;
-    }
+    if ((header->version >> 8) != 0 || (header->version & 0xFF) != 1) {
     
     // 计算需要的总扇区数
     total_sectors = (header->image_size + 511) / 512;

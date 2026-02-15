@@ -34,6 +34,10 @@ typedef signed long long INTN;
 typedef uint8_t BOOLEAN;
 typedef UINTN EFI_STATUS;
 
+// 布尔值常量
+#define FALSE 0
+#define TRUE  1
+
 // GUID
 typedef struct {
     uint32_t data1;
@@ -118,13 +122,12 @@ typedef struct {
     CHAR16 filename[1];
 } EFI_FILE_INFO;
 
-// 简单文件系统协议
-typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
-struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
+// 简单文件系统协议 (UEFI 2.11规范)
+typedef struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL {
     uint64_t revision;
-    EFI_STATUS (*OpenVolume)(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *this,
+    EFI_STATUS (*OpenVolume)(struct _EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *this,
                              struct _EFI_FILE_PROTOCOL **root_volume);
-};
+} EFI_SIMPLE_FILE_SYSTEM_PROTOCOL;
 
 // 前向声明
 
@@ -300,20 +303,115 @@ typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
 
 } EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 
-// EFI启动服务
+// LocateHandle搜索类型
+typedef enum {
+    AllHandles,
+    ByRegisterNotify,
+    ByProtocol
+} EFI_LOCATE_SEARCH_TYPE;
+
+// 设备路径协议
+typedef struct _EFI_DEVICE_PATH_PROTOCOL {
+    uint8_t type;
+    uint8_t sub_type;
+    uint16_t length[1];
+} EFI_DEVICE_PATH_PROTOCOL;
+
+// OpenProtocol信息
+typedef struct {
+    EFI_HANDLE agent_handle;
+    EFI_HANDLE controller_handle;
+    uint32_t attributes;
+    uint32_t open_count;
+} EFI_OPEN_PROTOCOL_INFORMATION_ENTRY;
+
+// EFI启动服务 (UEFI 2.0规范)
 typedef struct _EFI_BOOT_SERVICES {
     EFI_TABLE_HEADER hdr;
-    EFI_STATUS (*AllocatePool)(uint32_t pool_type, UINTN size, void **buffer);
-    EFI_STATUS (*FreePool)(void *buffer);
+    EFI_STATUS (*RaiseTPL)(UINTN new_tpl);
+    EFI_STATUS (*RestoreTPL)(UINTN old_tpl);
     EFI_STATUS (*AllocatePages)(uint32_t allocation_type, uint32_t memory_type,
                                  UINTN pages, EFI_PHYSICAL_ADDRESS *memory);
     EFI_STATUS (*FreePages)(EFI_PHYSICAL_ADDRESS memory, UINTN pages);
     EFI_STATUS (*GetMemoryMap)(UINTN *memory_map_size, void *memory_map,
                                   UINTN *map_key, UINTN *descriptor_size, uint32_t *descriptor_version);
+    EFI_STATUS (*AllocatePool)(uint32_t pool_type, UINTN size, void **buffer);
+    EFI_STATUS (*FreePool)(void *buffer);
+    EFI_STATUS (*CreateEvent)(uint32_t type, uint32_t notify_tpl,
+                              void (*notify_function)(void *event, void *context),
+                              void *notify_context, EFI_EVENT *event);
+    EFI_STATUS (*SetTimer)(EFI_EVENT event, uint32_t type, uint64_t trigger_time);
+    EFI_STATUS (*WaitForEvent)(UINTN number_of_events, EFI_EVENT *event, UINTN *index);
+    void (*SignalEvent)(EFI_EVENT event);
+    void (*CloseEvent)(EFI_EVENT event);
+    EFI_STATUS (*CheckEvent)(EFI_EVENT event);
+    
+    // Task Priority Services
+    EFI_STATUS (*InstallProtocolInterface)(EFI_HANDLE *handle, EFI_GUID *protocol,
+                                            uint32_t interface_type, void *interface);
+    EFI_STATUS (*ReinstallProtocolInterface)(EFI_HANDLE handle, EFI_GUID *protocol,
+                                             void *old_interface, void *new_interface);
+    EFI_STATUS (*UninstallProtocolInterface)(EFI_HANDLE handle, EFI_GUID *protocol,
+                                              void *interface);
     EFI_STATUS (*HandleProtocol)(EFI_HANDLE handle, EFI_GUID *protocol, void **interface);
+    void *reserved1;
+    EFI_STATUS (*RegisterProtocolNotify)(EFI_GUID *protocol, EFI_EVENT event,
+                                         void **registration);
+    EFI_STATUS (*LocateHandle)(EFI_LOCATE_SEARCH_TYPE search_type, EFI_GUID *protocol, 
+                               void *search_key, UINTN *buffer_size, EFI_HANDLE *buffer);
+    EFI_STATUS (*LocateDevicePath)(EFI_GUID *protocol, EFI_DEVICE_PATH_PROTOCOL **device_path,
+                                    EFI_HANDLE *device);
+    EFI_STATUS (*InstallConfigurationTable)(EFI_GUID *guid, void *table);
+    
+    // Image Services
+    EFI_STATUS (*LoadImage)(BOOLEAN boot_policy, EFI_HANDLE parent_image_handle,
+                            EFI_DEVICE_PATH_PROTOCOL *device_path, void *source_buffer,
+                            UINTN source_size, EFI_HANDLE *image_handle);
+    EFI_STATUS (*StartImage)(EFI_HANDLE image_handle, UINTN *exit_data_size, CHAR16 **exit_data);
+    EFI_STATUS (*Exit)(EFI_HANDLE image_handle, EFI_STATUS exit_status, UINTN exit_data_size,
+                      CHAR16 *exit_data);
+    EFI_STATUS (*UnloadImage)(EFI_HANDLE image_handle);
     EFI_STATUS (*ExitBootServices)(EFI_HANDLE image_handle, UINTN map_key);
-    void (*Stall)(UINTN microseconds);
-    void *reserved[49];
+    
+    // Misc Services
+    EFI_STATUS (*GetNextMonotonicCount)(UINT64 *count);
+    EFI_STATUS (*Stall)(UINTN microseconds);
+    EFI_STATUS (*SetWatchdogTimer)(UINTN timeout, UINT64 watchdog_code, UINT64 data_size,
+                                    CHAR16 *watchdog_data);
+    EFI_STATUS (*ConnectController)(EFI_HANDLE controller_handle, EFI_HANDLE *driver_image_handle,
+                                    EFI_DEVICE_PATH_PROTOCOL *remaining_device_path,
+                                    BOOLEAN recursive);
+    EFI_STATUS (*DisconnectController)(EFI_HANDLE controller_handle, EFI_HANDLE driver_image_handle,
+                                       EFI_HANDLE child_handle);
+    
+    // Protocol Open/Close Services
+    EFI_STATUS (*OpenProtocol)(EFI_HANDLE handle, EFI_GUID *protocol, void **interface,
+                               EFI_HANDLE agent_handle, EFI_HANDLE controller_handle, uint32_t attributes);
+    EFI_STATUS (*CloseProtocol)(EFI_HANDLE handle, EFI_GUID *protocol, EFI_HANDLE agent_handle,
+                                EFI_HANDLE controller_handle);
+    EFI_STATUS (*OpenProtocolInformation)(EFI_HANDLE handle, EFI_GUID *protocol,
+                                          EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **entry_buffer,
+                                          UINTN *entry_count);
+    
+    // Library Services
+    EFI_STATUS (*ProtocolsPerHandle)(EFI_HANDLE handle, EFI_GUID ***protocol_buffer,
+                                      UINTN *protocol_buffer_count);
+    EFI_STATUS (*LocateHandleBuffer)(EFI_LOCATE_SEARCH_TYPE search_type, EFI_GUID *protocol,
+                                      void *search_key, UINTN *no_handles, EFI_HANDLE **buffer);
+    EFI_STATUS (*LocateProtocol)(EFI_GUID *protocol, void *registration, void **interface);
+    EFI_STATUS (*InstallMultipleProtocolInterfaces)(EFI_HANDLE *handle, ...);
+    EFI_STATUS (*UninstallMultipleProtocolInterfaces)(EFI_HANDLE *handle, ...);
+    
+    // CRC Services
+    EFI_STATUS (*CalculateCrc32)(void *data, UINTN data_size, uint32_t *crc32);
+    
+    // Misc Services
+    void (*CopyMem)(void *destination, void *source, UINTN length);
+    void (*SetMem)(void *buffer, UINTN size, uint8_t value);
+    EFI_STATUS (*CreateEventEx)(uint32_t type, uint32_t notify_tpl,
+                                 void (*notify_function)(void *event, void *context),
+                                 void *notify_context, EFI_GUID *event_group,
+                                 EFI_EVENT *event);
 } EFI_BOOT_SERVICES;
 
 // EFI配置表

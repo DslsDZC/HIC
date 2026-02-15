@@ -1,8 +1,14 @@
 {
   "project": "HIK System",
   "version": "0.1.0",
-  "build_time": "2026-02-15T14:10:54.520473",
-  "build_duration": "0:00:05.475421",
+  "build_time": "2026-02-15T15:28:26.211196",
+  "build_duration": "0:00:00.462085",
   "build_type": "full",
-  "components": {}
+  "components": {
+    "uefi_bootloader": {
+      "path": "EFI/BOOT/bootx64.efi",
+      "size": 39540,
+      "hash": "f58fb5659efc45c1b188bc194d66c2c464b9b138e5f491614270352ad32815a5d83f6cbd753d596106b03d858a799967"
+    }
+  }
 }
