@@ -1,0 +1,46 @@
+# HIK内核GDB调试脚本
+# 使用方法: gdb -x gdb_script.txt build/bin/hik-kernel.elf
+
+# 设置架构
+set architecture i386:x86-64
+
+# 连接到QEMU
+target remote :1234
+
+# 在关键位置设置断点
+echo "\n=== 设置断点 ==="
+break *0x100000                    # 内核入口点
+break kernel_start                 # kernel_start函数
+break kernel_entry                 # kernel_entry函数
+break privileged_service_init      # 特权服务初始化
+break domain_create                # 域创建
+break capability_system_init       # 能力系统初始化
+
+# 继续执行到内核入口点
+echo "\n=== 执行到内核入口点 ==="
+continue
+
+# 显示寄存器状态
+echo "\n=== 寄存器状态 ==="
+info registers
+
+# 显示栈内容
+echo "\n=== 栈内容 ==="
+x/20gx $rsp
+
+# 显示当前指令
+echo "\n=== 当前指令 ==="
+x/10i $rip
+
+# 检查boot_info结构
+echo "\n=== 检查boot_info结构 ==="
+print/x *(hik_boot_info_t*)$rdi
+print/x ((hik_boot_info_t*)$rdi)->magic
+print/x ((hik_boot_info_t*)$rdi)->version
+print/x ((hik_boot_info_t*)$rdi)->entry_point
+print/x ((hik_boot_info_t*)$rdi)->kernel_base
+print/x ((hik_boot_info_t*)$rdi)->kernel_size
+
+# 继续执行
+echo "\n=== 继续执行 ==="
+continue

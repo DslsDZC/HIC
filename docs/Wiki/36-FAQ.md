@@ -27,7 +27,7 @@ A: HIK的独特之处在于：
 
 ### Q: HIK的许可证是什么？
 
-A: HIK使用GPL-2.0许可证。详见 [LICENSE](../LICENSE)。
+A: HIK使用GPL-2.0许可证。详见 [LICENSE](../../LICENSE)。
 
 ### Q: 如何为HIK做贡献？
 

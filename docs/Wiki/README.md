@@ -179,7 +179,7 @@
 
 ## 📄 许可证
 
-HIK文档遵循GPL-2.0许可证。详见 [LICENSE](../LICENSE)。
+HIK文档遵循GPL-2.0许可证。详见 [LICENSE](../../LICENSE)。
 
 ---
 

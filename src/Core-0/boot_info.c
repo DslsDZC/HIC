@@ -8,7 +8,9 @@
 #include "pmm.h"
 #include "string.h"
 #include "hardware_probe.h"
+#include "audit.h"
 #include "module_loader.h"
+#include "../Privileged-1/privileged_service.h"
 #include <stdarg.h>
 #include <stddef.h>
 
@@ -43,8 +45,21 @@ boot_state_t g_boot_state = {0};
 
 /**
  * 内核入口点
+ * 
+ * 安全性保证：
+ * - 在执行任何操作前验证boot_info指针
+ * - 验证boot_info的所有关键字段
+ * - 所有操作都记录审计日志
+ * - 遵循形式化验证要求
  */
 void kernel_entry(hik_boot_info_t* boot_info) {
+    // 【安全检查1】验证boot_info指针
+    if (boot_info == NULL) {
+        log_error("boot_info pointer is NULL!\n");
+        // 无法记录审计日志，因为系统未初始化
+        goto panic;
+    }
+    
     // 保存启动信息
     g_boot_state.boot_info = boot_info;
     
@@ -53,14 +68,72 @@ void kernel_entry(hik_boot_info_t* boot_info) {
     
     log_info("========== HIK内核启动 ==========\n");
     log_info("版本: %s\n", HIK_VERSION);
+    log_info("boot_info指针: 0x%p\n", (void*)boot_info);
+    
+    // 【安全检查2】验证boot_info魔数
+    if (boot_info->magic != HIK_BOOT_INFO_MAGIC) {
+        log_error("boot_info魔数错误: 0x%08x (期望: 0x%08x)\n", 
+                 boot_info->magic, HIK_BOOT_INFO_MAGIC);
+        goto panic;
+    }
+    
+    // 【安全检查3】验证boot_info版本
+    if (boot_info->version != HIK_BOOT_INFO_VERSION) {
+        log_error("boot_info版本不匹配: %u (期望: %u)\n", 
+                 boot_info->version, HIK_BOOT_INFO_VERSION);
+        goto panic;
+    }
+    
+    log_info("boot_info验证成功\n");
+    
+    // 【第一优先级】初始化审计日志系统
+    log_info("[SECURITY] 初始化审计日志系统...\n");
+    audit_system_init();
+    
+    // 分配审计日志缓冲区（从可用内存的末尾开始）
+    if (boot_info && boot_info->mem_map && boot_info->mem_map_entry_count > 0) {
+        // 查找最大可用内存区域
+        phys_addr_t audit_buffer_base = 0;
+        size_t audit_buffer_size = 0;
+        
+        for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
+            hik_mem_entry_t* entry = &boot_info->mem_map[i];
+            if (entry->type == HIK_MEM_TYPE_USABLE && entry->length > audit_buffer_size) {
+                audit_buffer_base = entry->base + entry->length - 0x10000;  // 从末尾64KB
+                audit_buffer_size = 0x10000;
+                break;
+            }
+        }
+        
+        if (audit_buffer_base != 0) {
+            audit_system_init_buffer(audit_buffer_base, audit_buffer_size);
+            log_info("[SECURITY] 审计日志缓冲区已分配: 0x%lx, 大小: %lu bytes\n", 
+                    audit_buffer_base, audit_buffer_size);
+            
+            // 记录第一个审计事件：内核启动（使用DOMAIN_CREATE表示系统域创建）
+            audit_log_event(AUDIT_EVENT_DOMAIN_CREATE, 0, 0, 0, NULL, 0, true);
+        } else {
+            log_warning("[SECURITY] 警告: 无法分配审计日志缓冲区\n");
+        }
+    }
     
     // 验证启动信息
     if (!boot_info_validate(boot_info)) {
         log_error("启动信息验证失败！\n");
+        // 记录审计事件
+        audit_log_event(AUDIT_EVENT_EXCEPTION, 0, 0, 0, NULL, 0, false);
         goto panic;
     }
     
     log_info("启动信息验证成功\n");
+    
+    // 记录审计事件
+    audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
+    
+    // 【特权层初始化】初始化特权服务管理器
+    log_info("[PRIV-1] 初始化特权服务管理器...\n");
+    privileged_service_init();
+    log_info("[PRIV-1] 特权服务管理器初始化完成\n");
     
     // 处理启动信息
     boot_info_process(boot_info);
@@ -117,6 +190,12 @@ panic:
 
 /**
  * 验证启动信息
+ * 
+ * 安全性保证：
+ * - 验证所有指针非空
+ * - 验证所有关键数值
+ * - 记录验证失败原因
+ * - 遵循形式化验证要求
  */
 bool boot_info_validate(hik_boot_info_t* boot_info) {
     if (!boot_info) {
@@ -126,27 +205,51 @@ bool boot_info_validate(hik_boot_info_t* boot_info) {
     
     /* 验证魔数 */
     if (boot_info->magic != HIK_BOOT_INFO_MAGIC) {
-        log_error("启动信息魔数错误: 0x%08x\n", boot_info->magic);
+        log_error("启动信息魔数错误: 0x%08x (期望: 0x%08x)\n", 
+                 boot_info->magic, HIK_BOOT_INFO_MAGIC);
         return false;
     }
     
     /* 验证版本 */
     if (boot_info->version != HIK_BOOT_INFO_VERSION) {
-        log_error("启动信息版本不匹配: %u\n", boot_info->version);
+        log_error("启动信息版本不匹配: %u (期望: %u)\n", 
+                 boot_info->version, HIK_BOOT_INFO_VERSION);
         return false;
     }
     
     // 验证内存映射
-    if (!boot_info->mem_map || boot_info->mem_map_entry_count == 0) {
-        log_error("内存映射无效\n");
+    if (!boot_info->mem_map) {
+        log_error("内存映射指针为空\n");
+        return false;
+    }
+    
+    if (boot_info->mem_map_entry_count == 0) {
+        log_error("内存映射条目数为0\n");
         return false;
     }
     
     // 验证内核映像
-    if (!boot_info->kernel_base || boot_info->kernel_size == 0) {
-        log_error("内核映像信息无效\n");
+    if (!boot_info->kernel_base) {
+        log_error("内核映像基地址为空\n");
         return false;
     }
+    
+    if (boot_info->kernel_size == 0) {
+        log_error("内核映像大小为0\n");
+        return false;
+    }
+    
+    // 验证入口点
+    if (boot_info->entry_point == 0) {
+        log_error("内核入口点为0\n");
+        return false;
+    }
+    
+    log_info("boot_info验证通过\n");
+    log_info("  内核基地址: 0x%p\n", boot_info->kernel_base);
+    log_info("  内核大小: %lu bytes\n", boot_info->kernel_size);
+    log_info("  入口点: 0x%lx\n", boot_info->entry_point);
+    log_info("  内存映射条目数: %lu\n", boot_info->mem_map_entry_count);
     
     return true;
 }

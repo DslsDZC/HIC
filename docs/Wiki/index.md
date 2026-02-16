@@ -94,7 +94,7 @@
 
 ## 许可证
 
-[GPL-2.0 License](../LICENSE)
+[GPL-2.0 License](../../LICENSE)
 
 ---
 

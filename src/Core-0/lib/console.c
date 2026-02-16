@@ -15,7 +15,7 @@ static u8 bg_color = 0x00;
 /* 初始化控制台 */
 void console_init(console_type_t type)
 {
-    (void)type; /* 避免未使用参数警告 */
+    (void)type; /* 未使用参数 */
     console_clear();
 }
 

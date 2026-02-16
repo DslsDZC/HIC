@@ -177,7 +177,7 @@ Privileged-1服务采用物理内存直接映射方案：
 
 ## 许可证
 
-GPL-2.0 License - 详见 [LICENSE](../LICENSE)
+GPL-2.0 License - 详见 [LICENSE](../../LICENSE)
 
 ---
 

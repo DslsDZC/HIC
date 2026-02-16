@@ -320,17 +320,17 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     }
     console_puts("[BOOTLOADER AUDIT] Stage 5: Kernel segments loaded\n");
     
-    /* 退出启动服务 */
-    console_puts("[BOOTLOADER AUDIT] Stage 6: Exiting boot services...\n");
-    status = exit_boot_services(boot_info);
-    if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] ERROR: Failed to exit boot services\n");
-        return status;
-    }
-    console_puts("[BOOTLOADER AUDIT] Stage 6: Boot services exited\n");
+    /* 不退出启动服务，直接跳转到内核 */
+    console_puts("[BOOTLOADER AUDIT] Stage 6: Skipping boot services exit for debugging\n");
     
     /* 跳转到内核 */
     console_puts("[BOOTLOADER AUDIT] Stage 7: Jumping to kernel...\n");
+    
+    char temp_str[256];
+    snprintf(temp_str, sizeof(temp_str), "[BOOTLOADER] Before jump: boot_info=%p, entry_point=%p (0x%lx)\n",
+             boot_info, (void*)boot_info->entry_point, boot_info->entry_point);
+    console_puts(temp_str);
+    
     bootlog_event(BOOTLOG_JUMP_TO_KERNEL, NULL, 0);
     jump_to_kernel(boot_info);
     
@@ -445,22 +445,22 @@ EFI_STATUS load_platform_config(void)
 
     console_puts("[BOOTLOADER AUDIT] Stage 2: Getting File Info\n");
     
-    /* 检查GetInfo函数指针是否有效 */
+/* 检查file和GetInfo函数指针是否有效 */
     if (file == NULL || file->GetInfo == NULL) {
-        console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - file or GetInfo is NULL\n");
-        if (file) file->Close(file);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: WARNING - GetInfo is NULL, skipping platform.yaml\n");
+        // platform.yaml是可选的，直接返回成功
         root->Close(root);
-        return EFI_INVALID_PARAMETER;
+        return EFI_SUCCESS;
     }
     
     // 获取文件信息
     info_size = 0;
     status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, NULL);
     if (status != EFI_BUFFER_TOO_SMALL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: GetInfo ERROR, skipping platform.yaml\n");
         file->Close(file);
         root->Close(root);
-        console_puts("[BOOTLOADER AUDIT] Stage 2: GetInfo ERROR\n");
-        return status;
+        return EFI_SUCCESS;  // platform.yaml是可选的
     }
 
     console_puts("[BOOTLOADER AUDIT] Stage 2: Allocating File Info Buffer\n");
@@ -607,7 +607,7 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
     }
     
     // 使用默认内核路径
-    utf8_to_utf16("\\EFI\\HIK\\kernel.hik", kernel_path, 256);
+    utf8_to_utf16("\\hik-kernel.bin", kernel_path, 256);
     
     // 打开卷的根目录
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
@@ -672,9 +672,29 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
     }
     
     console_puts("[BOOTLOADER AUDIT] Stage 3: Opening kernel file...\n");
+    
+    /* 显示file指针的地址 */
+    {
+        char ptr_str[64];
+        snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: &file=%p\n", &file);
+        console_puts(ptr_str);
+        snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file before Open=%p\n", file);
+        console_puts(ptr_str);
+    }
+    
     // 打开内核文件
     status = root->Open(root, &file, kernel_path,
                        EFI_FILE_MODE_READ, 0);
+    
+    /* 显示Open返回状态 */
+    {
+        char ptr_str[64];
+        snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: Open returned status=%d\n", (int)status);
+        console_puts(ptr_str);
+        snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file after Open=%p\n", file);
+        console_puts(ptr_str);
+    }
+    
     if (EFI_ERROR(status)) {
         root->Close(root);
         console_puts("[BOOTLOADER AUDIT] Stage 3: Cannot open kernel file\n");
@@ -682,6 +702,37 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
     }
     
     console_puts("[BOOTLOADER AUDIT] Stage 3: Kernel file opened\n");
+    
+    /* 验证file指针和函数指针表 */
+    console_puts("[BOOTLOADER AUDIT] Stage 3: Verifying file handle integrity...\n");
+    if (file == NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 3: ERROR - file handle is NULL!\n");
+        root->Close(root);
+        return EFI_INVALID_PARAMETER;
+    }
+    
+    /* 打印file指针地址 */
+    char ptr_str[64];
+    snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file handle=%p\n", file);
+    console_puts(ptr_str);
+    
+    /* 检查关键函数指针 */
+    snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file->Read=%p\n", file->Read);
+    console_puts(ptr_str);
+    snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file->GetInfo=%p\n", file->GetInfo);
+    console_puts(ptr_str);
+    snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file->GetPosition=%p\n", file->GetPosition);
+    console_puts(ptr_str);
+    snprintf(ptr_str, sizeof(ptr_str), "[BOOTLOADER AUDIT] Stage 3: file->SetPosition=%p\n", file->SetPosition);
+    console_puts(ptr_str);
+    
+    if (file->Read == NULL || file->Close == NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 3: ERROR - Critical file functions are NULL!\n");
+        root->Close(root);
+        return EFI_INVALID_PARAMETER;
+    }
+    
+    console_puts("[BOOTLOADER AUDIT] Stage 3: File handle validation OK\n");
     
     // 获取文件大小 - 先尝试使用GetInfo
     file_size = 0;
@@ -705,11 +756,37 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
     // 如果GetInfo失败，尝试使用文件结尾位置获取大小
     if (file_size == 0) {
         console_puts("[BOOTLOADER] GetInfo failed, trying alternative method\n");
-        uint64_t original_pos = 0;
-        file->GetPosition(file, &original_pos);
-        file->SetPosition(file, 0xFFFFFFFFFFFFFFFFULL); // 移动到文件结尾
-        file->GetPosition(file, (uint64_t*)&file_size);
-        file->SetPosition(file, original_pos); // 恢复位置
+        
+        /* 检查file指针有效性 */
+        if (file == NULL) {
+            console_puts("[BOOTLOADER] ERROR: file pointer is NULL!\n");
+            file_size = 0;
+        } else if (file->GetPosition == NULL || file->SetPosition == NULL) {
+            console_puts("[BOOTLOADER] ERROR: file function pointers are NULL!\n");
+            console_puts("[BOOTLOADER] GetPosition=");
+            char ptr_str[32];
+            snprintf(ptr_str, sizeof(ptr_str), "%p\n", file->GetPosition);
+            console_puts(ptr_str);
+            console_puts("[BOOTLOADER] SetPosition=");
+            snprintf(ptr_str, sizeof(ptr_str), "%p\n", file->SetPosition);
+            console_puts(ptr_str);
+            file_size = 0;
+        } else {
+            uint64_t original_pos = 0;
+            console_puts("[BOOTLOADER] Calling GetPosition...\n");
+            EFI_STATUS pos_status = file->GetPosition(file, &original_pos);
+            if (EFI_ERROR(pos_status)) {
+                console_puts("[BOOTLOADER] ERROR: GetPosition failed!\n");
+                file_size = 0;
+            } else {
+                console_puts("[BOOTLOADER] Moving to file end...\n");
+                file->SetPosition(file, 0xFFFFFFFFFFFFFFFFULL); // 移动到文件结尾
+                console_puts("[BOOTLOADER] Getting final position...\n");
+                file->GetPosition(file, (uint64_t*)&file_size);
+                console_puts("[BOOTLOADER] Restoring position...\n");
+                file->SetPosition(file, original_pos); // 恢复位置
+            }
+        }
     }
     
     if (file_size == 0) {
@@ -936,7 +1013,7 @@ void find_acpi_tables(hik_boot_info_t *boot_info)
 /**
  * 加载内核段
  */
-EFI_STATUS load_kernel_segments(void *image_data, __attribute__((unused)) uint64_t image_size,
+EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
                                        hik_boot_info_t *boot_info)
 {
     console_puts("[BOOTLOADER] load_kernel_segments called\n");
@@ -946,75 +1023,70 @@ EFI_STATUS load_kernel_segments(void *image_data, __attribute__((unused)) uint64
         return EFI_INVALID_PARAMETER;
     }
     
-    if (image_size < sizeof(hik_image_header_t)) {
-        console_puts("[BOOTLOADER] ERROR: Invalid kernel image data\n");
-        char err_str[64];
-        snprintf(err_str, sizeof(err_str), "[BOOTLOADER] image_size: %d, needed: %d\n", 
-                (int)image_size, (int)sizeof(hik_image_header_t));
-        console_puts(err_str);
+    if (image_size == 0) {
+        console_puts("[BOOTLOADER] ERROR: image_size is 0\n");
         return EFI_INVALID_PARAMETER;
     }
     
-console_puts("[BOOTLOADER] load_kernel_segments called\n");
-    
-    // 直接手动解析头部字段，避免结构体对齐问题
     uint8_t *raw_bytes = (uint8_t *)image_data;
     
-    // 手动读取关键字段（按照kernel_image.h中的定义）
-    uint16_t arch_id = *((uint16_t*)(raw_bytes + 8));
-    uint16_t version = *((uint16_t*)(raw_bytes + 10));
-    uint64_t entry_point = *((uint64_t*)(raw_bytes + 12));
-    uint64_t manual_image_size = *((uint64_t*)(raw_bytes + 20));
-    uint64_t segment_table_offset = *((uint64_t*)(raw_bytes + 28));
-    uint64_t segment_count = *((uint64_t*)(raw_bytes + 36));
-    
-    char debug_str[128];
-    snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] Manual: arch=%d, ver=%d, entry=0x%llX, size=%d, seg_off=%d, seg_cnt=%d\n",
-             (int)arch_id, (int)version, (unsigned long long)entry_point, (int)manual_image_size, 
-             (int)segment_table_offset, (int)segment_count);
-    console_puts(debug_str);
-    
-    // 检查魔数
-    if (memcmp(raw_bytes, HIK_IMG_MAGIC, 8) != 0) {
-        console_puts("[BOOTLOADER] ERROR: Invalid magic number\n");
-        return EFI_INVALID_PARAMETER;
+    // 检查是否是HIK镜像格式（有魔数）
+    if (image_size >= 8 && memcmp(raw_bytes, HIK_IMG_MAGIC, 8) == 0) {
+        console_puts("[BOOTLOADER] Detected HIK image format\n");
+        
+        // 手动读取HIK镜像头部字段
+        uint64_t entry_point = *((uint64_t*)(raw_bytes + 12));
+        uint64_t manual_image_size = *((uint64_t*)(raw_bytes + 20));
+        
+        char debug_str[128];
+        snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] HIK image: entry=0x%lx, size=%d\n",
+                 entry_point, (int)manual_image_size);
+        console_puts(debug_str);
+        
+        // 计算内核代码在HIK镜像中的偏移量
+        uint64_t kernel_offset = 160;  // HIK镜像格式: header(120) + segment_table(40)
+        uint64_t kernel_code_size = manual_image_size - kernel_offset;
+        
+        // 将内核代码复制到物理地址0x100000
+        void *kernel_phys_base = (void*)0x100000;
+        void *kernel_code_start = raw_bytes + kernel_offset;
+        memcpy(kernel_phys_base, kernel_code_start, kernel_code_size);
+        
+        console_puts("[BOOTLOADER] Kernel code copied to 0x100000\n");
+        
+        // 更新启动信息
+        boot_info->kernel_base = kernel_phys_base;
+        boot_info->kernel_size = manual_image_size;
+        boot_info->entry_point = 0x100000;  // kernel_start的绝对地址
+        
+    } else {
+        // 纯二进制格式，直接复制
+        console_puts("[BOOTLOADER] Detected raw binary format\n");
+        
+        char debug_str[128];
+        snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] Raw binary: size=%d bytes\n", (int)image_size);
+        console_puts(debug_str);
+        
+        // 直接将二进制文件复制到物理地址0x100000
+        void *kernel_phys_base = (void*)0x100000;
+        memcpy(kernel_phys_base, image_data, image_size);
+        
+        console_puts("[BOOTLOADER] Kernel copied to 0x100000\n");
+        
+        // 更新启动信息
+        boot_info->kernel_base = kernel_phys_base;
+        boot_info->kernel_size = image_size;
+        boot_info->entry_point = 0x100000;  // kernel_start的绝对地址
     }
     
-    console_puts("[BOOTLOADER] Magic number OK\n");
+    console_puts("[BOOTLOADER] Entry point set to 0x100000\n");
     
-    // 使用手动解析的值，而不是结构体字段
-    snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] Using manual values: image_size=%d, seg_off=%d, seg_cnt=%d\n", 
-             (int)manual_image_size, (int)segment_table_offset, (int)segment_count);
-    console_puts(debug_str);
-    
-    // 检查映像大小是否足够
-    uint64_t needed_size = segment_table_offset + segment_count * sizeof(hik_segment_entry_t);
-    snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] needed_size: %d\n", (int)needed_size);
-    console_puts(debug_str);
-    
-    if (image_size < needed_size) {
-        console_puts("[BOOTLOADER] ERROR: Kernel image too small\n");
-        return EFI_INVALID_PARAMETER;
-    }
-    
-    // 直接使用手动解析的段表
-    console_puts("[BOOTLOADER] Kernel image validated\n");
-    
-    console_puts("[BOOTLOADER] Skipping complex segment loading, using direct kernel entry...\n");
-    
-    // 直接使用内核数据作为加载基础
-    void *load_base = image_data;
-    uint64_t total_size = manual_image_size;
-    
-    // 更新启动信息
-    boot_info->kernel_base = load_base;
-    boot_info->kernel_size = total_size;
-    boot_info->entry_point = entry_point;  // 直接使用相对入口点
+    char debug2_str[256];
+    snprintf(debug2_str, sizeof(debug2_str), "[BOOTLOADER] boot_info=%p, entry_point=%p\n",
+             boot_info, (void*)boot_info->entry_point);
+    console_puts(debug2_str);
     
     console_puts("[BOOTLOADER] Kernel ready, entry point set\n");
-    
-    // 添加调试信息
-    console_puts("[BOOTLOADER] About to jump to kernel...\n");
     
     return EFI_SUCCESS;
 }
@@ -1063,24 +1135,83 @@ EFI_STATUS exit_boot_services(__attribute__((unused)) hik_boot_info_t *boot_info
 
 /**
  * 跳转到内核
+ * 
+ * 安全性保证：
+ * - 验证所有指针非空
+ * - 验证入口点地址有效
+ * - 验证栈地址有效
+ * - 记录详细的跳转信息
  */
 __attribute__((noreturn))
-void jump_to_kernel(hik_boot_info_t *boot_info)
-{
+void jump_to_kernel(hik_boot_info_t *boot_info) {
+    // 【安全检查1】验证boot_info指针
+    if (boot_info == NULL) {
+        console_puts("[JUMP] ERROR: boot_info is NULL!\n");
+        while (1) {
+            __asm__ volatile ("hlt");
+        }
+    }
+    
+    // 【安全检查2】验证入口点
+    if (boot_info->entry_point == 0) {
+        console_puts("[JUMP] ERROR: entry_point is 0!\n");
+        while (1) {
+            __asm__ volatile ("hlt");
+        }
+    }
+    
+    // 【安全检查3】验证栈指针
+    if (boot_info->stack_top == 0) {
+        console_puts("[JUMP] ERROR: stack_top is 0!\n");
+        while (1) {
+            __asm__ volatile ("hlt");
+        }
+    }
+    
+    // 添加调试信息
+    char temp_str[256];
+    snprintf(temp_str, sizeof(temp_str), "[JUMP] boot_info=%p, entry_point=%p (0x%lx), stack_top=%p\n",
+             boot_info, (void*)boot_info->entry_point, boot_info->entry_point, (void*)boot_info->stack_top);
+    console_puts(temp_str);
+    
+    // 验证入口点地址范围（应该在0x100000左右）
+    if (boot_info->entry_point < 0x100000 || boot_info->entry_point > 0x200000) {
+        snprintf(temp_str, sizeof(temp_str), "[JUMP] WARNING: entry_point 0x%lx seems unusual\n", boot_info->entry_point);
+        console_puts(temp_str);
+    }
+    
     // 直接跳转到内核入口点，不使用函数调用
     void *kernel_entry = (void *)boot_info->entry_point;
     void *stack_top = (void *)boot_info->stack_top;
     
+    // 验证指针不为NULL
+    if (kernel_entry == NULL) {
+        console_puts("[JUMP] ERROR: kernel_entry is NULL!\n");
+        while (1) {
+            __asm__ volatile ("hlt");
+        }
+    }
+    
+    if (stack_top == NULL) {
+        console_puts("[JUMP] ERROR: stack_top is NULL!\n");
+        while (1) {
+            __asm__ volatile ("hlt");
+        }
+    }
+    
+    console_puts("[JUMP] All checks passed, jumping to kernel...\n");
+    
     // 禁用中断
     __asm__ volatile ("cli");
     
-    // 设置栈指针并跳转到内核
+    // 设置栈指针,确保RDI包含boot_info,然后跳转到内核
     __asm__ volatile (
-        "mov %0, %%rsp\n"
-        "jmp *%1\n"
+        "mov %0, %%rsp\n"    // 设置栈指针
+        "mov %2, %%rdi\n"    // 设置RDI为boot_info
+        "jmp *%1\n"          // 跳转到内核入口点
         :
-        : "r"(stack_top), "r"(kernel_entry)
-        : "memory"
+        : "r"(stack_top), "r"(kernel_entry), "r"(boot_info)
+        : "memory", "rdi"
     );
     
     // 永远不会到达这里

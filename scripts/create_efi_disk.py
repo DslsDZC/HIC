@@ -1,31 +1,106 @@
 #!/usr/bin/env python3
 import os
-import struct
+import subprocess
+import sys
 
-def create_fat32_image(disk_path, bootloader_path):
+def create_fat32_image(disk_path, bootloader_path, kernel_path):
     """
-    创建FAT32磁盘镜像，包含UEFI引导文件
+    创建FAT32磁盘镜像，包含UEFI引导文件和内核
     """
-    disk_size = 64 * 1024 * 1024  # 64MB
-    sector_size = 512
-    total_sectors = disk_size // sector_size
+    disk_size = "64M"  # 64MB
     
-    # 读取引导程序
-    with open(bootloader_path, 'rb') as f:
-        bootloader_data = f.read()
+    print(f"创建FAT32磁盘镜像: {disk_path}")
+    print(f"引导程序: {bootloader_path}")
+    print(f"内核: {kernel_path}")
     
-    # 创建磁盘镜像
-    with open(disk_path, 'wb') as disk:
-        # 写入零填充的磁盘
-        disk.write(b'\x00' * disk_size)
+    # 检查文件是否存在
+    if not os.path.exists(bootloader_path):
+        print(f"错误: 引导程序不存在: {bootloader_path}")
+        return False
     
-    print(f"创建磁盘镜像: {disk_path} ({disk_size // 1024 // 1024}MB)")
-    print(f"引导程序大小: {len(bootloader_data)} bytes")
-    print(f"\n需要手动将引导程序复制到磁盘镜像的 EFI/BOOT/BOOTX64.EFI")
-    print("由于环境限制，建议使用以下方法之一：")
-    print("1. 安装 dosfstools: sudo pacman -S dosfstools")
-    print("2. 安装 mtools: sudo pacman -S mtools")
-    print("3. 使用其他工具创建FAT32镜像")
+    if not os.path.exists(kernel_path):
+        print(f"错误: 内核不存在: {kernel_path}")
+        return False
+    
+    # 创建临时目录
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # 创建EFI目录结构
+        efi_dir = os.path.join(tmpdir, "EFI", "BOOT")
+        os.makedirs(efi_dir, exist_ok=True)
+        
+        # 复制引导程序
+        boot_efi_path = os.path.join(efi_dir, "BOOTX64.EFI")
+        subprocess.run(['cp', bootloader_path, boot_efi_path], check=True)
+        
+        # 复制内核
+        kernel_copy_path = os.path.join(tmpdir, "hik-kernel.bin")
+        subprocess.run(['cp', kernel_path, kernel_copy_path], check=True)
+        
+        # 使用mkfs.vfat创建FAT32镜像
+        try:
+            # 计算需要的块数 - 使用更大的镜像以满足FAT32要求
+            bootloader_size = os.path.getsize(bootloader_path)
+            kernel_size = os.path.getsize(kernel_path)
+            total_size = bootloader_size + kernel_size + 32 * 1024 * 1024  # 额外32MB
+            block_count = (total_size // 512) + 10000  # 增加更多空间
+            
+            # 创建FAT32镜像
+            subprocess.run([
+                'dd', 'if=/dev/zero', f'of={disk_path}', 
+                f'bs=512', f'count={block_count}'
+            ], check=True, stdout=subprocess.DEVNULL)
+            
+            # 格式化为FAT32
+            subprocess.run([
+                'mkfs.vfat', '-F', '32', disk_path
+            ], check=True, stdout=subprocess.DEVNULL)
+            
+            # 挂载镜像
+            mount_point = os.path.join(tmpdir, 'mnt')
+            os.makedirs(mount_point)
+            subprocess.run([
+                'sudo', 'mount', '-o', 'loop', disk_path, mount_point
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            try:
+                # 复制文件
+                subprocess.run([
+                    'sudo', 'mkdir', '-p', 
+                    os.path.join(mount_point, 'EFI', 'BOOT')
+                ], check=True)
+                
+                subprocess.run([
+                    'sudo', 'cp', bootloader_path,
+                    os.path.join(mount_point, 'EFI', 'BOOT', 'BOOTX64.EFI')
+                ], check=True)
+                
+                subprocess.run([
+                    'sudo', 'cp', kernel_path,
+                    os.path.join(mount_point, 'hik-kernel.bin')
+                ], check=True)
+                
+            finally:
+                # 卸载
+                subprocess.run([
+                    'sudo', 'umount', mount_point
+                ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            print(f"✓ 磁盘镜像创建成功: {disk_path}")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"错误: 创建FAT32镜像失败: {e}")
+            return False
 
 if __name__ == '__main__':
-    create_fat32_image('/tmp/hik_disk.img', 'output/bootx64.efi')
+    if len(sys.argv) < 4:
+        print("用法: python3 create_efi_disk.py --bootloader <path> --kernel <path> --output <path>")
+        sys.exit(1)
+    
+    bootloader_path = sys.argv[sys.argv.index('--bootloader') + 1]
+    kernel_path = sys.argv[sys.argv.index('--kernel') + 1]
+    output_path = sys.argv[sys.argv.index('--output') + 1]
+    
+    if not create_fat32_image(output_path, bootloader_path, kernel_path):
+        sys.exit(1)
