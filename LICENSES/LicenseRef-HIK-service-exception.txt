@@ -130,5 +130,5 @@ following additional permission, which supplements the terms of GPL-2.0-only:
    at: dsls.dzc@gmail.com
 
    The official version of this exception is maintained at:
-   [https://github.com/DslsDZC/HIK/LICENSE/HIK-service-exception.txt]
+   [https://github.com/DslsDZC/HIK/LICENSE/LicenseRef-HIK-service-exception.txt]
 
