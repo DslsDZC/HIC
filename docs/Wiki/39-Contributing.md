@@ -8,17 +8,17 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-感谢您对 HIK 项目的兴趣！本文档将指导您如何为 HIK 做出贡献。
+感谢您对 HIC 项目的兴趣！本文档将指导您如何为 HIC 做出贡献。
 
 ## 开始贡献
 
 ### 1. Fork 仓库
 
 ```bash
-# Fork HIK 仓库到您的 GitHub 账户
+# Fork HIC 仓库到您的 GitHub 账户
 # 然后克隆您的 fork
-git clone https://github.com/your-username/HIK.git
-cd HIK
+git clone https://github.com/your-username/HIC.git
+cd HIC
 ```
 
 ### 2. 设置开发环境
@@ -133,9 +133,9 @@ TEST(test_ipc_communication) {
     domain_id_t d2 = create_domain();
     
     // 测试通信
-    hik_status_t status = ipc_call(d1, endpoint, ...);
+    hic_status_t status = ipc_call(d1, endpoint, ...);
     
-    ASSERT_EQUAL(status, HIK_SUCCESS);
+    ASSERT_EQUAL(status, HIC_SUCCESS);
 }
 ```
 

@@ -1,6 +1,6 @@
 version = 1
-SPDX-PackageName = "HIK"
-SPDX-PackageDownloadLocation = "https://github.com/DslsDZC/HIK"
+SPDX-PackageName = "HIC"
+SPDX-PackageDownloadLocation = "https://github.com/DslsDZC/HIC"
 
 [[annotations]]
 path = "src/Privileged-1/*"
@@ -18,7 +18,7 @@ SPDX-License-Identifier = "Apache-2.0"
 path = "src/Core-0/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
-SPDX-License-Identifier = "GPL-2.0-only WITH LicenseRef-HIK-service-exception"
+SPDX-License-Identifier = "GPL-2.0-only WITH LicenseRef-HIC-service-exception"
 
 [[annotations]]
 path = "src/bootloader/**"

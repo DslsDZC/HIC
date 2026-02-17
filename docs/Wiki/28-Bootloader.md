@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 引导加载程序负责将 HIK 内核加载到内存并跳转到内核入口点。支持 UEFI 和 BIOS 两种引导方式，确保安全启动。
+HIC 引导加载程序负责将 HIC 内核加载到内存并跳转到内核入口点。支持 UEFI 和 BIOS 两种引导方式，确保安全启动。
 
 ## Bootloader 架构
 
@@ -74,11 +74,11 @@ void detect_memory(void) {
 
 ```c
 // 加载内核镜像
-hik_status_t load_kernel_image(void) {
+hic_status_t load_kernel_image(void) {
     // 查找内核镜像
     char *kernel_path = find_kernel_image();
     if (!kernel_path) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     // 读取内核文件
@@ -87,7 +87,7 @@ hik_status_t load_kernel_image(void) {
     
     // 验证内核签名
     if (!verify_kernel_signature(kernel_data, kernel_size)) {
-        return HIK_ERROR_SIGNATURE;
+        return HIC_ERROR_SIGNATURE;
     }
     
     // 计算内核加载地址
@@ -100,7 +100,7 @@ hik_status_t load_kernel_image(void) {
     g_kernel_info.base = load_addr;
     g_kernel_info.size = kernel_size;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -110,11 +110,11 @@ hik_status_t load_kernel_image(void) {
 // 验证内核签名
 bool verify_kernel_signature(u8 *kernel_data, u64 kernel_size) {
     // 读取签名
-    hikmod_signature_t *sig = (hikmod_signature_t *)
-        (kernel_data + kernel_size - sizeof(hikmod_signature_t));
+    hicmod_signature_t *sig = (hicmod_signature_t *)
+        (kernel_data + kernel_size - sizeof(hicmod_signature_t));
     
     // 计算内核哈希
-    u64 signed_size = kernel_size - sizeof(hikmod_signature_t);
+    u64 signed_size = kernel_size - sizeof(hicmod_signature_t);
     u8 hash[48];
     sha384(kernel_data, signed_size, hash);
     
@@ -130,13 +130,13 @@ bool verify_kernel_signature(u8 *kernel_data, u64 kernel_size) {
 // 跳转到内核
 void jump_to_kernel(void) {
     // 设置内核启动参数
-    hik_boot_info_t *boot_info = prepare_boot_info();
+    hic_boot_info_t *boot_info = prepare_boot_info();
     
     // 设置页表（如果需要）
     setup_page_tables();
     
     // 跳转到内核入口
-    void (*kernel_entry)(hik_boot_info_t*) = (void(*)(hik_boot_info_t*))
+    void (*kernel_entry)(hic_boot_info_t*) = (void(*)(hic_boot_info_t*))
         g_kernel_info.base;
     
     console_puts("Jumping to kernel...\n");

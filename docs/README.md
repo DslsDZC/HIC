@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK内核实现
+# HIC内核实现
 
 ## 项目概述
 
-HIK (Hierarchical Isolation Kernel) 是一个分级隔离内核，根据三层模型文档实现。
+HIC (Hierarchical Isolation Core) 是一个分级隔离内核，根据三层模型文档实现。
 
 ## 架构说明
 
@@ -151,7 +151,7 @@ make all
 构建产物位于 `output/` 目录：
 - `bootx64.efi` - UEFI引导程序
 - `bios.bin` - BIOS引导程序
-- `hik-kernel.bin` - 二进制格式内核映像
+- `hic-kernel.bin` - 二进制格式内核映像
 
 ## 文档
 
@@ -168,7 +168,7 @@ make all
 
 - 作者: DslsDZC
 - Email: dsls.dzc@gmail.com
-- GitHub: https://github.com/DslsDZC/HIK
+- GitHub: https://github.com/DslsDZC/HIC
 
 ## 版本
 

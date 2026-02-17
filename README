@@ -1,7 +1,7 @@
-HIK Kernel
+HIC Kernel
 =========
 
-The HIK (Hierarchical Isolation Kernel) is a formally verified microkernel with a
+The HIC (Hierarchical Isolation Core) is a formally verified microkernel with a
 three-tier privilege architecture, mathematical proof of security properties,
 and runtime invariant checking.
 
@@ -9,7 +9,7 @@ Quick Start
 -----------
 
 * Report a bug: See docs/Wiki/FAQ.md
-* Get the latest version: https://github.com/DslsDZC/HIK
+* Get the latest version: https://github.com/DslsDZC/HIC
 * Build the kernel: See docs/Wiki/03-QuickStart.md
 * View architecture: docs/Wiki/02-Architecture.md
 
@@ -31,7 +31,7 @@ Who Are You?
 
 Find your role below:
 
-* New Kernel Developer - Getting started with HIK development
+* New Kernel Developer - Getting started with HIC development
 * Academic Researcher - Studying formal verification and security proofs
 * Security Expert - Analyzing capability system and isolation guarantees
 * System Administrator - Configuring and troubleshooting
@@ -45,7 +45,7 @@ For Specific Users
 New Kernel Developer
 --------------------
 
-Welcome! Start your HIK development journey here:
+Welcome! Start your HIC development journey here:
 
 * Getting Started: docs/Wiki/03-QuickStart.md
 * Build System: docs/Wiki/04-BuildSystem.md
@@ -57,7 +57,7 @@ Welcome! Start your HIK development journey here:
 Academic Researcher
 -------------------
 
-Explore HIK's formal verification and security proofs:
+Explore HIC's formal verification and security proofs:
 
 * Three-Layer Architecture: docs/Wiki/02-Architecture.md
 * Mathematical Proofs: src/Core-0/math_proofs.tex
@@ -82,7 +82,7 @@ Security documentation and verification guides:
 System Administrator
 --------------------
 
-Configure, tune, and troubleshoot HIK systems:
+Configure, tune, and troubleshoot HIC systems:
 
 * Quick Start: docs/Wiki/03-QuickStart.md
 * Build System: docs/Wiki/04-BuildSystem.md
@@ -139,5 +139,5 @@ Communication and Support
 * Documentation: docs/Wiki/index.md
 * FAQ: docs/Wiki/FAQ.md
 * Build Scripts: scripts/build_system.py, scripts/build_system.sh
-* Repository: https://github.com/DslsDZC/HIK
+* Repository: https://github.com/DslsDZC/HIC
 * License: LICENSE (GPL-2.0)

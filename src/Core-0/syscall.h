@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK系统调用接口
+ * HIC系统调用接口
  * 遵循文档第3.2节：统一API访问模型与安全通信
  */
 
-#ifndef HIK_KERNEL_SYSCALL_H
-#define HIK_KERNEL_SYSCALL_H
+#ifndef HIC_KERNEL_SYSCALL_H
+#define HIC_KERNEL_SYSCALL_H
 
 #include "types.h"
 #include "capability.h"
@@ -40,12 +40,12 @@ typedef struct ipc_call_params {
 } ipc_call_params_t;
 
 /* 系统调用接口 */
-hik_status_t syscall_ipc_call(ipc_call_params_t *params);
-hik_status_t syscall_cap_transfer(domain_id_t to, cap_id_t cap);
-hik_status_t syscall_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out);
-hik_status_t syscall_cap_revoke(cap_id_t cap);
+hic_status_t syscall_ipc_call(ipc_call_params_t *params);
+hic_status_t syscall_cap_transfer(domain_id_t to, cap_id_t cap);
+hic_status_t syscall_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out);
+hic_status_t syscall_cap_revoke(cap_id_t cap);
 
 /* 系统调用入口（汇编调用） */
 void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4);
 
-#endif /* HIK_KERNEL_SYSCALL_H */
+#endif /* HIC_KERNEL_SYSCALL_H */

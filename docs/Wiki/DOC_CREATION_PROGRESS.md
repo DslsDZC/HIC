@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK Wiki 文档创建进度报告
+# HIC Wiki 文档创建进度报告
 
 ## 已完成的文档（8个）
 
@@ -144,7 +144,7 @@ docs/Wiki/
 
 ## 文档质量标准
 
-所有 HIK Wiki 文档应遵循以下标准：
+所有 HIC Wiki 文档应遵循以下标准：
 
 1. **结构清晰**: 使用清晰的标题和子标题
 2. **代码示例**: 包含实际可运行的代码示例

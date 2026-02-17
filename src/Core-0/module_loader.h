@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核静态模块加载器
- * 支持静态链接.hikmod格式的驱动模块
+ * HIC内核静态模块加载器
+ * 支持静态链接.hicmod格式的驱动模块
  */
 
-#ifndef HIK_MODULE_LOADER_H
-#define HIK_MODULE_LOADER_H
+#ifndef HIC_MODULE_LOADER_H
+#define HIC_MODULE_LOADER_H
 
 #include <stdint.h>
 #include "types.h"
@@ -18,11 +18,11 @@
 #include "hardware_probe.h"
 
 /* 模块格式定义 */
-#define HIKMOD_MAGIC 0x48494B4D  // "HIKM"
-#define HIKMOD_VERSION 1
+#define HICMOD_MAGIC 0x48494B4D  // "HICM"
+#define HICMOD_VERSION 1
 
 /* 模块头 */
-typedef struct hikmod_header {
+typedef struct hicmod_header {
     u32 magic;                  // 魔数
     u32 version;                // 格式版本
     u8 uuid[16];                // 模块UUID
@@ -32,17 +32,17 @@ typedef struct hikmod_header {
     u32 data_size;              // 数据段大小
     u32 signature_offset;       // 签名偏移
     u32 header_size;            // 头部大小
-} hikmod_header_t;
+} hicmod_header_t;
 
 /* 模块元数据 */
-typedef struct hikmod_metadata {
+typedef struct hicmod_metadata {
     char name[64];              // 模块名称
     char description[256];      // 描述
     char author[64];            // 作者
     u32 endpoint_count;         // 导出端点数量
     u32 resource_count;         // 资源需求数量
     u32 dependency_count;       // 依赖数量
-} hikmod_metadata_t;
+} hicmod_metadata_t;
 
 /* 端点描述符 */
 typedef struct endpoint_descriptor {
@@ -67,7 +67,7 @@ typedef struct dependency {
 } dependency_t;
 
 /* 模块实例 */
-typedef struct hikmod_instance {
+typedef struct hicmod_instance {
     u64 instance_id;            // 实例ID
     domain_id_t domain;         // 所属域
     u8 uuid[16];                // 模块UUID
@@ -78,11 +78,11 @@ typedef struct hikmod_instance {
     cap_id_t* capabilities;     // 能力列表
     u32 cap_count;              // 能力数量
     u8 state;                   // 状态
-} hikmod_instance_t;
+} hicmod_instance_t;
 
 /* 模块加载器状态 */
 typedef struct module_loader {
-    hikmod_instance_t instances[256];  // 实例表
+    hicmod_instance_t instances[256];  // 实例表
     u32 instance_count;                // 实例数量
     u64 next_instance_id;              // 下一个实例ID
 } module_loader_t;
@@ -174,7 +174,7 @@ int module_auto_load_drivers(device_list_t* devices);
  * 
  * 返回值：验证通过返回true
  */
-bool module_verify_signature(const hikmod_header_t* header, 
+bool module_verify_signature(const hicmod_header_t* header, 
                             const void* signature, 
                             u32 signature_size);
 
@@ -186,7 +186,7 @@ bool module_verify_signature(const hikmod_header_t* header,
  * 
  * 返回值：依赖解析成功返回true
  */
-bool module_resolve_dependencies(hikmod_instance_t* instance);
+bool module_resolve_dependencies(hicmod_instance_t* instance);
 
 /**
  * 分配模块资源
@@ -198,7 +198,7 @@ bool module_resolve_dependencies(hikmod_instance_t* instance);
  * 
  * 返回值：分配成功返回true
  */
-bool module_allocate_resources(hikmod_instance_t* instance,
+bool module_allocate_resources(hicmod_instance_t* instance,
                               const resource_requirement_t* resources,
                               u32 count);
 
@@ -212,7 +212,7 @@ bool module_allocate_resources(hikmod_instance_t* instance,
  * 
  * 返回值：注册成功返回true
  */
-bool module_register_endpoints(hikmod_instance_t* instance,
+bool module_register_endpoints(hicmod_instance_t* instance,
                               const endpoint_descriptor_t* endpoints,
                               u32 count);
 
@@ -224,7 +224,7 @@ bool module_register_endpoints(hikmod_instance_t* instance,
  * 
  * 返回值：实例指针，不存在返回NULL
  */
-hikmod_instance_t* module_get_instance(u64 instance_id);
+hicmod_instance_t* module_get_instance(u64 instance_id);
 
 /**
  * 查找模块实例（通过UUID）
@@ -234,7 +234,7 @@ hikmod_instance_t* module_get_instance(u64 instance_id);
  * 
  * 返回值：实例指针，不存在返回NULL
  */
-hikmod_instance_t* module_find_instance_by_uuid(const u8 uuid[16]);
+hicmod_instance_t* module_find_instance_by_uuid(const u8 uuid[16]);
 
 /**
  * 枚举所有模块实例
@@ -243,7 +243,7 @@ hikmod_instance_t* module_find_instance_by_uuid(const u8 uuid[16]);
  *   callback - 回调函数
  *   context - 上下文
  */
-void module_enumerate_instances(void (*callback)(hikmod_instance_t*, void*),
+void module_enumerate_instances(void (*callback)(hicmod_instance_t*, void*),
                                 void* context);
 
 #endif /* MODULE_LOADER_H */

@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核运行时配置系统实现
+ * HIC内核运行时配置系统实现
  * 支持通过引导层传递配置参数，实现无需重新编译即可调整内核行为
  */
 
@@ -447,10 +447,10 @@ config_item_t* runtime_config_get_item(const char* name)
 }
 
 /* 设置配置项值 */
-hik_status_t runtime_config_set_item(const char* name, const void* value, config_type_t type)
+hic_status_t runtime_config_set_item(const char* name, const void* value, config_type_t type)
 {
     if (!name || !value) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 检查是否为只读配置 */
@@ -459,7 +459,7 @@ hik_status_t runtime_config_set_item(const char* name, const void* value, config
         console_puts("[CONFIG] ERROR: Configuration item '");
         console_puts(name);
         console_puts("' is read-only\n");
-        return HIK_ERROR_PERMISSION_DENIED;
+        return HIC_ERROR_PERMISSION_DENIED;
     }
     
     /* 设置内置配置项 */
@@ -475,7 +475,7 @@ hik_status_t runtime_config_set_item(const char* name, const void* value, config
                 }
             }
             
-            return HIK_SUCCESS;
+            return HIC_SUCCESS;
         }
     } else if (strcmp(name, "enable_debug") == 0) {
         if (type == CONFIG_TYPE_BOOL) {
@@ -489,11 +489,11 @@ hik_status_t runtime_config_set_item(const char* name, const void* value, config
                 }
             }
             
-            return HIK_SUCCESS;
+            return HIC_SUCCESS;
         }
     }
     
-    return HIK_ERROR_NOT_FOUND;
+    return HIC_ERROR_NOT_FOUND;
 }
 
 /* 重置配置项为默认值 */

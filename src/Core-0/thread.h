@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK线程管理头文件
+ * HIC线程管理头文件
  * 遵循三层模型文档第2.1节：执行控制与调度
  */
 
-#ifndef HIK_KERNEL_THREAD_H
-#define HIK_KERNEL_THREAD_H
+#ifndef HIC_KERNEL_THREAD_H
+#define HIC_KERNEL_THREAD_H
 
 #include "types.h"
 #include "domain.h"
@@ -72,18 +72,18 @@ struct thread {
 void thread_system_init(void);
 
 /* 创建线程 */
-hik_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
+hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
                           priority_t priority, thread_id_t *out);
 
 /* 终止线程 */
-hik_status_t thread_terminate(thread_id_t thread_id);
+hic_status_t thread_terminate(thread_id_t thread_id);
 
 /* 让出CPU */
 void thread_yield(void);
 
 /* 阻塞/唤醒 */
-hik_status_t thread_block(thread_id_t thread_id);
-hik_status_t thread_wakeup(thread_id_t thread_id);
+hic_status_t thread_block(thread_id_t thread_id);
+hic_status_t thread_wakeup(thread_id_t thread_id);
 
 /* 全局线程表 */
 extern thread_t g_threads[MAX_THREADS];
@@ -117,4 +117,4 @@ u64 get_thread_wait_time(thread_id_t thread);
  */
 cap_id_t get_thread_wait_resource(thread_id_t thread);
 
-#endif /* HIK_KERNEL_THREAD_H */
+#endif /* HIC_KERNEL_THREAD_H */

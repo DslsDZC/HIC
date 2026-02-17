@@ -5,12 +5,12 @@
  */
 
 /**
- * HIK Privileged-1服务管理头文件
+ * HIC Privileged-1服务管理头文件
  * 遵循三层模型文档第2.2节：Privileged-1层特权服务沙箱
  */
 
-#ifndef HIK_KERNEL_PRIVILEGED_SERVICE_H
-#define HIK_KERNEL_PRIVILEGED_SERVICE_H
+#ifndef HIC_KERNEL_PRIVILEGED_SERVICE_H
+#define HIC_KERNEL_PRIVILEGED_SERVICE_H
 
 #include "../Core-0/types.h"
 #include "../Core-0/domain.h"
@@ -58,7 +58,7 @@ typedef struct privileged_service {
     
     /* 模块信息 */
     u64             instance_id;     /* 模块实例ID */
-    hikmod_instance_t *module;   /* 模块实例指针 */
+    hicmod_instance_t *module;   /* 模块实例指针 */
     
     /* 物理内存映射（直接映射） */
     phys_addr_t     code_base;       /* 代码段物理地址 */
@@ -127,37 +127,37 @@ typedef struct service_manager {
 void privileged_service_init(void);
 
 /* 从模块加载服务 */
-hik_status_t privileged_service_load(u64 module_instance_id, 
+hic_status_t privileged_service_load(u64 module_instance_id, 
                                       const char *service_name,
                                       service_type_t type,
                                       const domain_quota_t *quota,
                                       domain_id_t *out_domain_id);
 
 /* 启动服务 */
-hik_status_t privileged_service_start(domain_id_t domain_id);
+hic_status_t privileged_service_start(domain_id_t domain_id);
 
 /* 停止服务 */
-hik_status_t privileged_service_stop(domain_id_t domain_id);
+hic_status_t privileged_service_stop(domain_id_t domain_id);
 
 /* 重启服务 */
-hik_status_t privileged_service_restart(domain_id_t domain_id);
+hic_status_t privileged_service_restart(domain_id_t domain_id);
 
 /* 卸载服务 */
-hik_status_t privileged_service_unload(domain_id_t domain_id);
+hic_status_t privileged_service_unload(domain_id_t domain_id);
 
 /* ============================================================
  * 端点管理接口
  * ============================================================ */
 
 /* 注册服务端点 */
-hik_status_t privileged_service_register_endpoint(domain_id_t domain_id,
+hic_status_t privileged_service_register_endpoint(domain_id_t domain_id,
                                                   const char *name,
                                                   virt_addr_t handler_addr,
                                                   u32 syscall_num,
                                                   cap_id_t *out_cap_id);
 
 /* 注销服务端点 */
-hik_status_t privileged_service_unregister_endpoint(domain_id_t domain_id,
+hic_status_t privileged_service_unregister_endpoint(domain_id_t domain_id,
                                                     cap_id_t endpoint_cap);
 
 /* 查找端点 */
@@ -171,12 +171,12 @@ service_endpoint_t* privileged_service_find_endpoint_by_syscall(u32 syscall_num)
  * ============================================================ */
 
 /* 注册中断处理函数 */
-hik_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
+hic_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
                                                      u32 irq_vector,
                                                      virt_addr_t handler_addr);
 
 /* 注销中断处理函数 */
-hik_status_t privileged_service_unregister_irq_handler(domain_id_t domain_id,
+hic_status_t privileged_service_unregister_irq_handler(domain_id_t domain_id,
                                                        u32 irq_vector);
 
 /* 分发中断到服务 */
@@ -187,13 +187,13 @@ void privileged_service_dispatch_irq(u32 irq_vector);
  * ============================================================ */
 
 /* 分配MMIO区域 */
-hik_status_t privileged_service_map_mmio(domain_id_t domain_id,
+hic_status_t privileged_service_map_mmio(domain_id_t domain_id,
                                          phys_addr_t mmio_phys,
                                          size_t size,
                                          virt_addr_t *out_virt_addr);
 
 /* 释放MMIO区域 */
-hik_status_t privileged_service_unmap_mmio(domain_id_t domain_id,
+hic_status_t privileged_service_unmap_mmio(domain_id_t domain_id,
                                            virt_addr_t virt_addr);
 
 /* ============================================================
@@ -218,11 +218,11 @@ void privileged_service_foreach(service_callback_t callback, void *arg);
  * ============================================================ */
 
 /* 检查内存配额 */
-hik_status_t privileged_service_check_memory_quota(domain_id_t domain_id,
+hic_status_t privileged_service_check_memory_quota(domain_id_t domain_id,
                                                    size_t size);
 
 /* 检查CPU配额 */
-hik_status_t privileged_service_check_cpu_quota(domain_id_t domain_id);
+hic_status_t privileged_service_check_cpu_quota(domain_id_t domain_id);
 
 /* 更新服务统计 */
 void privileged_service_update_stats(domain_id_t domain_id,
@@ -234,7 +234,7 @@ void privileged_service_update_stats(domain_id_t domain_id,
  * ============================================================ */
 
 /* 添加依赖 */
-hik_status_t privileged_service_add_dependency(domain_id_t domain_id,
+hic_status_t privileged_service_add_dependency(domain_id_t domain_id,
                                                domain_id_t dep_domain_id);
 
 /* 检查依赖是否满足 */
@@ -245,4 +245,4 @@ u32 privileged_service_get_dependencies(domain_id_t domain_id,
                                         domain_id_t *deps,
                                         u32 max_deps);
 
-#endif /* HIK_KERNEL_PRIVILEGED_SERVICE_H */
+#endif /* HIC_KERNEL_PRIVILEGED_SERVICE_H */

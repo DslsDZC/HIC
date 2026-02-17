@@ -4,16 +4,16 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK 项目 Wiki
+# HIC 项目 Wiki
 
-欢迎使用 HIK (Hierarchical Isolation Kernel) 项目文档中心。
+欢迎使用 HIC (Hierarchical Isolation Core) 项目文档中心。
 
 ## 快速导航
 
 ### 📚 核心文档
-- [项目概述](./01-Overview.md) - HIK是什么，设计哲学和目标
+- [项目概述](./01-Overview.md) - HIC是什么，设计哲学和目标
 - [架构设计](./02-Architecture.md) - 三层模型架构详解
-- [快速开始](./03-QuickStart.md) - 如何快速构建和运行HIK
+- [快速开始](./03-QuickStart.md) - 如何快速构建和运行HIC
 
 ### 🔧 开发指南
 - [构建系统](./04-BuildSystem.md) - 详细的构建说明和配置
@@ -40,7 +40,7 @@ SPDX-License-Identifier: CC-BY-4.0
 - [快速路径](./19-FastPath.md) - 快速路径优化
 
 ### 🔄 模块化系统
-- [模块格式](./20-ModuleFormat.md) - .hikmod模块格式
+- [模块格式](./20-ModuleFormat.md) - .hicmod模块格式
 - [模块管理器](./21-ModuleManager.md) - 模块生命周期管理
 - [滚动更新](./22-RollingUpdate.md) - 滚动更新机制
 - [API版本管理](./23-APIVersioning.md) - API版本管理
@@ -94,9 +94,9 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 相关链接
 
-- [GitHub仓库](https://github.com/DslsDZC/HIK)
-- [Issue追踪](https://github.com/DslsDZC/HIK/issues)
-- [讨论区](https://github.com/DslsDZC/HIK/discussions)
+- [GitHub仓库](https://github.com/DslsDZC/HIC)
+- [Issue追踪](https://github.com/DslsDZC/HIC/issues)
+- [讨论区](https://github.com/DslsDZC/HIC/discussions)
 
 ## 许可证
 

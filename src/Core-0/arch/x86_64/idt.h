@@ -1,15 +1,15 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
  * x86-64中断描述符表(IDT)
  */
 
-#ifndef HIK_ARCH_X86_64_IDT_H
-#define HIK_ARCH_X86_64_IDT_H
+#ifndef HIC_ARCH_X86_64_IDT_H
+#define HIC_ARCH_X86_64_IDT_H
 
 #include <stdint.h>
 
@@ -80,4 +80,4 @@ extern void idt_load(idt_ptr_t *idt_ptr);
 extern void isr_common_stub(void);
 extern void irq_common_stub(void);
 
-#endif /* HIK_ARCH_X86_64_IDT_H */
+#endif /* HIC_ARCH_X86_64_IDT_H */

@@ -5,7 +5,7 @@ echo "启动QEMU（等待GDB连接）..."
 qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.4m.fd \
   -drive if=pflash,format=raw,file=/tmp/OVMF_VARS.4m.fd \
-  -drive format=raw,file=output/hik-uefi-disk.img \
+  -drive format=raw,file=output/hic-uefi-disk.img \
   -m 512M \
   -nographic \
   -s -S \
@@ -19,7 +19,7 @@ echo "等待5秒让QEMU启动..."
 sleep 5
 
 echo "启动GDB调试..."
-gdb -batch -x scripts/debug.gdb build/bin/hik-kernel.elf 2>&1 | tee /tmp/gdb_debug.log
+gdb -batch -x scripts/debug.gdb build/bin/hic-kernel.elf 2>&1 | tee /tmp/gdb_debug.log
 
 echo ""
 echo "清理QEMU进程..."

@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK内核代码组织结构
+# HIC内核代码组织结构
 
 ## 概述
 
-HIK内核代码被清晰地分为两个独立的部分：
+HIC内核代码被清晰地分为两个独立的部分：
 1. **架构相关代码** - 特定于CPU架构的实现
 2. **架构无关代码** - 跨架构通用的核心逻辑
 
@@ -259,7 +259,7 @@ aarch64-elf-ld -T arch/arm64/linker.ld -o kernel.elf \
 
 ## 总结
 
-通过这种清晰的分层结构，HIK内核实现了：
+通过这种清晰的分层结构，HIC内核实现了：
 - **可移植性**: 核心代码可在不同架构间共享
 - **可维护性**: 架构特定代码集中管理
 - **可扩展性**: 容易添加新架构支持

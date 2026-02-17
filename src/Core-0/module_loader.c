@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK模块加载器实现（完整版）
+ * HIC模块加载器实现（完整版）
  * 遵循文档第6节：模块系统架构
  */
 
@@ -57,7 +57,7 @@ void module_loader_init(void) {
  */
 int module_load_from_file(const char* path, u64* instance_id) {
     /* 完整实现：从文件系统读取模块 */
-    hik_boot_info_t* boot_info = g_boot_state.boot_info;
+    hic_boot_info_t* boot_info = g_boot_state.boot_info;
     
     if (!boot_info || boot_info->module_count == 0) {
         log_error("没有可用的模块\n");
@@ -81,16 +81,16 @@ int module_load_from_file(const char* path, u64* instance_id) {
  * 从内存加载模块
  */
 int module_load_from_memory(const void* base, u64 size, u64* instance_id) {
-    const hikmod_header_t* header = (const hikmod_header_t*)base;
+    const hicmod_header_t* header = (const hicmod_header_t*)base;
     
     /* 验证魔数 */
-    if (header->magic != HIKMOD_MAGIC) {
+    if (header->magic != HICMOD_MAGIC) {
         log_error("无效的模块魔数\n");
         return -1;
     }
     
     /* 验证版本 */
-    if (header->version != HIKMOD_VERSION) {
+    if (header->version != HICMOD_VERSION) {
         log_error("不支持的模块版本\n");
         return -1;
     }
@@ -110,13 +110,13 @@ int module_load_from_memory(const void* base, u64 size, u64* instance_id) {
         return -1;
     }
     
-    hikmod_instance_t* instance = &g_loader.instances[g_loader.instance_count];
-    memzero(instance, sizeof(hikmod_instance_t));
+    hicmod_instance_t* instance = &g_loader.instances[g_loader.instance_count];
+    memzero(instance, sizeof(hicmod_instance_t));
     
 instance->instance_id = g_loader.next_instance_id++;
     instance->code_base = (u64)base;
     instance->data_base = instance->code_base + header->code_size;
-    instance->entry_point = instance->code_base + sizeof(hikmod_header_t);
+    instance->entry_point = instance->code_base + sizeof(hicmod_header_t);
     instance->state = MODULE_STATE_LOADED;
     
     /* 复制UUID */
@@ -134,7 +134,7 @@ instance->instance_id = g_loader.next_instance_id++;
 /**
  * 验证模块签名（完整实现）
  */
-bool module_verify_signature(const hikmod_header_t* header,
+bool module_verify_signature(const hicmod_header_t* header,
                             const void* signature,
                             u32 signature_size) {
     /* 完整实现：PKCS#1 v2.1 RSASSA-PSS签名验证 */
@@ -155,7 +155,7 @@ bool module_verify_signature(const hikmod_header_t* header,
 /**
  * 解析模块依赖（完整实现框架）
  */
-bool module_resolve_dependencies(hikmod_instance_t* instance) {
+bool module_resolve_dependencies(hicmod_instance_t* instance) {
     /* 完整实现：解析并验证模块依赖关系 */
     (void)instance;
 
@@ -172,7 +172,7 @@ bool module_resolve_dependencies(hikmod_instance_t* instance) {
 /**
  * 分配资源（完整实现框架）
  */
-bool module_allocate_resources(hikmod_instance_t* instance,
+bool module_allocate_resources(hicmod_instance_t* instance,
                               const resource_requirement_t* resources,
                               u32 count) {
     /* 完整实现：为模块分配内存和其他资源 */
@@ -193,7 +193,7 @@ bool module_allocate_resources(hikmod_instance_t* instance,
 /**
  * 注册模块端点（完整实现框架）
  */
-bool module_register_endpoints(hikmod_instance_t* instance,
+bool module_register_endpoints(hicmod_instance_t* instance,
                               const endpoint_descriptor_t* endpoints,
                               u32 count) {
     /* 完整实现：注册模块的服务端点 */
@@ -240,7 +240,7 @@ int module_auto_load_drivers(device_list_t* devices) {
  * 
  * 返回值：实例指针，不存在返回NULL
  */
-hikmod_instance_t* module_get_instance(u64 instance_id)
+hicmod_instance_t* module_get_instance(u64 instance_id)
 {
     if (instance_id == 0 || instance_id >= 256) {
         return NULL;

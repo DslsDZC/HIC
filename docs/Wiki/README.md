@@ -4,24 +4,24 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK Wiki - 完整文档中心
+# HIC Wiki - 完整文档中心
 
-欢迎来到HIK项目的完整文档中心！
+欢迎来到HIC项目的完整文档中心！
 
 ## 🚀 快速开始
 
-如果你是第一次接触HIK，建议按以下顺序阅读：
+如果你是第一次接触HIC，建议按以下顺序阅读：
 
-1. **[项目概述](./01-Overview.md)** - 了解HIK是什么，设计哲学和目标
-2. **[快速开始](./03-QuickStart.md)** - 如何快速构建和运行HIK
+1. **[项目概述](./01-Overview.md)** - 了解HIC是什么，设计哲学和目标
+2. **[快速开始](./03-QuickStart.md)** - 如何快速构建和运行HIC
 3. **[架构设计](./02-Architecture.md)** - 深入理解三层模型架构
 
 ## 📚 文档分类
 
 ### 核心文档
-- [项目概述](./01-Overview.md) - HIK是什么，设计哲学和目标
+- [项目概述](./01-Overview.md) - HIC是什么，设计哲学和目标
 - [架构设计](./02-Architecture.md) - 三层模型架构详解
-- [快速开始](./03-QuickStart.md) - 如何快速构建和运行HIK
+- [快速开始](./03-QuickStart.md) - 如何快速构建和运行HIC
 
 ### 开发指南
 - [构建系统](./04-BuildSystem.md) - 详细的构建说明和配置
@@ -48,7 +48,7 @@ SPDX-License-Identifier: CC-BY-4.0
 - [快速路径](./19-FastPath.md) - 快速路径优化
 
 ### 模块化系统
-- [模块格式](./20-ModuleFormat.md) - .hikmod模块格式
+- [模块格式](./20-ModuleFormat.md) - .hicmod模块格式
 - [模块管理器](./21-ModuleManager.md) - 模块生命周期管理
 - [滚动更新](./22-RollingUpdate.md) - 滚动更新机制
 - [API版本管理](./23-APIVersioning.md) - API版本管理
@@ -132,7 +132,7 @@ SPDX-License-Identifier: CC-BY-4.0
 ### 按问题搜索
 
 **我想...**
-- ...了解HIK：[项目概述](./01-Overview.md)
+- ...了解HIC：[项目概述](./01-Overview.md)
 - ...快速开始：[快速开始](./03-QuickStart.md)
 - ...构建项目：[构建系统](./04-BuildSystem.md)
 - ...开发功能：[开发环境](./05-DevelopmentEnvironment.md)
@@ -160,9 +160,9 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 🔗 相关链接
 
-- **项目主页**: [GitHub仓库](https://github.com/DslsDZC/HIK)
-- **问题追踪**: [Issues](https://github.com/DslsDZC/HIK/issues)
-- **讨论区**: [Discussions](https://github.com/DslsDZC/HIK/discussions)
+- **项目主页**: [GitHub仓库](https://github.com/DslsDZC/HIC)
+- **问题追踪**: [Issues](https://github.com/DslsDZC/HIC/issues)
+- **讨论区**: [Discussions](https://github.com/DslsDZC/HIC/discussions)
 - **技术文档**: [TD目录](../TD/)
 - **项目文档**: [README](../README.md)
 
@@ -180,12 +180,12 @@ SPDX-License-Identifier: CC-BY-4.0
 ## 📧 联系方式
 
 - **Email**: dsls.dzc@gmail.com
-- **GitHub**: https://github.com/DslsDZC/HIK
-- **Discussions**: https://github.com/DslsDZC/HIK/discussions
+- **GitHub**: https://github.com/DslsDZC/HIC
+- **Discussions**: https://github.com/DslsDZC/HIC/discussions
 
 ## 📄 许可证
 
-HIK文档遵循GPL-2.0许可证。详见 [LICENSE](../../LICENSE)。
+HIC文档遵循GPL-2.0许可证。详见 [LICENSE](../../LICENSE)。
 
 ---
 

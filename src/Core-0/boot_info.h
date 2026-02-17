@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /*
- * HIK内核启动信息处理
+ * HIC内核启动信息处理
  * 接收并处理Bootloader传递的启动信息
  */
 
-#ifndef HIK_KERNEL_BOOT_INFO_H
-#define HIK_KERNEL_BOOT_INFO_H
+#ifndef HIC_KERNEL_BOOT_INFO_H
+#define HIC_KERNEL_BOOT_INFO_H
 
 #include <stdint.h>
 #include "types.h"
@@ -61,18 +61,18 @@ typedef struct {
 } acpi_xsdt_t;
 
 /* 引导信息魔数 */
-#define HIK_BOOT_INFO_MAGIC  0x48494B21  // "HIK!"
-#define HIK_BOOT_INFO_VERSION 1
+#define HIC_BOOT_INFO_MAGIC  0x48494B21  // "HIC!"
+#define HIC_BOOT_INFO_VERSION 1
 
 /* 内存映射条目类型 */
-#define HIK_MEM_TYPE_USABLE      1
-#define HIK_MEM_TYPE_RESERVED    2
-#define HIK_MEM_TYPE_ACPI        3
-#define HIK_MEM_TYPE_NVS         4
-#define HIK_MEM_TYPE_UNUSABLE    5
-#define HIK_MEM_TYPE_BOOTLOADER  6
-#define HIK_MEM_TYPE_KERNEL      7
-#define HIK_MEM_TYPE_MODULE      8
+#define HIC_MEM_TYPE_USABLE      1
+#define HIC_MEM_TYPE_RESERVED    2
+#define HIC_MEM_TYPE_ACPI        3
+#define HIC_MEM_TYPE_NVS         4
+#define HIC_MEM_TYPE_UNUSABLE    5
+#define HIC_MEM_TYPE_BOOTLOADER  6
+#define HIC_MEM_TYPE_KERNEL      7
+#define HIC_MEM_TYPE_MODULE      8
 
 /* 内存映射条目 */
 typedef struct {
@@ -80,7 +80,7 @@ typedef struct {
     u64 length;
     u32 type;
     u32 flags;
-} hik_mem_entry_t;
+} hic_mem_entry_t;
 
 /* 视频信息 */
 typedef struct {
@@ -96,14 +96,14 @@ typedef struct {
 struct hardware_probe_result;
 typedef struct hardware_probe_result hardware_probe_result_t;
 
-/* HIK引导信息结构 */
+/* HIC引导信息结构 */
 typedef struct {
-    u32 magic;                    // 魔数 "HIK!"
+    u32 magic;                    // 魔数 "HIC!"
     u32 version;                  // 结构版本
     u64 flags;                    // 特性标志位
     
     // 内存信息
-    hik_mem_entry_t* mem_map;
+    hic_mem_entry_t* mem_map;
     u64 mem_map_size;
     u64 mem_map_desc_size;
     u64 mem_map_entry_count;
@@ -165,18 +165,18 @@ typedef struct {
     /* 调试信息 */
     debug_info_t debug;
     
-} hik_boot_info_t;
+} hic_boot_info_t;
 
 /* 标志位定义 */
-#define HIK_BOOT_FLAG_SECURE_BOOT   (1ULL << 0)
-#define HIK_BOOT_FLAG_ACPI_ENABLED  (1ULL << 1)
-#define HIK_BOOT_FLAG_VIDEO_ENABLED (1ULL << 2)
-#define HIK_BOOT_FLAG_DEBUG_ENABLED (1ULL << 3)
-#define HIK_BOOT_FLAG_RECOVERY_MODE (1ULL << 4)
+#define HIC_BOOT_FLAG_SECURE_BOOT   (1ULL << 0)
+#define HIC_BOOT_FLAG_ACPI_ENABLED  (1ULL << 1)
+#define HIC_BOOT_FLAG_VIDEO_ENABLED (1ULL << 2)
+#define HIC_BOOT_FLAG_DEBUG_ENABLED (1ULL << 3)
+#define HIC_BOOT_FLAG_RECOVERY_MODE (1ULL << 4)
 
 /* 启动信息处理状态 */
 typedef struct boot_state {
-    hik_boot_info_t* boot_info;    // Bootloader传递的信息
+    hic_boot_info_t* boot_info;    // Bootloader传递的信息
     hardware_probe_result_t hw;    // 静态硬件探测结果
     u8 valid;                      // 信息是否有效
     
@@ -200,7 +200,7 @@ extern boot_state_t g_boot_state;
  * 参数：
  *   boot_info - Bootloader传递的启动信息结构
  */
-void kernel_entry(hik_boot_info_t* boot_info);
+void kernel_entry(hic_boot_info_t* boot_info);
 
 /**
  * 验证启动信息
@@ -210,7 +210,7 @@ void kernel_entry(hik_boot_info_t* boot_info);
  * 
  * 返回值：验证通过返回true
  */
-bool boot_info_validate(hik_boot_info_t* boot_info);
+bool boot_info_validate(hic_boot_info_t* boot_info);
 
 /**
  * 处理启动信息
@@ -219,7 +219,7 @@ bool boot_info_validate(hik_boot_info_t* boot_info);
  * 参数：
  *   boot_info - Bootloader传递的启动信息
  */
-void boot_info_process(hik_boot_info_t* boot_info);
+void boot_info_process(hic_boot_info_t* boot_info);
 
 /**
  * 初始化内存管理器
@@ -228,7 +228,7 @@ void boot_info_process(hik_boot_info_t* boot_info);
  * 参数：
  *   boot_info - 启动信息
  */
-void boot_info_init_memory(hik_boot_info_t* boot_info);
+void boot_info_init_memory(hic_boot_info_t* boot_info);
 
 /**
  * 初始化ACPI
@@ -237,7 +237,7 @@ void boot_info_init_memory(hik_boot_info_t* boot_info);
  * 参数：
  *   boot_info - 启动信息
  */
-void boot_info_init_acpi(hik_boot_info_t* boot_info);
+void boot_info_init_acpi(hic_boot_info_t* boot_info);
 
 /**
  * 解析命令行参数

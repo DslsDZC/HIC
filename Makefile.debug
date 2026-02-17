@@ -1,4 +1,4 @@
-# HIK内核自动化调试Makefile
+# HIC内核自动化调试Makefile
 # 使用QEMU GDB功能自动调试内核启动
 
 .PHONY: all clean bootloader kernel image debug qemu gdb
@@ -18,27 +18,27 @@ kernel:
 	cd build && make clean && make
 	@echo "✓ 内核编译完成"
 
-# 生成HIK镜像
+# 生成HIC镜像
 image: kernel
-	@echo "生成HIK镜像..."
-	cd build && gcc -O2 create_hik_image.c -o create_hik_image && ./create_hik_image bin/hik-kernel.elf bin/hik-kernel.hik
-	@echo "✓ HIK镜像生成完成"
+	@echo "生成HIC镜像..."
+	cd build && gcc -O2 create_hic_image.c -o create_hic_image && ./create_hic_image bin/hic-kernel.elf bin/hic-kernel.hic
+	@echo "✓ HIC镜像生成完成"
 
 # 更新磁盘镜像
 update-disk: image bootloader
 	@echo "更新磁盘镜像..."
-	@sudo umount /tmp/hik_mnt 2>/dev/null || true
-	@sudo mount -o loop output/hik-uefi-disk.img /tmp/hik_mnt 2>/dev/null || true
-	@sudo mkdir -p /tmp/hik_mnt/EFI/BOOT
-	@sudo cp src/bootloader/bin/bootx64.efi /tmp/hik_mnt/EFI/BOOT/
-	@sudo cp build/bin/hik-kernel.hik /tmp/hik_mnt/hik-kernel.bin
-	@sudo umount /tmp/hik_mnt
+	@sudo umount /tmp/hic_mnt 2>/dev/null || true
+	@sudo mount -o loop output/hic-uefi-disk.img /tmp/hic_mnt 2>/dev/null || true
+	@sudo mkdir -p /tmp/hic_mnt/EFI/BOOT
+	@sudo cp src/bootloader/bin/bootx64.efi /tmp/hic_mnt/EFI/BOOT/
+	@sudo cp build/bin/hic-kernel.hic /tmp/hic_mnt/hic-kernel.bin
+	@sudo umount /tmp/hic_mnt
 	@echo "✓ 磁盘镜像更新完成"
 
 # 创建GDB脚本
 gdb-script:
 	@echo "使用预定义的GDB调试脚本..."
-	@cp scripts/debug.gdb /tmp/hik_debug.gdb
+	@cp scripts/debug.gdb /tmp/hic_debug.gdb
 	@echo "✓ GDB脚本准备完成"
 
 # 启动QEMU（后台）
@@ -50,7 +50,7 @@ qemu: update-disk
 	@qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.4m.fd \
 		-drive if=pflash,format=raw,file=/tmp/OVMF_VARS.4m.fd \
-		-drive format=raw,file=output/hik-uefi-disk.img \
+		-drive format=raw,file=output/hic-uefi-disk.img \
 		-m 512M \
 		-nographic \
 		-s -S \
@@ -63,7 +63,7 @@ qemu: update-disk
 gdb:
 	@echo "启动GDB调试..."
 	@echo "========== GDB调试开始 =========="
-	@gdb -batch -x /tmp/hik_debug.gdb build/bin/hik-kernel.elf
+	@gdb -batch -x /tmp/hic_debug.gdb build/bin/hic-kernel.elf
 	@echo "========== GDB调试结束 =========="
 
 # 完整调试流程
@@ -81,8 +81,8 @@ debug: qemu gdb
 # 清理
 clean:
 	@echo "清理临时文件..."
-	@sudo umount /tmp/hik_mnt 2>/dev/null || true
-	@rm -f /tmp/qemu.pid /tmp/qemu_output.log /tmp/hik_debug.gdb
+	@sudo umount /tmp/hic_mnt 2>/dev/null || true
+	@rm -f /tmp/qemu.pid /tmp/qemu_output.log /tmp/hic_debug.gdb
 	@rm -f /tmp/OVMF_VARS.4m.fd
 	@echo "✓ 清理完成"
 
@@ -95,7 +95,7 @@ test: update-disk
 	@timeout 20 qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.4m.fd \
 		-drive if=pflash,format=raw,file=/tmp/OVMF_VARS.4m.fd \
-		-drive format=raw,file=output/hik-uefi-disk.img \
+		-drive format=raw,file=output/hic-uefi-disk.img \
 		-m 512M \
 		-nographic \
 		2>&1 | tail -100

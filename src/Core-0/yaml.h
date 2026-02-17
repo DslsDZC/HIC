@@ -1,17 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK YAML解析器
+ * HIC YAML解析器
  * 遵循文档第4节：构建时硬件合成系统
  * 解析platform.yaml配置文件
  */
 
-#ifndef HIK_KERNEL_YAML_H
-#define HIK_KERNEL_YAML_H
+#ifndef HIC_KERNEL_YAML_H
+#define HIC_KERNEL_YAML_H
 
 #include "types.h"
 #include "build_config.h"
@@ -65,7 +65,7 @@ u64 yaml_get_u64(yaml_node_t* node, u64 default_val);
 bool yaml_get_bool(yaml_node_t* node, bool default_val);
 
 /* 从YAML加载构建配置 */
-hik_status_t yaml_load_build_config(const char* yaml_data, size_t size, 
+hic_status_t yaml_load_build_config(const char* yaml_data, size_t size, 
                                      build_config_t* config);
 
-#endif /* HIK_KERNEL_YAML_H */
+#endif /* HIC_KERNEL_YAML_H */

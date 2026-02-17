@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK性能优化指南
+ * HIC性能优化指南
  * 遵循文档第9节：性能要求
  * 目标：
  * - 系统调用延迟：20-30纳秒
@@ -13,8 +13,8 @@
  * - 线程切换延迟：120-150纳秒
  */
 
-#ifndef HIK_KERNEL_PERFORMANCE_H
-#define HIK_KERNEL_PERFORMANCE_H
+#ifndef HIC_KERNEL_PERFORMANCE_H
+#define HIC_KERNEL_PERFORMANCE_H
 
 #include "types.h"
 
@@ -90,4 +90,4 @@ u64 get_system_time_ns(void);
 /* 定时器接口 */
 void timer_update(void);
 
-#endif /* HIK_KERNEL_PERFORMANCE_H */
+#endif /* HIC_KERNEL_PERFORMANCE_H */

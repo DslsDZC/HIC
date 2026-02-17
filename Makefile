@@ -1,4 +1,4 @@
-# HIK 根目录 Makefile
+# HIC 根目录 Makefile
 # 支持在根目录直接运行 make
 
 .PHONY: all clean bootloader kernel install help debug test
@@ -40,9 +40,9 @@ install:
 		cp src/bootloader/bin/bios.bin output/; \
 		echo "已复制 bios.bin"; \
 	fi
-	@if [ -f build/bin/hik-kernel.bin ]; then \
-		cp build/bin/hik-kernel.bin output/; \
-		echo "已复制 hik-kernel.bin"; \
+	@if [ -f build/bin/hic-kernel.bin ]; then \
+		cp build/bin/hic-kernel.bin output/; \
+		echo "已复制 hic-kernel.bin"; \
 	fi
 	@echo "安装完成"
 
@@ -61,7 +61,7 @@ test:
 
 # 构建系统帮助
 help:
-	@echo "HIK 构建系统"
+	@echo "HIC 构建系统"
 	@echo ""
 	@echo "用法:"
 	@echo "  make              - 构建引导程序和内核"

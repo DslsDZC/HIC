@@ -4,14 +4,14 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK (Hierarchical Isolation Kernel) Architecture Reference Documentation
+# HIC (Hierarchical Isolation Core) Architecture Reference Documentation
 
 Author: DslsDZC
 Email: dsls.dzc@gmail.com
 
 ## 1. Design Philosophy and Fundamental Goals
 
-HIK (Hierarchical Isolation Kernel) aims to construct an operating system kernel capable of adapting from resource-constrained embedded devices to feature-rich general-purpose computing systems through a unified architectural paradigm. Its core goal is to achieve the trinity of ultimate performance, strong security isolation, and dynamic extensibility within a single architectural framework.
+HIC (Hierarchical Isolation Core) aims to construct an operating system kernel capable of adapting from resource-constrained embedded devices to feature-rich general-purpose computing systems through a unified architectural paradigm. Its core goal is to achieve the trinity of ultimate performance, strong security isolation, and dynamic extensibility within a single architectural framework.
 
 Core Design Principles:
 
@@ -31,7 +31,7 @@ Core Design Principles:
 
 ## 2. Detailed Three-Tier Model Architecture (Direct Physical Memory Mapping Scheme)
 
-This chapter details the core architectural model of HIK, especially the design of the Privileged-1 layer using direct physical memory mapping and allocation limits.
+This chapter details the core architectural model of HIC, especially the design of the Privileged-1 layer using direct physical memory mapping and allocation limits.
 
 ### 2.1 Core-0 Layer: Kernel Core and Arbiter
 
@@ -103,7 +103,7 @@ Core Features and Implementation Details:
 
 ### 3.1 Dynamic Lifecycle and Secure Transfer of Capabilities
 
-Capabilities are the carriers of all authorization in HIK. Their security does not rely on storage location but on interpretation by the kernel (Core-0).
+Capabilities are the carriers of all authorization in HIC. Their security does not rely on storage location but on interpretation by the kernel (Core-0).
 
 1. **Generation:** Capabilities are initially generated at build time by the hardware synthesis system based on configuration, or dynamically created by Core-0 at runtime in response to resource allocation requests (e.g., mmap).
 2. **Storage:** The "master copy" of capabilities is stored in a protected global table inside Core-0. Each domain's held "capability space" only stores obfuscated indices (handles) pointing to entries in this global table.
@@ -164,7 +164,7 @@ This is a key compilation stage that transforms hardware uncertainty into softwa
 
 ## 5. Dynamic Device Support and Modular System
 
-Building upon build-time determinism, HIK provides a controlled dynamic extension mechanism to handle real-world hot-plugging needs (e.g., USB, NVMe SSD).
+Building upon build-time determinism, HIC provides a controlled dynamic extension mechanism to handle real-world hot-plugging needs (e.g., USB, NVMe SSD).
 
 1. **Dynamic Resource Pool:**
    · At build time, a portion of total physical resources (e.g., a set of MSI-X interrupt vectors, a reserved range of PCIe BAR space) is marked as a **"Dynamic Pool"** and not allocated to any static service.
@@ -186,14 +186,14 @@ Building upon build-time determinism, HIK provides a controlled dynamic extensio
 
 ### 6.1 Service Module Format and Secure Distribution
 
-· **Module Format (.hikmod):**
+· **Module Format (.hicmod):**
   · **Module Header:** Contains magic number, format version, module UUID, semantic version number, API descriptor offset, code segment size, data segment size, signature information offset.
   · **Metadata Segment:** Contains module name, description, author, list of exported service endpoints (name, ID, version), declared resource requirements, list of dependent modules (UUID + version constraints).
   · **Code Segment:** Contains relocatable machine code (architecture-specific, e.g., x86-64, ARM64), with entry points conforming to the Privileged-1 Service ABI.
   · **Data Segment:** Contains read-only global data and initialized read-write data.
   · **Signature Segment:** Contains a cryptographic hash (e.g., SHA-384) of the header, metadata, code, and data segments, and the digital signature of the publisher or developer.
 · **Secure Distribution and Repository:**
-  · The system maintains one or more trusted module repositories (local or network). Repositories provide module indices, metadata, and .hikmod file downloads.
+  · The system maintains one or more trusted module repositories (local or network). Repositories provide module indices, metadata, and .hicmod file downloads.
   · Each module is uniquely identified in a repository by its `UUID@version`.
   · Before installation, a module's digital signature must be verified to ensure it is published by a trusted party and untampered.
 
@@ -237,7 +237,7 @@ Implementation Mechanism:
 
 ### 6.4 Differentiated Deployment for Embedded and General-Purpose Systems
 
-The HIK architecture, through build and configuration toolchains, supports two extreme deployment modes:
+The HIC architecture, through build and configuration toolchains, supports two extreme deployment modes:
 
 1. **Embedded / Static Synthesis Mode:**
    · **Process:** Developers write a `system.yaml` configuration file listing all required service modules (including drivers, protocol stacks, etc.) and their versions. The build system (hardware synthesis system) statically links these modules with Core-0 to generate a single, solidified kernel image.
@@ -305,7 +305,7 @@ Scenario: Securely upgrading the system's network protocol stack from `netstack.
 
 ### 8.4 Resource Flood and Denial-of-Service Attack Protection
 
-**Resource Flooding** is a typical Denial-of-Service (DoS) attack where an attacker exhausts system critical resources (e.g., memory, file descriptors, connection count) to paralyze the system. HIK addresses such attacks with a multi-layered defense mechanism:
+**Resource Flooding** is a typical Denial-of-Service (DoS) attack where an attacker exhausts system critical resources (e.g., memory, file descriptors, connection count) to paralyze the system. HIC addresses such attacks with a multi-layered defense mechanism:
 
 1. **Hard Upper Limits Based on Build-Time Quotas:**
    · Each Privileged-1 service and Application is assigned explicit resource quotas at creation. For example, a network service can hold at most 1024 connection descriptors and 64MB of buffer pool. These are unbreakable hard limits enforced by Core-0 during resource allocation.
@@ -330,18 +330,18 @@ Scenario: Securely upgrading the system's network protocol stack from `netstack.
 6. **Timeliness of Capability Reclamation:**
    · When a service or application crashes, Core-0 ensures all its held capabilities and resources are reclaimed atomically and immediately. This prevents resources from "leaking" due to process crashes, which could be exploited by attackers (gradually exhausting resources by repeatedly crashing processes).
 
-This combined defense mechanism ensures that when facing resource flooding attacks, the HIK system can limit the impact scope (via quotas), provide early warning (via monitoring), maintain core functionality (via priority guarantees), and achieve rapid recovery (via atomic reclamation).
+This combined defense mechanism ensures that when facing resource flooding attacks, the HIC system can limit the impact scope (via quotas), provide early warning (via monitoring), maintain core functionality (via priority guarantees), and achieve rapid recovery (via atomic reclamation).
 
 ## 9. Performance Optimization System and Expected Metrics
 
-HIK's performance advantages stem from deep optimization of critical paths in the architectural design.
+HIC's performance advantages stem from deep optimization of critical paths in the architectural design.
 
 1. **System Call / Service Call Latency:**
    · **Traditional Microkernel:** Requires full privilege-level switching (save/restore many registers) + independent address space switch (page table switch) + IPC message copying. Latency is often in the microsecond range.
-   · **HIK (Direct Physical Mapping):** When calling a Privileged-1 service, there is no privilege-level switching, no page table switch (the service and caller may be in the same physical address space, or jump via pre-established, TLB-resident shared pages). The main overhead is Core-0's capability verification (a few memory table lookups) and controlled context jump. Design target: **20-30 nanoseconds**.
+   · **HIC (Direct Physical Mapping):** When calling a Privileged-1 service, there is no privilege-level switching, no page table switch (the service and caller may be in the same physical address space, or jump via pre-established, TLB-resident shared pages). The main overhead is Core-0's capability verification (a few memory table lookups) and controlled context jump. Design target: **20-30 nanoseconds**.
 2. **Interrupt Handling Latency:**
    · **Traditional System:** Interrupt → kernel generic entry → save context → call driver ISR (may trigger scheduling) → restore context. Latency often ranges from a few microseconds to tens of microseconds.
-   · **HIK:** Interrupt → Core-0 simplified entry (save few critical registers) → directly call the ISR registered by the Privileged-1 service based on the static routing table (same privilege-level function call). Design target: **0.5-1 microsecond**.
+   · **HIC:** Interrupt → Core-0 simplified entry (save few critical registers) → directly call the ISR registered by the Privileged-1 service based on the static routing table (same privilege-level function call). Design target: **0.5-1 microsecond**.
 3. **Thread Switching Latency:**
    · Occurs within Core-0, switching to another thread at the same physical privilege level. Only needs to switch general-purpose registers, stack pointer, and thread-private data pointer; no page table switch unless crossing domains. Design target: **120-150 nanoseconds**.
 4. **Communication Bandwidth:**
@@ -368,7 +368,7 @@ HIK's performance advantages stem from deep optimization of critical paths in th
 
 ## 11. Architecture Comparison Summary and Applicability Analysis
 
-| Feature Dimension | Linux Monolithic Kernel | Traditional Microkernel (e.g., seL4) | Hybrid Kernel (Windows NT) | **HIK Hierarchical Isolation Kernel** |
+| Feature Dimension | Linux Monolithic Kernel | Traditional Microkernel (e.g., seL4) | Hybrid Kernel (Windows NT) | **HIC Hierarchical Isolation Core** |
 | :--- | :--- | :--- | :--- | :--- |
 | **Driver/Service Location** | Kernel space (shared Ring 0 address space) | User space (Ring 3) | Mixed: Critical drivers in kernel space (Ring 0), some services in user space (Ring 3) | **Privileged Service Sandboxes (Logical Ring 1, Physical Ring 0 independent address space)** |
 | **Core Isolation Mechanism** | None (all drivers share memory) | Hardware privilege level + Inter-process IPC | Partial: Kernel drivers isolated from user services, but drivers within kernel still share space | **Hardware MMU (physical memory isolation) + Software Capability System (permission control)** |
@@ -385,33 +385,33 @@ HIK's performance advantages stem from deep optimization of critical paths in th
 
 Hybrid kernels (e.g., Windows NT, macOS's XNU) attempt to combine the advantages of monolithic and microkernels: placing core functions (scheduling, virtual memory) and performance-critical drivers in kernel space, while running filesystems, network protocol stacks, etc., as user-space services.
 
-**Significant Advantages of HIK over Hybrid Kernels:**
+**Significant Advantages of HIC over Hybrid Kernels:**
 
 1. **Consistent and Stronger Isolation:**
    · In hybrid kernels, drivers and services running in kernel space still share the same address space; a memory error in one driver can corrupt the entire kernel. Its isolation is incomplete.
-   · In HIK, **all drivers and services** (whether performance-critical or not) run in independent, MMU-strongly-isolated physical memory sandboxes, achieving uniform and complete fault isolation.
+   · In HIC, **all drivers and services** (whether performance-critical or not) run in independent, MMU-strongly-isolated physical memory sandboxes, achieving uniform and complete fault isolation.
 2. **Smaller Trusted Computing Base (TCB):**
    · The TCB of a hybrid kernel includes all code in the kernel space, which is still very large.
-   · HIK's TCB is strictly limited to Core-0 and the core capability system, **far smaller** than hybrid kernels, making it easier for formal verification and security auditing.
+   · HIC's TCB is strictly limited to Core-0 and the core capability system, **far smaller** than hybrid kernels, making it easier for formal verification and security auditing.
 3. **Better Performance Predictability:**
    · In hybrid kernels, interaction between user-space services and the kernel still requires expensive privilege-level switching and context switching.
-   · HIK eliminates this overhead by having services run in sandboxes at the same privilege level as the kernel, making performance more predictable, especially beneficial for real-time applications.
+   · HIC eliminates this overhead by having services run in sandboxes at the same privilege level as the kernel, making performance more predictable, especially beneficial for real-time applications.
 4. **Finer-Grained Resource Control:**
    · Hybrid kernels lack fine-grained resource limits for kernel-space components.
-   · HIK's capability system and quota mechanism can precisely control resource usage for **every service sandbox**, which is crucial for defending against internal attacks and guaranteeing Quality of Service (QoS).
+   · HIC's capability system and quota mechanism can precisely control resource usage for **every service sandbox**, which is crucial for defending against internal attacks and guaranteeing Quality of Service (QoS).
 
-**Potential Challenges of HIK (compared to Hybrid Kernels):**
+**Potential Challenges of HIC (compared to Hybrid Kernels):**
 
 1. **Implementation Complexity:** Achieving strong memory isolation at the same physical privilege level requires a carefully designed capability system and Core-0, which is more complex than traditional hybrid kernel architectures.
-2. **Compatibility:** Hybrid kernels generally offer better compatibility with existing drivers designed for monolithic kernels (through adaptation). HIK requires rewriting or adapting drivers for the Privileged-1 service sandbox model, or providing specific compatibility layers.
+2. **Compatibility:** Hybrid kernels generally offer better compatibility with existing drivers designed for monolithic kernels (through adaptation). HIC requires rewriting or adapting drivers for the Privileged-1 service sandbox model, or providing specific compatibility layers.
 
 ## 12. Simplified Design for Architectures without MMU
 
-The HIK architecture defaults to assuming the target processor has a full-fledged Memory Management Unit (MMU). However, for some extremely resource-constrained embedded microcontrollers (e.g., ARM Cortex-M series) or real-time control systems, an MMU may be absent or disabled. For such cases, HIK provides a simplified design variant that maintains core isolation principles in an MMU-less environment.
+The HIC architecture defaults to assuming the target processor has a full-fledged Memory Management Unit (MMU). However, for some extremely resource-constrained embedded microcontrollers (e.g., ARM Cortex-M series) or real-time control systems, an MMU may be absent or disabled. For such cases, HIC provides a simplified design variant that maintains core isolation principles in an MMU-less environment.
 
 ### 12.1 Flat Physical Memory Mapping Model
 
-When the target platform lacks an MMU, HIK adopts a **flat physical memory mapping model**:
+When the target platform lacks an MMU, HIC adopts a **flat physical memory mapping model**:
 
 1. **Single Physical Address Space:** The entire system runs in a single physical address space, with no virtual address translation. Code and data for all domains (Core-0, Privileged-1 services, Applications) directly use physical addresses.
 2. **Static Layout Allocation:** At build time, the hardware synthesis system allocates fixed, non-overlapping physical memory regions for each domain. The location and size of these regions are determined at compile time and hardcoded in the linker script.

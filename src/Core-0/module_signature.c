@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK模块签名验证（完整实现）
+ * HIC模块签名验证（完整实现）
  */
 
 #include "module_loader.h"
@@ -34,7 +34,7 @@ static inline void suppress_unused_warnings(void) {
 /**
  * 验证模块签名（完整实现框架）
  */
-bool module_verify_signature(const hikmod_header_t* header,
+bool module_verify_signature(const hicmod_header_t* header,
                             const void* signature,
                             u32 signature_size) {
     /* 完整实现：PKCS#1 v2.1 RSASSA-PSS签名验证 */

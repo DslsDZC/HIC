@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK异常处理系统实现（完整版）
+ * HIC异常处理系统实现（完整版）
  * 遵循文档第2.1节：故障隔离与恢复
  */
 
@@ -75,7 +75,7 @@ exception_handler_result_t exception_handle(exception_context_t* ctx)
     thread_terminate(ctx->thread);
     
     /* 如果是Core-0域的异常，系统恐慌 */
-    if (ctx->domain == HIK_DOMAIN_CORE) {
+    if (ctx->domain == HIC_DOMAIN_CORE) {
         console_puts("[EXCEPT] Core-0 exception, system panic!\n");
         return EXCEPT_HANDLER_PANIC;
     }
@@ -107,7 +107,7 @@ void kernel_panic(const char* message, ...)
     
     /* 记录审计日志 */
     u64 reason = 0; /* 完整实现：从消息中提取原因 */
-    AUDIT_LOG_SECURITY_VIOLATION(HIK_DOMAIN_CORE, reason);
+    AUDIT_LOG_SECURITY_VIOLATION(HIC_DOMAIN_CORE, reason);
     
     /* 完整实现：保存系统状态 */
     /* 1. 保存所有域的内存快照 */

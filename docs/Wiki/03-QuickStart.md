@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 快速开始
 
-本指南将帮助你快速构建和运行HIK系统。
+本指南将帮助你快速构建和运行HIC系统。
 
 ## 前置要求
 
@@ -52,8 +52,8 @@ make
 ### 方式1：使用根目录Makefile（推荐）
 
 ```bash
-# 在项目根目录（假设项目路径为 $HIK_ROOT）
-cd $HIK_ROOT
+# 在项目根目录（假设项目路径为 $HIC_ROOT）
+cd $HIC_ROOT
 
 # 构建所有组件
 make all
@@ -69,7 +69,7 @@ make all && make install
 
 ```bash
 # 在项目根目录
-cd $HIK_ROOT
+cd $HIC_ROOT
 
 # 构建所有组件
 ./build.sh
@@ -79,7 +79,7 @@ cd $HIK_ROOT
 
 ```bash
 # 在项目根目录
-cd $HIK_ROOT
+cd $HIC_ROOT
 
 # 运行构建系统（自动选择GUI/TUI/CLI）
 python3 scripts/build_system.py
@@ -127,10 +127,10 @@ make help
 output/
 ├── bootx64.efi         # UEFI引导程序
 ├── bios.bin            # BIOS引导程序
-└── hik-kernel.bin      # 内核映像
+└── hic-kernel.bin      # 内核映像
 ```
 
-## 运行HIK
+## 运行HIC
 
 ### 在QEMU中运行（UEFI）
 
@@ -147,7 +147,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_VARS.fd \
   -drive format=raw,file=disk.img \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio
 ```
@@ -158,7 +158,7 @@ qemu-system-x86_64 \
 # 启动QEMU（BIOS模式）
 qemu-system-x86_64 \
   -drive format=raw,file=output/bios.bin \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio
 ```
@@ -168,13 +168,13 @@ qemu-system-x86_64 \
 #### UEFI系统
 
 1. 将 `output/bootx64.efi` 复制到EFI分区
-2. 将 `output/hik-kernel.bin` 复制到适当位置
+2. 将 `output/hic-kernel.bin` 复制到适当位置
 3. 配置EFI引导加载程序
 
 #### BIOS系统
 
 1. 将 `output/bios.bin` 写入引导扇区
-2. 将 `output/hik-kernel.bin` 复制到适当位置
+2. 将 `output/hic-kernel.bin` 复制到适当位置
 3. 配置引导加载程序
 
 ## 验证构建
@@ -195,11 +195,11 @@ file output/bios.bin
 
 ```bash
 # 检查内核映像
-file output/hik-kernel.bin
+file output/hic-kernel.bin
 # 应该显示: data
 
 # 查看内核大小
-ls -lh output/hik-kernel.bin
+ls -lh output/hic-kernel.bin
 ```
 
 ### 检查签名（如果已签名）
@@ -207,7 +207,7 @@ ls -lh output/hik-kernel.bin
 ```bash
 # 检查SHA-384哈希
 sha384sum output/bootx64.efi
-sha384sum output/hik-kernel.bin
+sha384sum output/hic-kernel.bin
 
 # 验证RSA签名（如果有签名工具）
 # openssl dgst -sha384 -verify pubkey.pem -signature output/bootx64.efi.sig output/bootx64.efi
@@ -255,7 +255,7 @@ find /usr -name "OVMF_CODE.fd" 2>/dev/null
 # 解决方案：检查串口输出
 qemu-system-x86_64 \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio \
   -d int,cpu_reset  # 显示详细调试信息
@@ -265,7 +265,7 @@ qemu-system-x86_64 \
 
 ### 学习更多
 
-- [项目概述](./01-Overview.md) - 了解HIK的设计哲学
+- [项目概述](./01-Overview.md) - 了解HIC的设计哲学
 - [架构设计](./02-Architecture.md) - 深入理解三层模型
 - [开发环境](./05-DevelopmentEnvironment.md) - 搭建完整的开发环境
 
@@ -284,11 +284,11 @@ qemu-system-x86_64 \
 
 ### Q: 为什么需要交叉编译工具链？
 
-A: HIK引导程序需要为UEFI环境编译，UEFI使用PE格式，需要特殊的交叉编译工具链。
+A: HIC引导程序需要为UEFI环境编译，UEFI使用PE格式，需要特殊的交叉编译工具链。
 
 ### Q: 可以在没有UEFI的系统上运行吗？
 
-A: 可以。HIK支持BIOS引导，使用传统的BIOS启动方式。
+A: 可以。HIC支持BIOS引导，使用传统的BIOS启动方式。
 
 ### Q: 构建需要多长时间？
 
@@ -298,9 +298,9 @@ A: 在现代CPU上，完整构建通常需要2-5分钟。
 
 A: 目前主要支持x86-64。ARM64和RISC-V的支持正在开发中。
 
-### Q: 可以在闭源项目中使用HIK吗？
+### Q: 可以在闭源项目中使用HIC吗？
 
-A: 可以，但根据GPL-2.0许可证，如果您分发基于HIK的修改版本，必须同时提供源代码并使用相同的许可证。
+A: 可以，但根据GPL-2.0许可证，如果您分发基于HIC的修改版本，必须同时提供源代码并使用相同的许可证。
 
 ### Q: 如何调试引导程序？
 
@@ -310,8 +310,8 @@ A: 可以使用QEMU的调试功能，或者添加串口输出进行调试。
 
 - 查看 [常见问题](./36-FAQ.md)
 - 查看 [故障排查](./38-Troubleshooting.md)
-- 提交 [Issue](https://github.com/DslsDZC/HIK/issues)
-- 加入 [讨论区](https://github.com/DslsDZC/HIK/discussions)
+- 提交 [Issue](https://github.com/DslsDZC/HIC/issues)
+- 加入 [讨论区](https://github.com/DslsDZC/HIC/discussions)
 
 ---
 

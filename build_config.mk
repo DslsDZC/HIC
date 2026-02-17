@@ -1,12 +1,14 @@
-# HIK内核编译时配置示例
+# HIC内核编译时配置示例
 # 通过修改此文件并重新编译来调整内核行为
 
 # ===== 编译时配置选项 =====
 
+CONFIG_SERIAL ?= 1         # 启用串口支持 (0=禁用, 1=启用)
+
 # 调试配置
-CONFIG_DEBUG ?= 0          # 启用调试支持 (0=禁用, 1=启用)
+CONFIG_DEBUG ?= 1          # 启用调试支持 (0=禁用, 1=启用)
 CONFIG_TRACE ?= 0          # 启用跟踪功能 (0=禁用, 1=启用)
-CONFIG_VERBOSE ?= 0        # 启用详细输出 (0=禁用, 1=启用)
+CONFIG_VERBOSE ?= 1        # 启用详细输出 (0=禁用, 1=启用)
 
 # 安全配置
 CONFIG_KASLR ?= 1          # 启用内核地址空间布局随机化 (0=禁用, 1=启用)
@@ -24,9 +26,22 @@ CONFIG_ACPI ?= 1           # 启用ACPI支持 (0=禁用, 1=启用)
 CONFIG_SERIAL ?= 1         # 启用串口支持 (0=禁用, 1=启用)
 
 # 内存配置
+
 CONFIG_HEAP_SIZE_MB ?= 128 # 堆大小(MB)
+
 CONFIG_STACK_SIZE_KB ?= 8  # 栈大小(KB)
+
 CONFIG_PAGE_CACHE_PERCENT ?= 20  # 页面缓存百分比
+
+
+
+# 架构配置
+
+CONFIG_MMU ?= 1             # 启用MMU支持 (0=禁用, 1=启用)
+
+CONFIG_MPU ?= 0             # 启用MPU支持 (0=禁用, 1=启用)
+
+CONFIG_PHYSICAL_MAPPING ?= 0  # 物理内存直接映射 (0=禁用, 1=启用)
 
 # 调度器配置
 CONFIG_SCHEDULER_POLICY ?= priority  # 调度策略 (fifo, rr, priority)

@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /*
- * HIK内核静态硬件探测实现
+ * HIC内核静态硬件探测实现
  * 提供跨架构的静态硬件探测接口
  */
 
@@ -216,7 +216,7 @@ void detect_cpu_info(cpu_info_t* info) {
  */
 void detect_memory_topology(memory_topology_t* topo) {
     // 从Bootloader获取内存映射信息
-    hik_boot_info_t* boot_info = g_boot_state.boot_info;
+    hic_boot_info_t* boot_info = g_boot_state.boot_info;
     
     if (!boot_info || !boot_info->mem_map || boot_info->mem_map_entry_count == 0) {
         log_warning("无法获取内存映射信息，使用默认值\n");
@@ -242,7 +242,7 @@ void detect_memory_topology(memory_topology_t* topo) {
     u64 max_region_count = sizeof(topo->regions) / sizeof(topo->regions[0]);
     
     for (u64 i = 0; i < boot_info->mem_map_entry_count && i < max_region_count; i++) {
-        hik_mem_entry_t* entry = &boot_info->mem_map[i];
+        hic_mem_entry_t* entry = &boot_info->mem_map[i];
         
         if (topo->region_count >= max_region_count) {
             log_warning("内存区域数量超过上限 %lu\n", max_region_count);
@@ -254,7 +254,7 @@ void detect_memory_topology(memory_topology_t* topo) {
         region->size = entry->length;
         
         // 统计
-        if (entry->type == HIK_MEM_TYPE_USABLE) {
+        if (entry->type == HIC_MEM_TYPE_USABLE) {
             topo->total_usable += entry->length;
         }
         
@@ -374,7 +374,7 @@ void detect_pci_devices(device_list_t* devices) {
  */
 void detect_acpi_info(hardware_probe_result_t* result) {
     // 从Bootloader获取ACPI RSDP
-    hik_boot_info_t* boot_info = g_boot_state.boot_info;
+    hic_boot_info_t* boot_info = g_boot_state.boot_info;
     
     if (!boot_info || !boot_info->rsdp) {
         log_warning("无法获取ACPI RSDP，使用默认值\n");

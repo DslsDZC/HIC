@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK域管理实现
+ * HIC域管理实现
  * 遵循三层模型文档第2.2节：Privileged-1层特权服务沙箱
  */
 
@@ -30,7 +30,7 @@ void domain_system_init(void)
         g_domains[i].domain_id = i;
         g_domains[i].state = DOMAIN_STATE_INIT;
         g_domains[i].flags = 0;
-        g_domains[i].parent_domain = HIK_INVALID_DOMAIN;
+        g_domains[i].parent_domain = HIC_INVALID_DOMAIN;
     }
     
     /* 创建Core-0域 */
@@ -42,7 +42,7 @@ void domain_system_init(void)
     };
     
     domain_id_t core_domain;
-    if (domain_create(DOMAIN_TYPE_CORE, HIK_INVALID_DOMAIN, &core_quota, &core_domain) == HIK_SUCCESS) {
+    if (domain_create(DOMAIN_TYPE_CORE, HIC_INVALID_DOMAIN, &core_quota, &core_domain) == HIC_SUCCESS) {
         console_puts("[Domain] Core-0 domain created\n");
     }
     
@@ -52,11 +52,11 @@ void domain_system_init(void)
 /**
  * 创建域
  */
-hik_status_t domain_create(domain_type_t type, domain_id_t parent,
+hic_status_t domain_create(domain_type_t type, domain_id_t parent,
                            const domain_quota_t *quota, domain_id_t *out)
 {
     /* 查找空闲域ID */
-    domain_id_t domain_id = HIK_INVALID_DOMAIN;
+    domain_id_t domain_id = HIC_INVALID_DOMAIN;
     for (u32 i = 0; i < MAX_DOMAINS; i++) {
         if (g_domains[i].state == DOMAIN_STATE_INIT) {
             domain_id = i;
@@ -64,8 +64,8 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
         }
     }
     
-    if (domain_id == HIK_INVALID_DOMAIN) {
-        return HIK_ERROR_NO_RESOURCE;
+    if (domain_id == HIC_INVALID_DOMAIN) {
+        return HIC_ERROR_NO_RESOURCE;
     }
     
     domain_t *domain = &g_domains[domain_id];
@@ -74,8 +74,8 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
     domain->cap_capacity = quota->max_caps;
     phys_addr_t cap_space_phys;
     u32 cap_pages = (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE;
-    if (pmm_alloc_frames(HIK_DOMAIN_CORE, cap_pages, PAGE_FRAME_CORE, &cap_space_phys) != HIK_SUCCESS) {
-        return HIK_ERROR_NO_RESOURCE;
+    if (pmm_alloc_frames(HIC_DOMAIN_CORE, cap_pages, PAGE_FRAME_CORE, &cap_space_phys) != HIC_SUCCESS) {
+        return HIC_ERROR_NO_RESOURCE;
     }
     
     /* 将物理地址映射到虚拟地址 */
@@ -83,17 +83,17 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
     domain->cap_space = (cap_handle_t *)cap_space_phys;
     if (!domain->cap_space) {
         pmm_free_frames(cap_space_phys, cap_pages);
-        return HIK_ERROR_NO_RESOURCE;
+        return HIC_ERROR_NO_RESOURCE;
     }
     
     /* 分配物理内存 */
     phys_addr_t mem_base;
     size_t mem_size = quota->max_memory;
     if (pmm_alloc_frames(domain_id, (mem_size + PAGE_SIZE - 1) / PAGE_SIZE,
-                         PAGE_FRAME_PRIVILEGED, &mem_base) != HIK_SUCCESS) {
+                         PAGE_FRAME_PRIVILEGED, &mem_base) != HIC_SUCCESS) {
         pmm_free_frames((phys_addr_t)domain->cap_space, 
                         (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
-        return HIK_ERROR_NO_RESOURCE;
+        return HIC_ERROR_NO_RESOURCE;
     }
     
     /* 初始化域 */
@@ -114,6 +114,20 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
     domain->flags = 0;
     domain->parent_domain = parent;
     
+    /* 特权域标记（Privileged-1 服务默认为特权域） */
+    if (type == DOMAIN_TYPE_PRIVILEGED) {
+        domain->flags |= DOMAIN_FLAG_PRIVILEGED;
+        
+        /* 设置运行时特权位图（增强安全） */
+        extern void cap_set_privileged_domain(domain_id_t, bool);
+        cap_set_privileged_domain(domain_id, true);
+    }
+    
+    /* Core-0 为可信域 */
+    if (type == DOMAIN_TYPE_CORE) {
+        domain->flags |= DOMAIN_FLAG_TRUSTED;
+    }
+    
     g_domain_count++;
     
     *out = domain_id;
@@ -123,28 +137,31 @@ hik_status_t domain_create(domain_type_t type, domain_id_t parent,
         console_puts("[Domain] Invariant violation detected after domain_create!\n");
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 销毁域
  */
-hik_status_t domain_destroy(domain_id_t domain_id)
+hic_status_t domain_destroy(domain_id_t domain_id)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->state == DOMAIN_STATE_INIT ||
         domain->state == DOMAIN_STATE_TERMINATED) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 回收所有能力 */
     for (u32 i = 0; i < domain->cap_count; i++) {
-        cap_revoke(domain->cap_space[i].cap_id);
+        cap_id_t cap_id = domain->cap_space[i];
+        if (cap_id != HIC_CAP_INVALID) {
+            cap_revoke(cap_id);
+        }
     }
     
     /* 释放能力空间 */
@@ -166,100 +183,100 @@ hik_status_t domain_destroy(domain_id_t domain_id)
         console_puts("[Domain] Invariant violation detected after domain_destroy!\n");
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 查询域信息
  */
-hik_status_t domain_get_info(domain_id_t domain_id, domain_t *info)
+hic_status_t domain_get_info(domain_id_t domain_id, domain_t *info)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->state == DOMAIN_STATE_INIT) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     *info = *domain;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 暂停域
  */
-hik_status_t domain_suspend(domain_id_t domain_id)
+hic_status_t domain_suspend(domain_id_t domain_id)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->state != DOMAIN_STATE_RUNNING) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     domain->state = DOMAIN_STATE_SUSPENDED;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 恢复域
  */
-hik_status_t domain_resume(domain_id_t domain_id)
+hic_status_t domain_resume(domain_id_t domain_id)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->state != DOMAIN_STATE_SUSPENDED) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     domain->state = DOMAIN_STATE_RUNNING;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 检查内存配额
  */
-hik_status_t domain_check_memory_quota(domain_id_t domain_id, size_t size)
+hic_status_t domain_check_memory_quota(domain_id_t domain_id, size_t size)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->usage.memory_used + size > domain->quota.max_memory) {
-        return HIK_ERROR_QUOTA_EXCEEDED;
+        return HIC_ERROR_QUOTA_EXCEEDED;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
  * 检查线程配额
  */
-hik_status_t domain_check_thread_quota(domain_id_t domain_id)
+hic_status_t domain_check_thread_quota(domain_id_t domain_id)
 {
     if (domain_id >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     
     domain_t *domain = &g_domains[domain_id];
     
     if (domain->usage.thread_used >= domain->quota.max_threads) {
-        return HIK_ERROR_QUOTA_EXCEEDED;
+        return HIC_ERROR_QUOTA_EXCEEDED;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* ============================================ */
@@ -319,9 +336,10 @@ u64 get_domain_granted_caps(domain_id_t domain)
     u64 granted_count = 0;
     
     for (u32 i = 0; i < d->cap_count; i++) {
-        cap_entry_t cap;
-        if (cap_get_info(d->cap_space[i].cap_id, &cap) == HIK_SUCCESS) {
-            if (cap.type == CAP_CAP_DERIVE) {
+        cap_id_t cap_id = d->cap_space[i];
+        if (cap_id != HIC_CAP_INVALID && cap_id < CAP_TABLE_SIZE) {
+            /* 检查能力是否存在 */
+            if (g_global_cap_table[cap_id].cap_id == cap_id) {
                 granted_count++;
             }
         }
@@ -342,10 +360,9 @@ u64 get_domain_revoked_caps(domain_id_t domain)
     /* 统计已撤销的能力 */
     u64 revoked_count = 0;
     
-    for (cap_id_t i = 0; i < MAX_CAPABILITIES; i++) {
-        cap_entry_t cap;
-        if (cap_get_info(i, &cap) == HIK_SUCCESS) {
-            if (cap.owner == domain && (cap.flags & CAP_FLAG_REVOKED)) {
+    for (cap_id_t i = 0; i < CAP_TABLE_SIZE; i++) {
+        if (g_global_cap_table[i].cap_id == i) {
+            if (g_global_cap_table[i].owner == domain && (g_global_cap_table[i].flags & CAP_FLAG_REVOKED)) {
                 revoked_count++;
             }
         }

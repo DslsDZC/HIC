@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 模块管理器负责模块的生命周期管理，包括加载、卸载、依赖解析和版本兼容性检查。模块管理器确保模块的安全性和系统的稳定性。
+HIC 模块管理器负责模块的生命周期管理，包括加载、卸载、依赖解析和版本兼容性检查。模块管理器确保模块的安全性和系统的稳定性。
 
 ## 模块实例
 
@@ -18,14 +18,14 @@ HIK 模块管理器负责模块的生命周期管理，包括加载、卸载、�
 typedef struct module_instance {
     u64                  instance_id;       // 实例ID
     char                 name[64];          // 模块名称
-    hikmod_type_t        type;             // 模块类型
+    hicmod_type_t        type;             // 模块类型
     u32                  version_major;     // 主版本
     u32                  version_minor;     // 次版本
     
     // 模块数据
     u8                  *module_data;      // 模块数据
     u64                  module_size;      // 模块大小
-    hikmod_header_t     *header;          // 模块头部
+    hicmod_header_t     *header;          // 模块头部
     
     // 段基址
     u8                  *code_base;       // 代码段基址
@@ -33,7 +33,7 @@ typedef struct module_instance {
     u8                  *bss_base;        // BSS段基址
     
     // 符号表
-    hikmod_symbol_t     *symbols;         // 符号表
+    hicmod_symbol_t     *symbols;         // 符号表
     u32                  symbol_count;     // 符号数量
     
     // 依赖
@@ -76,36 +76,36 @@ static u32 g_module_count = 0;
 
 ```c
 // 加载模块
-hik_status_t module_load(const char *path, u64 *instance_id) {
+hic_status_t module_load(const char *path, u64 *instance_id) {
     // 查找空闲实例槽
     u64 slot = find_free_module_slot();
     if (slot == INVALID_MODULE_ID) {
-        return HIK_ERROR_NO_RESOURCE;
+        return HIC_ERROR_NO_RESOURCE;
     }
     
     // 分配模块实例
     module_instance_t *instance = allocate_module_instance();
     if (!instance) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     // 加载模块文件
-    hik_status_t status = load_module(path, instance);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = load_module(path, instance);
+    if (status != HIC_SUCCESS) {
         free_module_instance(instance);
         return status;
     }
     
     // 解析依赖
     status = resolve_module_dependencies(instance);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         unload_module(instance);
         return status;
     }
     
     // 初始化模块
     status = module_initialize(instance);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         unload_module(instance);
         return status;
     }
@@ -120,7 +120,7 @@ hik_status_t module_load(const char *path, u64 *instance_id) {
     // 记录审计日志
     AUDIT_LOG_MODULE_LOAD(instance->domain, instance->instance_id, true);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -128,29 +128,29 @@ hik_status_t module_load(const char *path, u64 *instance_id) {
 
 ```c
 // 卸载模块
-hik_status_t module_unload(u64 instance_id) {
+hic_status_t module_unload(u64 instance_id) {
     module_instance_t *instance = g_module_table[instance_id];
     
     if (!instance) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     // 检查引用计数
     if (instance->ref_count > 0) {
-        return HIK_ERROR_BUSY;
+        return HIC_ERROR_BUSY;
     }
     
     // 检查依赖
     if (has_dependents(instance)) {
-        return HIK_ERROR_DEPENDENT;
+        return HIC_ERROR_DEPENDENT;
     }
     
     // 清理模块
     module_cleanup(instance);
     
     // 卸载模块
-    hik_status_t status = unload_module(instance);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = unload_module(instance);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
@@ -162,7 +162,7 @@ hik_status_t module_unload(u64 instance_id) {
     // 记录审计日志
     AUDIT_LOG_MODULE_UNLOAD(instance->domain, instance->instance_id, true);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -172,7 +172,7 @@ hik_status_t module_unload(u64 instance_id) {
 
 ```c
 // 解析模块依赖
-hik_status_t resolve_module_dependencies(module_instance_t *instance) {
+hic_status_t resolve_module_dependencies(module_instance_t *instance) {
     for (u32 i = 0; i < instance->dep_count; i++) {
         module_dependency_t *dep = &instance->dependencies[i];
         
@@ -181,23 +181,23 @@ hik_status_t resolve_module_dependencies(module_instance_t *instance) {
         if (!dep_module) {
             // 尝试加载依赖
             u64 dep_instance_id;
-            hik_status_t status = module_load(dep->name, &dep_instance_id);
-            if (status != HIK_SUCCESS) {
-                return HIK_ERROR_DEPENDENCY;
+            hic_status_t status = module_load(dep->name, &dep_instance_id);
+            if (status != HIC_SUCCESS) {
+                return HIC_ERROR_DEPENDENCY;
             }
             dep_module = g_module_table[dep_instance_id];
         }
         
         // 检查版本兼容性
         if (!check_version_compatibility(dep_module, dep)) {
-            return HIK_ERROR_VERSION_MISMATCH;
+            return HIC_ERROR_VERSION_MISMATCH;
         }
         
         // 增加引用计数
         dep_module->ref_count++;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -227,25 +227,25 @@ bool check_version_compatibility(module_instance_t *module,
 
 ```c
 // 初始化模块
-hik_status_t module_initialize(module_instance_t *instance) {
+hic_status_t module_initialize(module_instance_t *instance) {
     // 查找初始化函数
-    hikmod_symbol_t *init_sym = find_symbol(instance, "module_init");
+    hicmod_symbol_t *init_sym = find_symbol(instance, "module_init");
     if (!init_sym) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     // 调用初始化函数
     module_init_func_t init_func = (module_init_func_t)
         (instance->code_base + init_sym->offset);
     
-    hik_status_t status = init_func(instance);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = init_func(instance);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
     instance->state = MODULE_STATE_INITIALIZED;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -266,7 +266,7 @@ module_instance_t* find_module_by_name(const char *name) {
 }
 
 // 按类型查找模块
-u32 find_modules_by_type(hikmod_type_t type, module_instance_t **modules,
+u32 find_modules_by_type(hicmod_type_t type, module_instance_t **modules,
                            u32 max_count) {
     u32 count = 0;
     

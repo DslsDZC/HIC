@@ -1,5 +1,5 @@
 /**
- * HIK BIOS Bootloader汇编入口
+ * HIC BIOS Bootloader汇编入口
  * 
  * BIOS启动流程：
  * 1. BIOS POST
@@ -183,7 +183,7 @@ enable_a20:
 .align 4
 
 hello_msg:
-    .asciz "HIK BIOS Bootloader v1.0\r\n"
+    .asciz "HIC BIOS Bootloader v1.0\r\n"
 
 error_msg:
     .asciz "Disk error!\r\n"

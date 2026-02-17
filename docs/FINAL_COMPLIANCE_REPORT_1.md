@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK 文档合规性检查报告
+# HIC 文档合规性检查报告
 
 **日期**: 2026-02-14  
-**检查范围**: 整个HIK项目代码实现  
+**检查范围**: 整个HIC项目代码实现  
 **检查依据**: docs/TD/目录下的所有文档
 
 ---
@@ -339,7 +339,7 @@ SPDX-License-Identifier: CC-BY-4.0
 ### 5.1 模块加载 ✅
 
 **文档要求** (TD/三层模型.md 第6节):
-- 支持模块格式（.hikmod）
+- 支持模块格式（.hicmod）
 - 模块签名验证
 - 模块生命周期管理
 
@@ -608,7 +608,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 结论
 
-✅ **HIK项目代码实现严格按照文档要求完成**
+✅ **HIC项目代码实现严格按照文档要求完成**
 
 - 核心架构完全符合三层模型设计
 - 引导加载程序支持UEFI和BIOS双引导

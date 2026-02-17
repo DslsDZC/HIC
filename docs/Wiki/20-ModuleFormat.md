@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 模块格式（.hikmod）定义了可加载内核模块的二进制格式。模块格式支持签名验证、版本管理和依赖解析，确保模块的安全性和兼容性。
+HIC 模块格式（.hicmod）定义了可加载内核模块的二进制格式。模块格式支持签名验证、版本管理和依赖解析，确保模块的安全性和兼容性。
 
 ## 模块文件结构
 
@@ -16,7 +16,7 @@ HIK 模块格式（.hikmod）定义了可加载内核模块的二进制格式。
 
 ```
 +------------------+
-|   模块魔数      |  8 bytes: "HIKMOD\0"
+|   模块魔数      |  8 bytes: "HICMOD\0"
 +------------------+
 |   版本信息      |  4 bytes: 主版本.次版本
 +------------------+
@@ -59,8 +59,8 @@ HIK 模块格式（.hikmod）定义了可加载内核模块的二进制格式。
 ### 模块头部
 
 ```c
-typedef struct hikmod_header {
-    char     magic[8];           // "HIKMOD\0"
+typedef struct hicmod_header {
+    char     magic[8];           // "HICMOD\0"
     u32      version;            // 主版本.次版本
     u32      type;               // 模块类型
     u64      total_size;         // 总大小
@@ -73,20 +73,20 @@ typedef struct hikmod_header {
     u64      sig_offset;          // 签名偏移
     u64      sig_size;            // 签名大小
     u8       reserved[32];       // 保留字段
-} hikmod_header_t;
+} hicmod_header_t;
 ```
 
 ## 模块类型
 
 ```c
 typedef enum {
-    HIKMOD_TYPE_DRIVER,        // 设备驱动
-    HIKMOD_TYPE_FILESYSTEM,    // 文件系统
-    HIKMOD_TYPE_NETWORK,       // 网络协议
-    HIKMOD_TYPE_CRYPTO,        // 加密服务
-    HIKMOD_TYPE_MONITOR,       // 监控服务
-    HIKMOD_TYPE_CUSTOM,        // 自定义模块
-} hikmod_type_t;
+    HICMOD_TYPE_DRIVER,        // 设备驱动
+    HICMOD_TYPE_FILESYSTEM,    // 文件系统
+    HICMOD_TYPE_NETWORK,       // 网络协议
+    HICMOD_TYPE_CRYPTO,        // 加密服务
+    HICMOD_TYPE_MONITOR,       // 监控服务
+    HICMOD_TYPE_CUSTOM,        // 自定义模块
+} hicmod_type_t;
 ```
 
 ## 符号表
@@ -94,26 +94,26 @@ typedef enum {
 ### 符号表项
 
 ```c
-typedef struct hikmod_symbol {
+typedef struct hicmod_symbol {
     char     name[64];          // 符号名称
     u64      offset;            // 偏移（相对于段基址）
     u64      size;              // 大小
     u8       section;           // 段索引（0=代码, 1=数据, 2=BSS）
     u8       binding;           // 绑定类型
     u8       type;              // 符号类型
-} hikmod_symbol_t;
+} hicmod_symbol_t;
 ```
 
 ### 符号类型
 
 ```c
 typedef enum {
-    HIKMOD_SYM_FUNC,           // 函数
-    HIKMOD_SYM_DATA,           // 数据
-    HIKMOD_SYM_BSS,            // BSS
-    HIKMOD_SYM_IMPORT,         // 导入符号
-    HIKMOD_SYM_EXPORT,         // 导出符号
-} hikmod_symbol_type_t;
+    HICMOD_SYM_FUNC,           // 函数
+    HICMOD_SYM_DATA,           // 数据
+    HICMOD_SYM_BSS,            // BSS
+    HICMOD_SYM_IMPORT,         // 导入符号
+    HICMOD_SYM_EXPORT,         // 导出符号
+} hicmod_symbol_type_t;
 ```
 
 ## 重定位表
@@ -122,22 +122,22 @@ typedef enum {
 
 ```c
 typedef enum {
-    HIKMOD_RELOC_ABSOLUTE,      // 绝对地址
-    HIKMOD_RELOC_RELATIVE,      // 相对地址
-    HIKMOD_RELOC_GOT,          // 全局偏移表
-    HIKMOD_RELOC_PLT,          // 过程链接表
-} hikmod_reloc_type_t;
+    HICMOD_RELOC_ABSOLUTE,      // 绝对地址
+    HICMOD_RELOC_RELATIVE,      // 相对地址
+    HICMOD_RELOC_GOT,          // 全局偏移表
+    HICMOD_RELOC_PLT,          // 过程链接表
+} hicmod_reloc_type_t;
 ```
 
 ### 重定位项
 
 ```c
-typedef struct hikmod_reloc {
+typedef struct hicmod_reloc {
     u64      offset;            // 重定位偏移
     u64      symbol_index;      // 符号索引
     u8       type;              // 重定位类型
     u8       addend;            // 加数
-} hikmod_reloc_t;
+} hicmod_reloc_t;
 ```
 
 ## 依赖表
@@ -145,12 +145,12 @@ typedef struct hikmod_reloc {
 ### 依赖项
 
 ```c
-typedef struct hikmod_dependency {
+typedef struct hicmod_dependency {
     char     name[64];          // 依赖名称
     u32      version_major;      // 主版本要求
     u32      version_minor;      // 次版本要求
     u32      flags;             // 标志
-} hikmod_dependency_t;
+} hicmod_dependency_t;
 ```
 
 ## 签名
@@ -158,11 +158,11 @@ typedef struct hikmod_dependency {
 ### 签名格式
 
 ```c
-typedef struct hikmod_signature {
+typedef struct hicmod_signature {
     u8       public_key[32];     // Ed25519 公钥
     u8       signature[64];      // Ed25519 签名
     u64      timestamp;         // 签名时间戳
-} hikmod_signature_t;
+} hicmod_signature_t;
 ```
 
 ### 签名验证
@@ -170,7 +170,7 @@ typedef struct hikmod_signature {
 ```c
 // 验证模块签名
 bool verify_module_signature(u8 *module_data, u64 module_size,
-                              hikmod_signature_t *sig) {
+                              hicmod_signature_t *sig) {
     // 计算模块哈希（不包括签名部分）
     u64 signed_size = sig->timestamp;
     u8 hash[48];
@@ -188,23 +188,23 @@ bool verify_module_signature(u8 *module_data, u64 module_size,
 
 ```c
 // 加载模块
-hik_status_t load_module(const char *path, module_instance_t *instance) {
+hic_status_t load_module(const char *path, module_instance_t *instance) {
     // 1. 读取模块文件
     u8 *module_data = read_module_file(path, &instance->module_size);
     
     // 2. 解析模块头部
-    hikmod_header_t *header = (hikmod_header_t *)module_data;
+    hicmod_header_t *header = (hicmod_header_t *)module_data;
     
     // 3. 验证魔数
-    if (memcmp(header->magic, "HIKMOD\0", 8) != 0) {
-        return HIK_ERROR_INVALID_FORMAT;
+    if (memcmp(header->magic, "HICMOD\0", 8) != 0) {
+        return HIC_ERROR_INVALID_FORMAT;
     }
     
     // 4. 验证签名
-    hikmod_signature_t *sig = (hikmod_signature_t *)
+    hicmod_signature_t *sig = (hicmod_signature_t *)
         (module_data + header->sig_offset);
     if (!verify_module_signature(module_data, instance->module_size, sig)) {
-        return HIK_ERROR_SIGNATURE;
+        return HIC_ERROR_SIGNATURE;
     }
     
     // 5. 解析依赖
@@ -222,10 +222,10 @@ hik_status_t load_module(const char *path, module_instance_t *instance) {
     instance->bss_base = allocate_memory(header->bss_size);
     
     // 9. 加载段
-    memcpy(instance->code_base, module_data + sizeof(hikmod_header_t),
+    memcpy(instance->code_base, module_data + sizeof(hicmod_header_t),
            header->code_size);
     memcpy(instance->data_base, 
-           module_data + sizeof(hikmod_header_t) + header->code_size,
+           module_data + sizeof(hicmod_header_t) + header->code_size,
            header->data_size);
     
     // 10. 执行重定位
@@ -234,7 +234,7 @@ hik_status_t load_module(const char *path, module_instance_t *instance) {
     // 11. 解析依赖
     resolve_dependencies(instance);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -244,10 +244,10 @@ hik_status_t load_module(const char *path, module_instance_t *instance) {
 
 ```c
 // 卸载模块
-hik_status_t unload_module(module_instance_t *instance) {
+hic_status_t unload_module(module_instance_t *instance) {
     // 1. 检查模块是否在使用
     if (instance->ref_count > 0) {
-        return HIK_ERROR_BUSY;
+        return HIC_ERROR_BUSY;
     }
     
     // 2. 释放符号
@@ -261,7 +261,7 @@ hik_status_t unload_module(module_instance_t *instance) {
     // 4. 释放模块数据
     free(instance->module_data);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -271,14 +271,14 @@ hik_status_t unload_module(module_instance_t *instance) {
 
 ```bash
 # 编译模块
-hik-modcc -o mymodule.hikmod mymodule.c
+hic-modcc -o mymodule.hicmod mymodule.c
 
 # 签名模块
-hik-modsign --private-key module.priv --public-key module.pub \
-               --output mymodule.hikmod mymodule.hikmod
+hic-modsign --private-key module.priv --public-key module.pub \
+               --output mymodule.hicmod mymodule.hicmod
 
 # 验证模块
-hik-modverify --public-key module.pub mymodule.hikmod
+hic-modverify --public-key module.pub mymodule.hicmod
 ```
 
 ## 最佳实践

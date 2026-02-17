@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 采用深度防御（Defense-in-Depth）安全架构，通过多层安全机制提供全面的安全保障。该架构基于最小权限原则、形式化验证和数学证明，确保系统的安全性和可信性。
+HIC 采用深度防御（Defense-in-Depth）安全架构，通过多层安全机制提供全面的安全保障。该架构基于最小权限原则、形式化验证和数学证明，确保系统的安全性和可信性。
 
 ## 安全设计原则
 
@@ -136,13 +136,13 @@ bool validate_capability(cap_handle_t *handle) {
 #### 权限单调性
 ```c
 // 派生能力权限是父能力的子集
-hik_status_t cap_derive(domain_id_t owner, cap_id_t parent, 
+hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, 
                         cap_rights_t sub_rights, cap_id_t *out) {
     cap_entry_t *parent_entry = &g_cap_table[parent];
     
     // 检查子权限是否为父权限的子集
     if ((sub_rights & parent_entry->rights) != sub_rights) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     // 创建派生能力
@@ -153,7 +153,7 @@ hik_status_t cap_derive(domain_id_t owner, cap_id_t parent,
 #### 能力撤销
 ```c
 // 撤销能力及其所有派生
-hik_status_t cap_revoke(cap_id_t cap) {
+hic_status_t cap_revoke(cap_id_t cap) {
     cap_entry_t *entry = &g_cap_table[cap];
     
     // 标记为已撤销
@@ -162,7 +162,7 @@ hik_status_t cap_revoke(cap_id_t cap) {
     // 撤销所有派生能力
     revoke_all_derivatives(cap);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -235,10 +235,10 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2,
     }
     
     // 执行系统调用
-    hik_status_t status = execute_syscall(syscall_num, arg1, arg2, arg3, arg4);
+    hic_status_t status = execute_syscall(syscall_num, arg1, arg2, arg3, arg4);
     
     // 记录审计日志
-    AUDIT_LOG_SYSCALL(current_domain, syscall_num, status == HIK_SUCCESS);
+    AUDIT_LOG_SYSCALL(current_domain, syscall_num, status == HIC_SUCCESS);
 }
 ```
 

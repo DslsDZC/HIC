@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK物理内存管理器(Physical Memory Manager)头文件
+ * HIC物理内存管理器(Physical Memory Manager)头文件
  * 遵循三层模型文档第2.1节：物理资源管理与分配
  */
 
-#ifndef HIK_KERNEL_PMM_H
-#define HIK_KERNEL_PMM_H
+#ifndef HIC_KERNEL_PMM_H
+#define HIC_KERNEL_PMM_H
 
 #include "types.h"
 #include "domain.h"
@@ -44,14 +44,14 @@ typedef struct page_frame {
 void pmm_init(void);
 
 /* 添加内存区域 */
-hik_status_t pmm_add_region(phys_addr_t base, size_t size);
+hic_status_t pmm_add_region(phys_addr_t base, size_t size);
 
 /* 分配页帧 */
-hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
+hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
                                page_frame_type_t type, phys_addr_t *out);
 
 /* 释放页帧 */
-hik_status_t pmm_free_frames(phys_addr_t addr, u32 count);
+hic_status_t pmm_free_frames(phys_addr_t addr, u32 count);
 
 /* 标记内存为已使用 */
 void pmm_mark_used(phys_addr_t base, size_t size);
@@ -60,7 +60,7 @@ void pmm_mark_used(phys_addr_t base, size_t size);
 void pmm_defragment(void);
 
 /* 查询页帧信息 */
-hik_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info);
+hic_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info);
 
 /* 获取统计信息 */
 void pmm_get_stats(u64 *total_pages, u64 *free_pages, u64 *used_pages);
@@ -69,4 +69,4 @@ void pmm_get_stats(u64 *total_pages, u64 *free_pages, u64 *used_pages);
 u64 used_memory(void);
 u64 total_memory(void);
 
-#endif /* HIK_KERNEL_PMM_H */
+#endif /* HIC_KERNEL_PMM_H */

@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-Privileged-1 层是 HIK 三层特权架构的第二层，位于 Core-0 和 Application-3 之间。它为特权服务提供了一个安全的沙箱环境，允许这些服务在受控的条件下执行特权操作。
+Privileged-1 层是 HIC 三层特权架构的第二层，位于 Core-0 和 Application-3 之间。它为特权服务提供了一个安全的沙箱环境，允许这些服务在受控的条件下执行特权操作。
 
 ## 设计目标
 
@@ -83,9 +83,9 @@ domain_quota_t service_quota = {
 
 // 创建服务域
 domain_id_t service_domain;
-hik_status_t status = domain_create(
+hic_status_t status = domain_create(
     DOMAIN_TYPE_PRIVILEGED,
-    HIK_DOMAIN_CORE,  // 父域是 Core-0
+    HIC_DOMAIN_CORE,  // 父域是 Core-0
     &service_quota,
     &service_domain
 );
@@ -117,10 +117,10 @@ cap_id_t endpoint_cap;
 cap_create_endpoint(service_domain, service_domain, &endpoint_cap);
 
 // 处理 IPC 请求
-hik_status_t handle_ipc_request(ipc_call_params_t *params) {
+hic_status_t handle_ipc_request(ipc_call_params_t *params) {
     // 验证调用者权限
     if (!cap_check_access(caller_domain, params->endpoint_cap, 0)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
     // 处理请求
@@ -130,7 +130,7 @@ hik_status_t handle_ipc_request(ipc_call_params_t *params) {
         case REQ_WRITE:
             return handle_write_request(params);
         default:
-            return HIK_ERROR_INVALID_PARAM;
+            return HIC_ERROR_INVALID_PARAM;
     }
 }
 ```
@@ -153,12 +153,12 @@ Privileged-1 服务只能通过能力访问资源：
 
 ```c
 // 检查能力访问权限
-hik_status_t access_resource(cap_id_t resource_cap, cap_rights_t required) {
+hic_status_t access_resource(cap_id_t resource_cap, cap_rights_t required) {
     domain_id_t my_domain = get_current_domain();
     
     // 验证能力存在且有效
     if (!capability_exists(resource_cap)) {
-        return HIK_ERROR_CAP_INVALID;
+        return HIC_ERROR_CAP_INVALID;
     }
     
     // 验证能力权限
@@ -195,7 +195,7 @@ Privileged-1 服务使用物理内存直接映射，避免了虚拟地址转换�
 
 ```
 虚拟地址 → 页表查找 → 物理地址  (传统内核)
-物理地址 → 直接访问               (HIK Privileged-1)
+物理地址 → 直接访问               (HIC Privileged-1)
 ```
 
 **优势**:
@@ -209,7 +209,7 @@ Privileged-1 服务使用物理内存直接映射，避免了虚拟地址转换�
 
 ```
 传统 IPC: 上下文切换 + 拷贝数据
-HIK IPC:  域切换 + 直接内存访问
+HIC IPC:  域切换 + 直接内存访问
 ```
 
 ## 开发指南
@@ -233,9 +233,9 @@ void service_main(void) {
     while (1) {
         // 等待 IPC 请求
         ipc_call_params_t params;
-        hik_status_t status = syscall_ipc_wait(&params);
+        hic_status_t status = syscall_ipc_wait(&params);
         
-        if (status == HIK_SUCCESS) {
+        if (status == HIC_SUCCESS) {
             // 处理请求
             handle_request(&params);
         }
@@ -243,10 +243,10 @@ void service_main(void) {
 }
 
 // 请求处理函数
-hik_status_t handle_request(ipc_call_params_t *params) {
+hic_status_t handle_request(ipc_call_params_t *params) {
     // 验证请求
     if (!validate_request(params)) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     // 执行操作
@@ -254,7 +254,7 @@ hik_status_t handle_request(ipc_call_params_t *params) {
         case REQ_IOCTL:
             return handle_ioctl(params);
         default:
-            return HIK_ERROR_NOT_SUPPORTED;
+            return HIC_ERROR_NOT_SUPPORTED;
     }
 }
 ```
@@ -262,11 +262,11 @@ hik_status_t handle_request(ipc_call_params_t *params) {
 ### 编译服务
 
 ```bash
-# 编译服务为 .hikmod 模块
+# 编译服务为 .hicmod 模块
 make MODULE=my_service
 
 # 加载服务到内核
-./build/tools/module_loader load my_service.hikmod
+./build/tools/module_loader load my_service.hicmod
 ```
 
 ## 最佳实践

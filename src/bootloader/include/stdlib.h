@@ -1,5 +1,5 @@
-#ifndef HIK_BOOTLOADER_STDLIB_H
-#define HIK_BOOTLOADER_STDLIB_H
+#ifndef HIC_BOOTLOADER_STDLIB_H
+#define HIC_BOOTLOADER_STDLIB_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -120,4 +120,4 @@ void *realloc(void *ptr, size_t size);
 // 字符串转整数
 int atoi(const char *str);
 
-#endif // HIK_BOOTLOADER_STDLIB_H
+#endif // HIC_BOOTLOADER_STDLIB_H

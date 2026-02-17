@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 测试指南
 
-本文档介绍HIK项目的测试方法和测试策略。
+本文档介绍HIC项目的测试方法和测试策略。
 
 ## 测试概览
 
@@ -37,7 +37,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ### 测试框架
 
-HIK使用自定义的轻量级测试框架：
+HIC使用自定义的轻量级测试框架：
 
 ```c
 /**
@@ -103,7 +103,7 @@ TEST(capability_create)
 
     /* 创建能力 */
     status = cap_create(
-        HIK_DOMAIN_CORE,
+        HIC_DOMAIN_CORE,
         CAP_TYPE_MEMORY,
         CAP_PERM_READ | CAP_PERM_WRITE,
         0x100000,
@@ -112,16 +112,16 @@ TEST(capability_create)
     );
 
     /* 断言创建成功 */
-    ASSERT_EQ(status, HIK_SUCCESS);
-    ASSERT_NE(cap, HIK_INVALID_CAP_ID);
+    ASSERT_EQ(status, HIC_SUCCESS);
+    ASSERT_NE(cap, HIC_INVALID_CAP_ID);
 
     /* 验证能力属性 */
     cap_entry_t entry;
     status = cap_get_info(cap, &entry);
-    ASSERT_EQ(status, HIK_SUCCESS);
+    ASSERT_EQ(status, HIC_SUCCESS);
     ASSERT_EQ(entry.type, CAP_TYPE_MEMORY);
     ASSERT_EQ(entry.rights, CAP_PERM_READ | CAP_PERM_WRITE);
-    ASSERT_EQ(entry.owner, HIK_DOMAIN_CORE);
+    ASSERT_EQ(entry.owner, HIC_DOMAIN_CORE);
 
     /* 清理 */
     cap_revoke(cap);
@@ -139,8 +139,8 @@ TEST(capability_transfer)
 
     /* 传递能力 */
     status = cap_transfer(DOMAIN_A, DOMAIN_B, cap1, 0, &cap2);
-    ASSERT_EQ(status, HIK_SUCCESS);
-    ASSERT_NE(cap2, HIK_INVALID_CAP_ID);
+    ASSERT_EQ(status, HIC_SUCCESS);
+    ASSERT_NE(cap2, HIC_INVALID_CAP_ID);
 
     /* 验证传递 */
     cap_entry_t entry;
@@ -207,7 +207,7 @@ make test-interrupt-routing
 qemu-system-x86_64 \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio \
   -d int,cpu_reset
@@ -219,7 +219,7 @@ qemu-system-x86_64 \
 # 启动QEMU（BIOS模式）
 qemu-system-x86_64 \
   -drive format=raw,file=output/bios.bin \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio \
   -d int,cpu_reset
@@ -231,7 +231,7 @@ qemu-system-x86_64 \
 #!/bin/bash
 # test_system.sh
 
-echo "=== HIK系统测试 ==="
+echo "=== HIC系统测试 ==="
 
 # 1. 构建系统
 echo "[1/5] 构建系统..."
@@ -254,14 +254,14 @@ fi
 echo "[3/5] 启动系统..."
 timeout 30 qemu-system-x86_64 \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio \
   -nographic > test.log 2>&1
 
 # 4. 检查输出
 echo "[4/5] 检查输出..."
-if grep -q "Hello, HIK!" test.log; then
+if grep -q "Hello, HIC!" test.log; then
     echo "系统启动成功"
 else
     echo "系统启动失败"
@@ -387,11 +387,11 @@ TEST(capability_verification)
 
     /* 测试：未授权访问 */
     status = memory_write(DOMAIN_B, cap, 0x100000, 0x42);
-    ASSERT_EQ(status, HIK_ERROR_PERMISSION);
+    ASSERT_EQ(status, HIC_ERROR_PERMISSION);
 
     /* 测试：权限不足 */
     status = memory_write(DOMAIN_A, cap, 0x100000, 0x42);
-    ASSERT_EQ(status, HIK_ERROR_PERMISSION);
+    ASSERT_EQ(status, HIC_ERROR_PERMISSION);
 
     /* 清理 */
     cap_revoke(cap);
@@ -409,13 +409,13 @@ TEST(buffer_boundary)
     char buffer[1024];
 
     /* 测试：正常访问 */
-    ASSERT_EQ(buffer_write(buffer, 0, 0, 512), HIK_SUCCESS);
+    ASSERT_EQ(buffer_write(buffer, 0, 0, 512), HIC_SUCCESS);
 
     /* 测试：越界访问 */
-    ASSERT_EQ(buffer_write(buffer, 0, 512, 1024), HIK_ERROR_OUT_OF_RANGE);
+    ASSERT_EQ(buffer_write(buffer, 0, 512, 1024), HIC_ERROR_OUT_OF_RANGE);
 
     /* 测试：负偏移 */
-    ASSERT_EQ(buffer_write(buffer, -1, 0, 100), HIK_ERROR_INVALID_PARAM);
+    ASSERT_EQ(buffer_write(buffer, -1, 0, 100), HIC_ERROR_INVALID_PARAM);
 }
 ```
 
@@ -432,14 +432,14 @@ TEST(resource_exhaustion)
     /* 尝试分配超过配额的内存 */
     for (int i = 0; i < 10000; i++) {
         status = allocate_memory(domain, 0x1000);
-        if (status == HIK_ERROR_QUOTA_EXCEEDED) {
+        if (status == HIC_ERROR_QUOTA_EXCEEDED) {
             /* 预期的配额限制 */
             break;
         }
     }
 
     /* 验证配额限制生效 */
-    ASSERT_EQ(status, HIK_ERROR_QUOTA_EXCEEDED);
+    ASSERT_EQ(status, HIC_ERROR_QUOTA_EXCEEDED);
 
     /* 清理 */
     destroy_domain(domain);
@@ -479,7 +479,7 @@ firefox coverage_report/index.html
 ### GitHub Actions配置
 
 ```yaml
-name: Test HIK
+name: Test HIC
 
 on: [push, pull_request]
 
@@ -528,7 +528,7 @@ TEST(memory_allocation_failure)
     status = allocate_memory(DOMAIN_A, 0x1000);
 
     /* 验证错误处理 */
-    ASSERT_EQ(status, HIK_ERROR_OUT_OF_MEMORY);
+    ASSERT_EQ(status, HIC_ERROR_OUT_OF_MEMORY);
 
     /* 恢复正常 */
     restore_memory();
@@ -633,13 +633,13 @@ ASSERT_EQ(result, expected);
 TEST(buffer_size)
 {
     /* 测试最小值 */
-    ASSERT_EQ(process_buffer(0), HIK_SUCCESS);
+    ASSERT_EQ(process_buffer(0), HIC_SUCCESS);
 
     /* 测试最大值 */
-    ASSERT_EQ(process_buffer(MAX_SIZE), HIK_SUCCESS);
+    ASSERT_EQ(process_buffer(MAX_SIZE), HIC_SUCCESS);
 
     /* 测试越界 */
-    ASSERT_EQ(process_buffer(MAX_SIZE + 1), HIK_ERROR_INVALID_PARAM);
+    ASSERT_EQ(process_buffer(MAX_SIZE + 1), HIC_ERROR_INVALID_PARAM);
 }
 ```
 

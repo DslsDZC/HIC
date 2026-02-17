@@ -1,9 +1,9 @@
-The HIK project consists of multiple components, each with its own license.
+The HIC project consists of multiple components, each with its own license.
 
 - The core kernel (src/Core-0) is licensed under **GPL-2.0-only** with the
-  **HIK-service-exception**. This exception allows Privileged-1 services
+  **HIC-service-exception**. This exception allows Privileged-1 services
   to be distributed under any license terms.  
-  See `LICENSES/GPL-2.0-only.txt` and `LICENSES/LicenseRef-HIK-service-exception.txt`.
+  See `LICENSES/GPL-2.0-only.txt` and `LICENSES/LicenseRef-HIC-service-exception.txt`.
 
 - Privileged-1 services (src/Privileged-1) are licensed under **MPL-2.0**.  
   See `LICENSES/MPL-2.0.txt`.
@@ -24,4 +24,4 @@ The HIK project consists of multiple components, each with its own license.
   files not covered above) are licensed under **MIT**.  
   See `LICENSES/MIT.txt`.
 
-SPDX-License-Identifier: (GPL-2.0-only WITH LicenseRef-HIK-service-exception) AND MPL-2.0 AND Apache-2.0 AND MIT AND CC-BY-4.0
+SPDX-License-Identifier: (GPL-2.0-only WITH LicenseRef-HIC-service-exception) AND MPL-2.0 AND Apache-2.0 AND MIT AND CC-BY-4.0

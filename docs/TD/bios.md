@@ -6,13 +6,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # x86_64引导加载程序设计
 
-基于HIK架构需求，以下是x86_64平台引导加载程序的详细设计方案：
+基于HIC架构需求，以下是x86_64平台引导加载程序的详细设计方案：
 
 ## 一、总体架构
 
 ### 1.1 多阶段引导流程
 ```
-UEFI/BIOS → HIK Bootloader (多阶段) → HIK Core-0
+UEFI/BIOS → HIC Bootloader (多阶段) → HIC Core-0
     │               │
     ├─ UEFI模式     ├─ BIOS模式
     │   (UEFI应用)   │   (MBR+引导扇区)
@@ -81,8 +81,8 @@ UEFI/BIOS → HIK Bootloader (多阶段) → HIK Core-0
 
 ### 4.1 通用结构（UEFI和BIOS通用）
 ```c
-struct hik_boot_info {
-    uint32_t magic;           // 0x48 0x49 0x4B 0x21 ("HIK!")
+struct hic_boot_info {
+    uint32_t magic;           // 0x48 0x49 0x4B 0x21 ("HIC!")
     uint32_t version;         // 结构版本
     uint64_t flags;           // 特性标志位
     
@@ -140,7 +140,7 @@ struct memory_map_entry {
 ### 5.1 文件头结构
 ```
 偏移量   大小    描述
-0x00     4      魔数 "HIK_IMG"
+0x00     4      魔数 "HIC_IMG"
 0x04     2      架构ID (1=x86_64)
 0x06     2      版本 (主版本.次版本)
 0x08     8      入口点偏移
@@ -217,9 +217,9 @@ struct segment_entry {
 ```
 
 ### 8.2 输出文件
-- **UEFI**：`bootx64.efi`（引导加载程序） + `kernel.hik`（内核）
+- **UEFI**：`bootx64.efi`（引导加载程序） + `kernel.hic`（内核）
 - **BIOS**：`boot.bin`（引导扇区） + `loader.bin`（第二阶段）
-- **ISO映像**：`hik-x86_64.iso`（用于虚拟机测试）
+- **ISO映像**：`hic-x86_64.iso`（用于虚拟机测试）
 
 ## 九、测试与验证
 

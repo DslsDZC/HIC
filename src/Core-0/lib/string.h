@@ -1,15 +1,15 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核字符串库
+ * HIC内核字符串库
  */
 
-#ifndef HIK_LIB_STRING_H
-#define HIK_LIB_STRING_H
+#ifndef HIC_LIB_STRING_H
+#define HIC_LIB_STRING_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -46,4 +46,4 @@ void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 void *memset(void *s, int c, size_t n);
 
-#endif /* HIK_LIB_STRING_H */
+#endif /* HIC_LIB_STRING_H */

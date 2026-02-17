@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-HIK系统构建系统 - 图形化GUI模式
+HIC系统构建系统 - 图形化GUI模式
 使用GTK3库实现图形用户界面
 遵循TD/滚动更新.md文档
 """
@@ -24,7 +24,7 @@ except ImportError:
     sys.exit(1)
 
 # 项目信息
-PROJECT = "HIK System"
+PROJECT = "HIC System"
 VERSION = "0.1.0"
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR = os.path.join(ROOT_DIR, "build")
@@ -36,7 +36,7 @@ class BuildConfigDialog(Gtk.Dialog):
     
     def __init__(self, parent, build_system):
         super().__init__(
-            title="HIK内核配置",
+            title="HIC内核配置",
             transient_for=parent,
             flags=0
         )
@@ -74,7 +74,7 @@ class BuildConfigDialog(Gtk.Dialog):
         welcome_box.set_margin_end(10)
         
         welcome_label = Gtk.Label()
-        welcome_label.set_markup("<b>🎯 欢迎使用HIK内核配置工具</b>")
+        welcome_label.set_markup("<b>🎯 欢迎使用HIC内核配置工具</b>")
         welcome_label.set_halign(Gtk.Align.START)
         welcome_box.pack_start(welcome_label, False, False, 0)
         
@@ -937,7 +937,7 @@ class BuildWindow(Gtk.Window):
             flags=0,
             message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.OK,
-            text="HIK系统构建系统帮助"
+            text="HIC系统构建系统帮助"
         )
         help_dialog.format_secondary_text(
             "命令行模式: make 或 make console\n"

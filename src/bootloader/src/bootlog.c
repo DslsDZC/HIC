@@ -1,5 +1,5 @@
 /**
- * HIK引导程序日志系统实现
+ * HIC引导程序日志系统实现
  */
 
 #include "bootlog.h"

@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK ARM64架构特定HAL实现
+ * HIC ARM64架构特定HAL实现
  * 
  * 本文件提供ARM64架构的HAL接口实现
  * 架构无关代码通过hal.c调用这些函数

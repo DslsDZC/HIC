@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK监控服务实现（完整版）
+ * HIC监控服务实现（完整版）
  */
 
 #include "monitor.h"
@@ -96,10 +96,10 @@ service_info_t* monitor_get_service_info(domain_id_t domain)
 }
 
 /* 重启服务（完整实现） */
-hik_status_t monitor_restart_service(domain_id_t domain)
+hic_status_t monitor_restart_service(domain_id_t domain)
 {
     if (domain >= MAX_SERVICES) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     service_info_t* service = &g_services[domain];
@@ -124,7 +124,7 @@ hik_status_t monitor_restart_service(domain_id_t domain)
     
     console_puts("[MONITOR] Service restarted successfully\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 获取系统统计（完整实现） */
@@ -171,7 +171,7 @@ void monitor_service_loop(void)
             /* 审计日志快满了，通知管理员 */
             monitor_event_t event;
             event.type = MONITOR_EVENT_AUDIT_LOG_FULL;
-            event.domain = HIK_DOMAIN_CORE;
+            event.domain = HIC_DOMAIN_CORE;
             event.timestamp = hal_get_timestamp();
             monitor_report_event(&event);
         }

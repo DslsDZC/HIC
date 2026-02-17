@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-本文档提供了 HIK 开发和使用的最佳实践建议。
+本文档提供了 HIC 开发和使用的最佳实践建议。
 
 ## 开发最佳实践
 
@@ -23,8 +23,8 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ```c
 // 检查返回值
-hik_status_t status = some_function();
-if (status != HIK_SUCCESS) {
+hic_status_t status = some_function();
+if (status != HIC_SUCCESS) {
     log_error("Function failed: %d", status);
     return status;
 }
@@ -32,7 +32,7 @@ if (status != HIK_SUCCESS) {
 // 检查指针
 if (ptr == NULL) {
     log_error("Null pointer");
-    return HIK_ERROR_INVALID;
+    return HIC_ERROR_INVALID;
 }
 ```
 
@@ -42,7 +42,7 @@ if (ptr == NULL) {
 // 分配后立即检查
 u8 *buffer = kmalloc(size);
 if (buffer == NULL) {
-    return HIK_ERROR_NO_MEMORY;
+    return HIC_ERROR_NO_MEMORY;
 }
 
 // 使用后立即释放
@@ -50,18 +50,27 @@ kfree(buffer);
 buffer = NULL;  // 防止悬空指针
 ```
 
-### 并发安全
+### 并发安全（无锁设计）
+
+HIC 采用无锁架构设计，不使用传统的锁机制。所有并发操作通过以下方式保证：
 
 ```c
-// 使用锁保护共享数据
-spinlock_lock(&lock);
-shared_data++;
-spinlock_unlock(&lock);
+// 使用原子操作保护共享数据
+atomic_inc_u64(&counter);
 
-// 禁用中断保护关键区域
-u64 flags = irq_save();
+// 禁用中断保护关键区域（单核原子性）
+bool irq_state = atomic_enter_critical();
 critical_section();
-irq_restore(flags);
+atomic_exit_critical(irq_state);
+
+// 使用内存屏障确保内存访问顺序
+atomic_acquire_barrier();  // 读取前
+// ... 读操作 ...
+atomic_release_barrier();  // 写入后
+
+// 使用无锁环形缓冲区进行生产者-消费者通信
+lockfree_ringbuffer_push(&rb, data);
+void* item = lockfree_ringbuffer_pop(&rb);
 ```
 
 ## 性能优化
@@ -114,7 +123,7 @@ data->counter++;
 ```c
 // 验证能力
 if (!cap_check_access(current_domain, cap, CAP_READ)) {
-    return HIK_ERROR_PERMISSION;
+    return HIC_ERROR_PERMISSION;
 }
 
 // 撤销不需要的能力
@@ -126,12 +135,12 @@ cap_revoke(current_domain, temp_cap);
 ```c
 // 验证输入参数
 if (offset >= size) {
-    return HIK_ERROR_INVALID;
+    return HIC_ERROR_INVALID;
 }
 
 // 验证指针
 if (!is_valid_user_pointer(ptr, size)) {
-    return HIK_ERROR_INVALID;
+    return HIC_ERROR_INVALID;
 }
 ```
 
@@ -184,10 +193,10 @@ TEST(test_ipc_communication) {
     int request = 42;
     int response;
     
-    hik_status_t status = ipc_call(d1, endpoint, &request, sizeof(request),
+    hic_status_t status = ipc_call(d1, endpoint, &request, sizeof(request),
                                     &response, sizeof(response));
     
-    ASSERT_EQUAL(status, HIK_SUCCESS);
+    ASSERT_EQUAL(status, HIC_SUCCESS);
     ASSERT_EQUAL(response, 84);
 }
 ```

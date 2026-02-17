@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 提供高效的域间通信（IPC）机制，支持同步和异步通信模式。通过能力系统和域切换，实现安全、高效的通信。
+HIC 提供高效的域间通信（IPC）机制，支持同步和异步通信模式。通过能力系统和域切换，实现安全、高效的通信。
 
 ## IPC 类型
 
@@ -16,12 +16,12 @@ HIK 提供高效的域间通信（IPC）机制，支持同步和异步通信模�
 
 ```c
 // 同步 IPC 调用
-hik_status_t ipc_call_sync(domain_id_t caller, cap_id_t endpoint_cap,
+hic_status_t ipc_call_sync(domain_id_t caller, cap_id_t endpoint_cap,
                           void *request, size_t req_size,
                           void *response, size_t resp_size) {
     // 验证端点能力
     if (!cap_check_access(caller, endpoint_cap, CAP_IPC_CALL)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
     // 获取端点信息
@@ -38,12 +38,12 @@ hik_status_t ipc_call_sync(domain_id_t caller, cap_id_t endpoint_cap,
 
 ```c
 // 异步 IPC 调用
-hik_status_t ipc_call_async(domain_id_t caller, cap_id_t endpoint_cap,
+hic_status_t ipc_call_async(domain_id_t caller, cap_id_t endpoint_cap,
                             void *request, size_t req_size,
                             ipc_callback_t callback) {
     // 验证端点能力
     if (!cap_check_access(caller, endpoint_cap, CAP_IPC_CALL)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
     // 创建异步IPC 请求
@@ -57,7 +57,7 @@ hik_status_t ipc_call_async(domain_id_t caller, cap_id_t endpoint_cap,
     // 加入异步队列
     enqueue_async_request(req);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -67,19 +67,19 @@ hik_status_t ipc_call_async(domain_id_t caller, cap_id_t endpoint_cap,
 
 ```c
 // 创建 IPC 端点
-hik_status_t ipc_create_endpoint(domain_id_t owner, cap_id_t *out) {
+hic_status_t ipc_create_endpoint(domain_id_t owner, cap_id_t *out) {
     // 创建端点能力
     return cap_create_endpoint(owner, owner, out);
 }
 
 // 绑定端点到服务
-hik_status_t ipc_bind_endpoint(cap_id_t endpoint, domain_id_t service) {
+hic_status_t ipc_bind_endpoint(cap_id_t endpoint, domain_id_t service) {
     cap_entry_t *endpoint = &g_cap_table[endpoint];
     
     // 设置目标域
     endpoint->endpoint.target_domain = service;
     
-    return HIK能力: 按照这种极简的格式创建剩余的文档（快速完成）。
+    return HIC能力: 按照这种极简的格式创建剩余的文档（快速完成）。
 ```
 
 ## 共享内存 IPC
@@ -88,22 +88,22 @@ hik_status_t ipc_bind_endpoint(cap_id_t endpoint, domain_id_t service) {
 
 ```c
 // 创建共享内存
-hik_status_t ipc_create_shared_memory(domain_id_t d1, domain_id_t d2,
+hic_status_t ipc_create_shared_memory(domain_id_t d1, domain_id_t d2,
                                         size_t size, cap_id_t *out1, cap_id_t *out2) {
     // 分配共享内存
     phys_addr_t shm_addr;
-    hik_status_t status = pmm_alloc_frames(HIK_DOMAIN_CORE,
+    hic_status_t status = pmm_alloc_frames(HIC_DOMAIN_CORE,
                                            (size + PAGE_SIZE - 1) / PAGE_SIZE,
                                            PAGE_FRAME_SHARED,
                                            &shm_addr);
     
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
     // 为两个域创建共享内存能力
     status = cap_create_memory(d1, shm_addr, size, CAP_READ | CAP_WRITE, out1);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         pmm_free_frames(shm_addr, (size + PAGE_SIZE - 1) / PAGE_SIZE);
         return status;
     }
@@ -138,7 +138,7 @@ typedef struct ipc_msg {
 
 ```c
 // 快速IPC（共享内存）
-hik_status_t fast_ipc_call(cap_id_t endpoint_cap, void *request, 
+hic_status_t fast_ipc_call(cap_id_t endpoint_cap, void *request, 
                             void *response) {
     // 直接访问共享内存，无需拷贝
     ipc_shm_t *shm = get_shared_memory(endpoint_cap);
@@ -155,7 +155,7 @@ hik_status_t fast_ipc_call(cap_id_t endpoint_cap, void *request,
     // 读取响应
     memcpy(response, shm->response_buffer, shm->response_size);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 

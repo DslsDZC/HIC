@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK API 版本管理确保系统调用、能力和模块接口的兼容性和稳定性。通过语义化版本和向后兼容策略，支持长期演进。
+HIC API 版本管理确保系统调用、能力和模块接口的兼容性和稳定性。通过语义化版本和向后兼容策略，支持长期演进。
 
 ## 版本号格式
 
@@ -201,9 +201,9 @@ bool is_syscall_deprecated(u32 syscall_num, version_t current_version) {
 // 获取系统版本
 version_t get_system_version(void) {
     version_t version;
-    version.major = HIK_VERSION_MAJOR;
-    version.minor = HIK_VERSION_MINOR;
-    version.patch = HIK_VERSION_PATCH;
+    version.major = HIC_VERSION_MAJOR;
+    version.minor = HIC_VERSION_MINOR;
+    version.patch = HIC_VERSION_PATCH;
     return version;
 }
 

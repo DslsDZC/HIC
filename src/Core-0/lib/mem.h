@@ -1,15 +1,15 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核内存操作库
+ * HIC内核内存操作库
  */
 
-#ifndef HIK_LIB_MEM_H
-#define HIK_LIB_MEM_H
+#ifndef HIC_LIB_MEM_H
+#define HIC_LIB_MEM_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -34,4 +34,4 @@ uint64_t swap64(uint64_t value);
 uintptr_t align_up(uintptr_t value, uintptr_t alignment);
 uintptr_t align_down(uintptr_t value, uintptr_t alignment);
 
-#endif /* HIK_LIB_MEM_H */
+#endif /* HIC_LIB_MEM_H */

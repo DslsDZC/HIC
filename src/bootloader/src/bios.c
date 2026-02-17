@@ -1,5 +1,5 @@
 /**
- * HIK BIOS Bootloader
+ * HIC BIOS Bootloader
  * 第一引导层：BIOS引导加载程序
  * 
  * 负责：
@@ -38,7 +38,7 @@
 #define BIOS_MEMORY_MAP        0xE820
 
 /* 全局变量 */
-static hik_boot_info_t *g_boot_info = NULL;
+static hic_boot_info_t *g_boot_info = NULL;
 static uint8_t *g_kernel_data = NULL;
 static uint64_t g_kernel_size = 0;
 
@@ -48,12 +48,12 @@ static void bios_init_video(void);
 static void bios_init_memory(void);
 static int bios_load_kernel(const char *path);
 static void bios_prepare_boot_info(void);
-static void bios_get_memory_map(hik_boot_info_t *boot_info);
-static void bios_find_acpi_tables(hik_boot_info_t *boot_info);
-static void bios_get_system_info(hik_boot_info_t *boot_info);
+static void bios_get_memory_map(hic_boot_info_t *boot_info);
+static void bios_find_acpi_tables(hic_boot_info_t *boot_info);
+static void bios_get_system_info(hic_boot_info_t *boot_info);
 static void bios_switch_to_protected_mode(void);
-static void bios_switch_to_long_mode(hik_boot_info_t *boot_info);
-__attribute__((noreturn)) void bios_jump_to_kernel(hik_boot_info_t *boot_info);
+static void bios_switch_to_long_mode(hic_boot_info_t *boot_info);
+__attribute__((noreturn)) void bios_jump_to_kernel(hic_boot_info_t *boot_info);
 static void bios_panic(const char *message);
 
 /**
@@ -65,11 +65,11 @@ void bios_main(void)
     // 初始化BIOS环境
     bios_init();
     
-    log_info("HIK BIOS Bootloader v1.0\n");
+    log_info("HIC BIOS Bootloader v1.0\n");
     log_info("hello world\n");
     
     // 加载内核
-    if (bios_load_kernel("\\HIK\\KERNEL.HIK") != 0) {
+    if (bios_load_kernel("\\HIC\\KERNEL.HIC") != 0) {
         bios_panic("Failed to load kernel");
     }
     
@@ -149,7 +149,7 @@ static void bios_init_memory(void)
 static int bios_load_kernel(const char *path)
 {
     // 使用BIOS INT 0x13从磁盘加载内核
-    // 假设内核文件在第一个硬盘的第一个分区的 /HIK/KERNEL.HIK
+    // 假设内核文件在第一个硬盘的第一个分区的 /HIC/KERNEL.HIC
     
     uint8_t *kernel_base = (uint8_t *)0x100000;  // 1MB处
     uint8_t *load_addr = kernel_base;
@@ -240,7 +240,7 @@ static int bios_load_kernel(const char *path)
     
     if (fat32_find_and_read_file(partition_offset, fat_start, data_start,
                                  sectors_per_cluster, bytes_per_sector,
-                                 root_cluster, "HIKKERNL", 
+                                 root_cluster, "HICKERNL", 
                                  kernel_data, &kernel_size) != 0) {
         log_error("Failed to find kernel file\n");
         return;
@@ -291,7 +291,7 @@ static int bios_load_kernel(const char *path)
     }
     
     // 验证内核映像
-    hik_image_header_t *header = (hik_image_header_t *)kernel_base;
+    hic_image_header_t *header = (hic_image_header_t *)kernel_base;
     
     if (header->magic[0] != 'H' || header->magic[1] != 'I' || 
         header->magic[2] != 'K' || header->magic[3] != '_' ||
@@ -347,7 +347,7 @@ static int bios_load_kernel(const char *path)
     }
     
     // 验证签名
-    if (!hik_image_verify_kernel(kernel_base, header->image_size)) {
+    if (!hic_image_verify_kernel(kernel_base, header->image_size)) {
         log_error("Kernel signature verification failed\n");
         return -1;
     }
@@ -371,14 +371,14 @@ read_error:
 static void bios_prepare_boot_info(void)
 {
     // 分配启动信息结构
-    g_boot_info = (hik_boot_info_t *)0x8000;  // 低内存区域
+    g_boot_info = (hic_boot_info_t *)0x8000;  // 低内存区域
     
     // 清零结构
-    memset(g_boot_info, 0, sizeof(hik_boot_info_t));
+    memset(g_boot_info, 0, sizeof(hic_boot_info_t));
     
     // 填充基本信息
-    g_boot_info->magic = HIK_BOOT_INFO_MAGIC;
-    g_boot_info->version = HIK_BOOT_INFO_VERSION;
+    g_boot_info->magic = HIC_BOOT_INFO_MAGIC;
+    g_boot_info->version = HIC_BOOT_INFO_VERSION;
     g_boot_info->flags = 0;
     g_boot_info->firmware_type = 1;  // BIOS
     
@@ -386,7 +386,7 @@ static void bios_prepare_boot_info(void)
     g_boot_info->firmware.bios.bios_data_area = (void *)0x400;
     
     // 内核信息
-    hik_image_header_t *header = (hik_image_header_t *)g_kernel_data;
+    hic_image_header_t *header = (hic_image_header_t *)g_kernel_data;
     g_boot_info->kernel_base = g_kernel_data;
     g_boot_info->kernel_size = g_kernel_size;
     g_boot_info->entry_point = header->entry_point;
@@ -405,14 +405,14 @@ static void bios_prepare_boot_info(void)
     g_boot_info->stack_top = 0x100000;  // 栈顶在1MB处
     
     // 调试信息
-    g_boot_info->flags |= HIK_BOOT_FLAG_DEBUG_ENABLED;
+    g_boot_info->flags |= HIC_BOOT_FLAG_DEBUG_ENABLED;
     g_boot_info->debug.serial_port = 0x3F8;  // COM1
 }
 
 /**
  * 获取内存映射
  */
-static void bios_get_memory_map(hik_boot_info_t *boot_info)
+static void bios_get_memory_map(hic_boot_info_t *boot_info)
 {
     // 使用BIOS INT 0x15, EAX=0xE820获取内存映射
     
@@ -468,37 +468,37 @@ static void bios_get_memory_map(hik_boot_info_t *boot_info)
         
     } while (1);
     
-    // 转换为HIK格式
-    hik_mem_entry_t *hik_map = (hik_mem_entry_t *)0x8000;
+    // 转换为HIC格式
+    hic_mem_entry_t *hic_map = (hic_mem_entry_t *)0x8000;
     
     uint64_t total_memory = 0;
     uint64_t usable_memory = 0;
     
     for (uint32_t i = 0; i < entry_count; i++) {
-        hik_map[i].base = bios_map[i].base;
-        hik_map[i].length = bios_map[i].length;
-        hik_map[i].flags = 0;
+        hic_map[i].base = bios_map[i].base;
+        hic_map[i].length = bios_map[i].length;
+        hic_map[i].flags = 0;
         
         // 转换类型
         switch (bios_map[i].type) {
             case 1:  // 可用内存
-                hik_map[i].type = HIK_MEM_TYPE_USABLE;
+                hic_map[i].type = HIC_MEM_TYPE_USABLE;
                 usable_memory += bios_map[i].length;
                 break;
             case 2:  // 保留内存
-                hik_map[i].type = HIK_MEM_TYPE_RESERVED;
+                hic_map[i].type = HIC_MEM_TYPE_RESERVED;
                 break;
             case 3:  // ACPI可回收
-                hik_map[i].type = HIK_MEM_TYPE_ACPI;
+                hic_map[i].type = HIC_MEM_TYPE_ACPI;
                 break;
             case 4:  // ACPI NVS
-                hik_map[i].type = HIK_MEM_TYPE_NVS;
+                hic_map[i].type = HIC_MEM_TYPE_NVS;
                 break;
             case 5:  // 不可用内存
-                hik_map[i].type = HIK_MEM_TYPE_UNUSABLE;
+                hic_map[i].type = HIC_MEM_TYPE_UNUSABLE;
                 break;
             default:
-                hik_map[i].type = HIK_MEM_TYPE_RESERVED;
+                hic_map[i].type = HIC_MEM_TYPE_RESERVED;
                 break;
         }
         
@@ -511,10 +511,10 @@ static void bios_get_memory_map(hik_boot_info_t *boot_info)
                 bios_map[i].type);
     }
     
-    boot_info->mem_map = hik_map;
+    boot_info->mem_map = hic_map;
     boot_info->mem_map_entry_count = entry_count;
-    boot_info->mem_map_size = entry_count * sizeof(hik_mem_entry_t);
-    boot_info->mem_map_desc_size = sizeof(hik_mem_entry_t);
+    boot_info->mem_map_size = entry_count * sizeof(hic_mem_entry_t);
+    boot_info->mem_map_desc_size = sizeof(hic_mem_entry_t);
     
     log_info("Found %lu memory map entries\n", entry_count);
     log_info("Total memory: %lu MB, Usable: %lu MB\n",
@@ -531,7 +531,7 @@ map_error:
 /**
  * 查找ACPI表
  */
-static void bios_find_acpi_tables(hik_boot_info_t *boot_info)
+static void bios_find_acpi_tables(hic_boot_info_t *boot_info)
 {
     // 在EBDA区域和BIOS区域搜索RSDP
     // RSDP签名: "RSD PTR "
@@ -570,7 +570,7 @@ static void bios_find_acpi_tables(hik_boot_info_t *boot_info)
             
             if (checksum == 0) {
                 boot_info->rsdp = (void *)p;
-                boot_info->flags |= HIK_BOOT_FLAG_ACPI_ENABLED;
+                boot_info->flags |= HIC_BOOT_FLAG_ACPI_ENABLED;
                 
                 // 检查是否是ACPI 2.0
                 if (p[15] >= 2) {
@@ -601,7 +601,7 @@ static void bios_find_acpi_tables(hik_boot_info_t *boot_info)
             
             if (checksum == 0) {
                 boot_info->rsdp = (void *)p;
-                boot_info->flags |= HIK_BOOT_FLAG_ACPI_ENABLED;
+                boot_info->flags |= HIC_BOOT_FLAG_ACPI_ENABLED;
                 
                 if (p[15] >= 2) {
                     boot_info->xsdp = (void *)p;
@@ -615,13 +615,13 @@ static void bios_find_acpi_tables(hik_boot_info_t *boot_info)
     }
     
     log_warning("ACPI RSDP not found\n");
-    boot_info->flags &= ~HIK_BOOT_FLAG_ACPI_ENABLED;
+    boot_info->flags &= ~HIC_BOOT_FLAG_ACPI_ENABLED;
 }
 
 /**
  * 获取系统信息
  */
-static void bios_get_system_info(hik_boot_info_t *boot_info)
+static void bios_get_system_info(hic_boot_info_t *boot_info)
 {
     // 使用BIOS INT 0x15获取内存大小
     
@@ -731,7 +731,7 @@ static void bios_get_system_info(hik_boot_info_t *boot_info)
         }
     }
     
-    boot_info->system.architecture = HIK_ARCH_X86_64;
+    boot_info->system.architecture = HIC_ARCH_X86_64;
     boot_info->system.platform_type = 2;  // BIOS
     
     log_info("System: %u MB memory, %u CPU(s)\n",
@@ -814,7 +814,7 @@ static void protected_mode_entry(void)
 /**
  * 切换到长模式
  */
-static void bios_switch_to_long_mode(hik_boot_info_t *boot_info)
+static void bios_switch_to_long_mode(hic_boot_info_t *boot_info)
 {
     log_info("Switching to long mode...\n");
     
@@ -937,9 +937,9 @@ static void long_mode_entry(void)
  * 跳转到内核
  */
 __attribute__((noreturn))
-static void bios_jump_to_kernel(hik_boot_info_t *boot_info)
+static void bios_jump_to_kernel(hic_boot_info_t *boot_info)
 {
-    typedef void (*kernel_entry_t)(hik_boot_info_t *);
+    typedef void (*kernel_entry_t)(hic_boot_info_t *);
     kernel_entry_t kernel_entry = (kernel_entry_t)boot_info->entry_point;
     
     // 设置栈

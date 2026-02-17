@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK示例Privileged-1服务
+ * HIC示例Privileged-1服务
  * 演示如何创建和实现一个Privileged-1服务
  *
  * 此示例实现一个简单的回显服务，接收消息并返回
@@ -43,11 +43,11 @@ typedef struct service_message {
  * 返回：
  *   处理结果
  */
-static hik_status_t echo_handler(service_message_t *msg, 
+static hic_status_t echo_handler(service_message_t *msg, 
                                   service_message_t *response)
 {
     if (!msg || !response) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     console_puts("[ECHO-SVC] Received message type: ");
@@ -75,10 +75,10 @@ static hik_status_t echo_handler(service_message_t *msg,
         default:
             response->type = 0xFF;  /* 错误响应 */
             response->length = 0;
-            return HIK_ERROR_INVALID_PARAM;
+            return HIC_ERROR_INVALID_PARAM;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
@@ -86,7 +86,7 @@ static hik_status_t echo_handler(service_message_t *msg,
  * 
  * 功能：执行简单的计算任务，测试性能
  */
-static hik_status_t perf_handler(service_message_t *msg,
+static hic_status_t perf_handler(service_message_t *msg,
                                   service_message_t *response)
 {
     u64 start = hal_get_timestamp();
@@ -109,7 +109,7 @@ static hik_status_t perf_handler(service_message_t *msg,
     console_putu(elapsed);
     console_puts(" ns\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* ============================================================
@@ -124,13 +124,13 @@ static hik_status_t perf_handler(service_message_t *msg,
  * 返回：
  *   初始化状态
  */
-hik_status_t service_init(void)
+hic_status_t service_init(void)
 {
     console_puts("[ECHO-SVC] Initializing...\n");
     
     /* 注册端点 */
     cap_id_t echo_cap;
-    hik_status_t status = privileged_service_register_endpoint(
+    hic_status_t status = privileged_service_register_endpoint(
         0,  /* domain_id由Core-0设置 */
         "echo_endpoint",
         (virt_addr_t)echo_handler,
@@ -138,7 +138,7 @@ hik_status_t service_init(void)
         &echo_cap
     );
     
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         console_puts("[ECHO-SVC] Failed to register echo endpoint\n");
         return status;
     }
@@ -153,13 +153,13 @@ hik_status_t service_init(void)
         &perf_cap
     );
     
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         console_puts("[ECHO-SVC] Failed to register perf endpoint\n");
         return status;
     }
     
     console_puts("[ECHO-SVC] Service initialized successfully\n");
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
@@ -167,10 +167,10 @@ hik_status_t service_init(void)
  * 
  * 当服务被启动时，Core-0会调用此函数
  */
-hik_status_t service_start(void)
+hic_status_t service_start(void)
 {
     console_puts("[ECHO-SVC] Service started\n");
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
@@ -178,10 +178,10 @@ hik_status_t service_start(void)
  * 
  * 当服务被停止时，Core-0会调用此函数
  */
-hik_status_t service_stop(void)
+hic_status_t service_stop(void)
 {
     console_puts("[ECHO-SVC] Service stopped\n");
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
@@ -189,10 +189,10 @@ hik_status_t service_stop(void)
  * 
  * 当服务被卸载时，Core-0会调用此函数
  */
-hik_status_t service_cleanup(void)
+hic_status_t service_cleanup(void)
 {
     console_puts("[ECHO-SVC] Service cleanup\n");
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* ============================================================
@@ -222,8 +222,8 @@ void irq_handler(u32 irq_vector)
  * ============================================================ */
 
 /* 模块头部（由构建系统生成） */
-typedef struct hikmod_header {
-    u32    magic;           /* 魔数：0x48494B4D ('HIKM') */
+typedef struct hicmod_header {
+    u32    magic;           /* 魔数：0x48494B4D ('HICM') */
     u32    version;         /* 版本 */
     u64    code_size;       /* 代码段大小 */
     u64    data_size;       /* 数据段大小 */
@@ -232,10 +232,10 @@ typedef struct hikmod_header {
     char   service_name[64];/* 服务名称 */
     char   service_uuid[37];/* 服务UUID */
     u32    service_type;    /* 服务类型 */
-} hikmod_header_t;
+} hicmod_header_t;
 
 /* 模块头部示例 */
-static const hikmod_header_t g_module_header = {
+static const hicmod_header_t g_module_header = {
     .magic = 0x48494B4D,
     .version = 0x00010000,  /* v1.0.0 */
     .code_size = 0x4000,    /* 16KB */
@@ -249,10 +249,10 @@ static const hikmod_header_t g_module_header = {
 
 /* 服务函数表（由Core-0调用） */
 typedef struct service_functions {
-    hik_status_t (*init)(void);
-    hik_status_t (*start)(void);
-    hik_status_t (*stop)(void);
-    hik_status_t (*cleanup)(void);
+    hic_status_t (*init)(void);
+    hic_status_t (*start)(void);
+    hic_status_t (*stop)(void);
+    hic_status_t (*cleanup)(void);
     void (*irq_handler)(u32);
 } service_functions_t;
 
@@ -266,7 +266,7 @@ static const service_functions_t g_service_funcs = {
 };
 
 /* 导出符号（用于模块加载器） */
-const hikmod_header_t* g_module_header_ptr = &g_module_header;
+const hicmod_header_t* g_module_header_ptr = &g_module_header;
 const service_functions_t* g_service_funcs_ptr = &g_service_funcs;
 
 /* ============================================================

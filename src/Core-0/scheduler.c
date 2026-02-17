@@ -1,29 +1,42 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK调度器实现
+ * HIC调度器实现（无锁设计）
  * 遵循三层模型文档第2.1节：执行控制与调度
+ * 
+ * 无锁设计原则：
+ * 1. 使用禁用中断保证调度操作的原子性
+ * 2. 就绪队列在临界区内修改
+ * 3. 当前线程指针只在中断上下文中修改
  */
 
 #include "thread.h"
 #include "types.h"
 #include "formal_verification.h"
+#include "atomic.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
-/* 当前运行的线程 */
+/* 当前运行的线程（原子操作保护） */
 thread_t *g_current_thread = NULL;
 
 /* 全局线程表 */
 thread_t g_threads[MAX_THREADS] = {0};
 
-/* 就绪队列（按优先级） */
-static thread_t *ready_queues[5];  /* 5个优先级 */
-static u64 runqueue_counts[5];
+/* 就绪队列（无锁设计 - 使用数组+索引） */
+#define MAX_READY_THREADS 64
+typedef struct {
+    thread_id_t threads[MAX_READY_THREADS];
+    volatile u32 head;
+    volatile u32 tail;
+    volatile u32 count;
+} ready_queue_t;
+
+static ready_queue_t ready_queues[5];  /* 5个优先级 */
 
 /* 空闲线程 */
 thread_t idle_thread;
@@ -32,8 +45,10 @@ thread_t idle_thread;
 void scheduler_init(void)
 {
     for (int i = 0; i < 5; i++) {
-        ready_queues[i] = NULL;
-        runqueue_counts[i] = 0;
+        ready_queues[i].head = 0;
+        ready_queues[i].tail = 0;
+        ready_queues[i].count = 0;
+        memzero((void*)ready_queues[i].threads, sizeof(ready_queues[i].threads));
     }
     
     g_current_thread = NULL;
@@ -42,36 +57,34 @@ void scheduler_init(void)
     memzero(&idle_thread, sizeof(thread_t));
     idle_thread.thread_id = 0xFFFFFFFF;
     idle_thread.state = THREAD_STATE_READY;
-    idle_thread.priority = HIK_PRIORITY_IDLE;
+    idle_thread.priority = HIC_PRIORITY_IDLE;
     
-    console_puts("[SCHED] Scheduler initialized\n");
+    console_puts("[SCHED] Scheduler initialized (lock-free)\n");
 }
 
-/* 添加线程到就绪队列 */
+/* 添加线程到就绪队列（无锁实现） */
 static void enqueue_thread(thread_t *thread)
 {
     if (thread == NULL || thread->priority > 4) {
         return;
     }
     
-    /* 添加到队列尾部 */
-    thread->next = NULL;
-    thread->prev = NULL;
+    ready_queue_t *queue = &ready_queues[thread->priority];
     
-    thread_t **queue = &ready_queues[thread->priority];
-    
-    if (*queue == NULL) {
-        *queue = thread;
-    } else {
-        thread_t *last = *queue;
-        while (last->next != NULL) {
-            last = last->next;
-        }
-        last->next = thread;
-        thread->prev = last;
+    /* 检查队列是否已满 */
+    if (queue->count >= MAX_READY_THREADS) {
+        console_puts("[SCHED] ERROR: Ready queue full for priority ");
+        console_putu64(thread->priority);
+        console_puts("\n");
+        return;
     }
     
-    runqueue_counts[thread->priority]++;
+    /* 添加到队列尾部 */
+    u32 tail = queue->tail;
+    queue->threads[tail] = thread->thread_id;
+    queue->tail = (tail + 1) % MAX_READY_THREADS;
+    queue->count++;
+    
     thread->state = THREAD_STATE_READY;
 }
 
@@ -82,43 +95,41 @@ __attribute__((unused)) static void dequeue_thread(thread_t *thread)
         return;
     }
     
-    if (thread->prev != NULL) {
-        thread->prev->next = thread->next;
-    } else {
-        /* 队列头 */
-        ready_queues[thread->priority] = thread->next;
+    ready_queue_t *queue = &ready_queues[thread->priority];
+    
+    if (queue->head == queue->tail) {
+        /* 队列为空 */
+        return;
     }
     
-    if (thread->next != NULL) {
-        thread->next->prev = thread->prev;
-    }
-    
-    runqueue_counts[thread->priority]--;
-    thread->next = NULL;
-    thread->prev = NULL;
+    queue->head = (queue->head + 1) % MAX_READY_THREADS;
+    queue->count--;
 }
 
-/* 选择下一个线程 */
+/* 选择下一个线程（无锁实现） */
 static thread_t *pick_next_thread(void)
 {
     /* 从高优先级到低优先级查找 */
     for (int prio = 4; prio >= 0; prio--) {
-        if (ready_queues[prio] != NULL) {
-            thread_t *thread = ready_queues[prio];
-            /* 移到队列尾部（轮转） */
-            ready_queues[prio] = thread->next;
-            if (thread->next != NULL) {
-                thread->next->prev = NULL;
-            }
+        ready_queue_t *queue = &ready_queues[prio];
+        
+        if (queue->count > 0) {
+            /* 取出队列头部 */
+            u32 head = queue->head;
+            thread_id_t tid = queue->threads[head];
+            queue->head = (head + 1) % MAX_READY_THREADS;
+            queue->count--;
             
-            /* 添加到尾部 */
-            thread_t **tail = &ready_queues[prio];
-            while (*tail != NULL) {
-                tail = &(*tail)->next;
+            /* 获取线程指针 */
+            thread_t *thread = &g_threads[tid];
+            
+            /* 轮转调度：如果队列中还有线程，将其重新加入尾部 */
+            if (queue->count > 0) {
+                u32 tail = queue->tail;
+                queue->threads[tail] = tid;
+                queue->tail = (tail + 1) % MAX_READY_THREADS;
+                queue->count++;
             }
-            *tail = thread;
-            thread->prev = *tail;
-            thread->next = NULL;
             
             return thread;
         }
@@ -131,13 +142,18 @@ static thread_t *pick_next_thread(void)
 /* 上下文切换（架构无关） */
 extern void context_switch(thread_t *prev, thread_t *next);
 
-/* 主调度函数 */
+/* 主调度函数（无锁实现） */
 void schedule(void)
 {
-    thread_t *prev = g_current_thread;
+    /* 进入临界区（禁用中断保证原子性） */
+    bool irq_state = atomic_enter_critical();
+    
+    thread_t *prev = (thread_t*)g_current_thread;
     thread_t *next = pick_next_thread();
     
     if (next == prev) {
+        /* 退出临界区 */
+        atomic_exit_critical(irq_state);
         return;  /* 不需要切换 */
     }
     
@@ -151,7 +167,11 @@ void schedule(void)
     next->state = THREAD_STATE_RUNNING;
     next->last_run_time = hal_get_timestamp();  /* 使用HAL接口 */
     
+    /* 原子更新当前线程指针 */
     g_current_thread = next;
+    
+    /* 退出临界区 */
+    atomic_exit_critical(irq_state);
     
     /* 调用形式化验证 */
     if (fv_check_all_invariants() != FV_SUCCESS) {
@@ -166,14 +186,21 @@ void schedule(void)
 thread_id_t scheduler_pick_next(void)
 {
     /* 按优先级从高到低查找就绪线程 */
-    for (int prio = HIK_PRIORITY_REALTIME; prio >= HIK_PRIORITY_IDLE; prio--) {
-        thread_t *thread = ready_queues[prio];
+    for (int prio = HIC_PRIORITY_REALTIME; prio >= HIC_PRIORITY_IDLE; prio--) {
+        ready_queue_t *queue = &ready_queues[prio];
         
-        while (thread != NULL) {
-            if (thread->state == THREAD_STATE_READY && thread->domain_id != HIK_DOMAIN_CORE) {
-                return thread->thread_id;
+        if (queue->count == 0) {
+            continue;
+        }
+        
+        for (u32 i = queue->head; i != queue->tail; i = (i + 1) % MAX_READY_THREADS) {
+            thread_id_t thread_id = queue->threads[i];
+            if (thread_id != 0 && thread_id < MAX_THREADS) {
+                thread_t *thread = &g_threads[thread_id];
+                if (thread->state == THREAD_STATE_READY && thread->domain_id != HIC_DOMAIN_CORE) {
+                    return thread->thread_id;
+                }
             }
-            thread = thread->next;
         }
     }
     
@@ -210,15 +237,15 @@ void thread_yield(void)
 }
 
 /* 阻塞线程 */
-hik_status_t thread_block(thread_id_t thread_id) {
+hic_status_t thread_block(thread_id_t thread_id) {
     if (thread_id >= MAX_THREADS) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     thread_t* thread = &g_threads[thread_id];
     
     if (thread == NULL) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 从就绪队列中移除 */
@@ -236,23 +263,23 @@ hik_status_t thread_block(thread_id_t thread_id) {
         schedule();
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 唤醒线程 */
-hik_status_t thread_wakeup(thread_id_t thread_id) {
+hic_status_t thread_wakeup(thread_id_t thread_id) {
     if (thread_id >= MAX_THREADS) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     thread_t* thread = &g_threads[thread_id];
     
     if (thread == NULL) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     if (thread->state != THREAD_STATE_BLOCKED) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 重置时间片 */
@@ -266,7 +293,7 @@ hik_status_t thread_wakeup(thread_id_t thread_id) {
     console_putu64(thread_id);
     console_puts("\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 检查线程超时 */

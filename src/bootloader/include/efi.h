@@ -1,10 +1,10 @@
 /**
- * HIK UEFI Bootloader - EFI Interface Header
+ * HIC UEFI Bootloader - EFI Interface Header
  * 完整的EFI接口定义
  */
 
-#ifndef HIK_BOOTLOADER_EFI_H
-#define HIK_BOOTLOADER_EFI_H
+#ifndef HIC_BOOTLOADER_EFI_H
+#define HIC_BOOTLOADER_EFI_H
 
 // 基础类型
 typedef unsigned char uint8_t;
@@ -454,4 +454,4 @@ extern EFI_GUID gEfiFileInfoGuid;
 extern EFI_GUID gEfiAcpi20TableGuid;
 extern EFI_GUID gEfiAcpiTableGuid;
 
-#endif // HIK_BOOTLOADER_EFI_H
+#endif // HIC_BOOTLOADER_EFI_H

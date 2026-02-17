@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 审计日志系统提供完整的系统操作记录，用于安全审计、故障诊断和合规性验证。系统记录 30 种不同类型的审计事件，确保所有关键操作都可追溯。
+HIC 审计日志系统提供完整的系统操作记录，用于安全审计、故障诊断和合规性验证。系统记录 30 种不同类型的审计事件，确保所有关键操作都可追溯。
 
 ## 设计目标
 
@@ -278,7 +278,7 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
 void audit_system_init(u64 buffer_size) {
     // 分配审计缓冲区
     g_audit_buffer.entries = (audit_entry_t *)pmm_alloc_frames(
-        HIK_DOMAIN_CORE,
+        HIC_DOMAIN_CORE,
         (buffer_size + PAGE_SIZE - 1) / PAGE_SIZE,
         PAGE_FRAME_CORE,
         NULL

@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 构建系统
 
-HIK提供多种构建方式，满足不同场景的需求。
+HIC提供多种构建方式，满足不同场景的需求。
 
 ## 构建方式概览
 
@@ -192,7 +192,7 @@ export OUTPUT_DIR=output
 
 ```makefile
 # 项目信息
-PROJECT = hik-kernel
+PROJECT = hic-kernel
 VERSION = 0.1.0
 
 # 编译器配置
@@ -242,7 +242,7 @@ security:
 output/
 ├── bootx64.efi         # UEFI引导程序
 ├── bios.bin            # BIOS引导程序
-├── hik-kernel.bin      # 内核映像
+├── hic-kernel.bin      # 内核映像
 └── build.log           # 构建日志
 ```
 
@@ -252,7 +252,7 @@ output/
 |------|------|------|
 | `bootx64.efi` | UEFI引导程序 | PE32+ |
 | `bios.bin` | BIOS引导程序 | 二进制 |
-| `hik-kernel.bin` | 内核映像 | 二进制 |
+| `hic-kernel.bin` | 内核映像 | 二进制 |
 | `build.log` | 构建日志 | 文本 |
 
 ## 并行构建
@@ -377,7 +377,7 @@ export CCACHE_MAXSIZE=5G
 ### GitHub Actions示例
 
 ```yaml
-name: Build HIK
+name: Build HIC
 
 on: [push, pull_request]
 
@@ -397,7 +397,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: hik-build
+          name: hic-build
           path: output/
 ```
 

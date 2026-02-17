@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-Application-3 层是 HIK 三层特权架构的最外层，为用户应用程序提供运行环境。这一层运行在最低特权级别（Ring 3），通过能力系统和系统调用与内核通信。
+Application-3 层是 HIC 三层特权架构的最外层，为用户应用程序提供运行环境。这一层运行在最低特权级别（Ring 3），通过能力系统和系统调用与内核通信。
 
 ## 设计目标
 
@@ -65,22 +65,22 @@ typedef struct domain {
 
 ```c
 // 文件操作
-hik_status_t sys_open(const char *path, int flags, cap_id_t *out);
-hik_status_t sys_close(cap_id_t fd);
+hic_status_t sys_open(const char *path, int flags, cap_id_t *out);
+hic_status_t sys_close(cap_id_t fd);
 ssize_t sys_read(cap_id_t fd, void *buf, size_t count);
 ssize_t sys_write(cap_id_t fd, const void *buf, size_t count);
 
 // 内存操作
 void *sys_mmap(size_t size, cap_rights_t prot);
-hik_status_t sys_munmap(void *addr, size_t size);
+hic_status_t sys_munmap(void *addr, size_t size);
 
 // 线程操作
-hik_status_t sys_thread_create(void (*func)(void *), void *arg, thread_id_t *out);
-hik_status_t sys_thread_join(thread_id_t thread);
+hic_status_t sys_thread_create(void (*func)(void *), void *arg, thread_id_t *out);
+hic_status_t sys_thread_join(thread_id_t thread);
 void sys_thread_exit(int status);
 
 // IPC 操作
-hik_status_t sys_ipc_call(cap_id_t endpoint, void *req, size_t req_size, 
+hic_status_t sys_ipc_call(cap_id_t endpoint, void *req, size_t req_size, 
                            void *resp, size_t resp_size);
 ```
 
@@ -88,13 +88,13 @@ hik_status_t sys_ipc_call(cap_id_t endpoint, void *req, size_t req_size,
 
 ```c
 // 能力操作
-hik_status_t sys_cap_transfer(domain_id_t to, cap_id_t cap);
-hik_status_t sys_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out);
-hik_status_t sys_cap_revoke(cap_id_t cap);
+hic_status_t sys_cap_transfer(domain_id_t to, cap_id_t cap);
+hic_status_t sys_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out);
+hic_status_t sys_cap_revoke(cap_id_t cap);
 
 // 端点操作
-hik_status_t sys_endpoint_create(cap_id_t *out);
-hik_status_t sys_endpoint_bind(cap_id_t endpoint, cap_id_t service);
+hic_status_t sys_endpoint_create(cap_id_t *out);
+hic_status_t sys_endpoint_bind(cap_id_t endpoint, cap_id_t service);
 ```
 
 ## 应用生命周期
@@ -111,7 +111,7 @@ domain_quota_t app_quota = {
 };
 
 domain_id_t app_domain;
-domain_create(DOMAIN_TYPE_APPLICATION, HIK_DOMAIN_CORE, 
+domain_create(DOMAIN_TYPE_APPLICATION, HIC_DOMAIN_CORE, 
               &app_quota, &app_domain);
 
 // 加载应用代码
@@ -181,12 +181,12 @@ void exit(int status) {
 所有系统调用都进行能力验证：
 
 ```c
-hik_status_t sys_open(const char *path, int flags, cap_id_t *out) {
+hic_status_t sys_open(const char *path, int flags, cap_id_t *out) {
     domain_id_t caller = get_current_domain();
     
     // 验证路径权限
     if (!check_path_permission(caller, path, flags)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
     // 创建文件能力
@@ -199,23 +199,23 @@ hik_status_t sys_open(const char *path, int flags, cap_id_t *out) {
 严格遵守域配额：
 
 ```c
-hik_status_t sys_mmap(size_t size, cap_rights_t prot) {
+hic_status_t sys_mmap(size_t size, cap_rights_t prot) {
     domain_id_t caller = get_current_domain();
     domain_t *domain = get_domain(caller);
     
     // 检查内存配额
     if (domain->usage.memory_used + size > domain->quota.max_memory) {
-        return HIK_ERROR_QUOTA_EXCEEDED;
+        return HIC_ERROR_QUOTA_EXCEEDED;
     }
     
     // 分配内存
     phys_addr_t addr;
-    hik_status_t status = pmm_alloc_frames(caller, 
+    hic_status_t status = pmm_alloc_frames(caller, 
                                            (size + PAGE_SIZE - 1) / PAGE_SIZE,
                                            PAGE_FRAME_APPLICATION, 
                                            &addr);
     
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         domain->usage.memory_used += size;
     }
     
@@ -237,7 +237,7 @@ hik_status_t sys_mmap(size_t size, cap_rights_t prot) {
 
 ```
 传统系统调用: 中断 → 上下文切换 → 内核 → 系统调用 → 上下文切换 → 返回
-HIK 系统调用:  快速指令 → 能力检查 → 直接操作 → 快速返回
+HIC 系统调用:  快速指令 → 能力检查 → 直接操作 → 快速返回
 ```
 
 ### 批量操作
@@ -260,7 +260,7 @@ ssize_t sys_writev(cap_id_t fd, const struct iovec *iov, int iovcnt);
 ### 应用模板
 
 ```c
-#include "hik.h"
+#include "hic.h"
 
 int main(int argc, char *argv[]) {
     printf("Hello from Application-3!\n");
@@ -284,10 +284,10 @@ int main(int argc, char *argv[]) {
 
 ```bash
 # 编译应用
-hik-gcc -o app main.c
+hic-gcc -o app main.c
 
 # 运行应用
-hik-run ./app args...
+hic-run ./app args...
 ```
 
 ## 标准 API
@@ -327,7 +327,7 @@ void _start(void) {
     char **argv;
     
     // 获取参数
-    __hik_get_args(&argc, &argv);
+    __hic_get_args(&argc, &argv);
     
     // 调用 main
     int result = main(argc, argv);
@@ -341,9 +341,9 @@ void _start(void) {
 
 支持其他运行时：
 
-- Python: 通过 FFI 调用 HIK API
-- Rust: 使用 HIK 绑定
-- Go: 使用 cgo 调用 HIK API
+- Python: 通过 FFI 调用 HIC API
+- Rust: 使用 HIC 绑定
+- Go: 使用 cgo 调用 HIC API
 
 ## 最佳实践
 

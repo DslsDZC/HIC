@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核核心入口点
+ * HIC内核核心入口点
  * 遵循三层模型文档：Core-0层作为系统仲裁者
  */
 
@@ -30,7 +30,7 @@ typedef struct {
     u64 num_cpus;
 } kernel_info_t;
 
-#define HIK_KERNEL_MAGIC 0x48494B4E /* "HIKN" */
+#define HIC_KERNEL_MAGIC 0x48494B4E /* "HICN" */
 
 /**
  * 内核主入口点
@@ -38,13 +38,13 @@ typedef struct {
  */
 void kernel_main(kernel_info_t *info)
 {
-    if (info->magic != HIK_KERNEL_MAGIC) {
+    if (info->magic != HIC_KERNEL_MAGIC) {
         console_puts("ERROR: Invalid kernel info magic\n");
         return;
     }
     
-    console_puts("HIK Kernel (Core-0) v0.1\n");
-    console_puts("Initializing Hierarchical Isolation Kernel...\n");
+    console_puts("HIC Kernel (Core-0) v0.1\n");
+    console_puts("Initializing Hierarchical Isolation Core...\n");
     
     /* 0. 初始化运行时配置系统（必须在最前面） */
     console_puts("[0/11] Initializing runtime configuration...\n");
@@ -80,7 +80,7 @@ void kernel_main(kernel_info_t *info)
     /* 初始化审计日志缓冲区 */
     phys_addr_t audit_buffer_base = 0;
     size_t audit_buffer_size = 0x100000;  /* 1MB审计日志缓冲区 */
-    pmm_alloc_frames(HIK_DOMAIN_CORE, audit_buffer_size / PAGE_SIZE, 
+    pmm_alloc_frames(HIC_DOMAIN_CORE, audit_buffer_size / PAGE_SIZE, 
                      PAGE_FRAME_CORE, &audit_buffer_base);
     audit_system_init_buffer(audit_buffer_base, audit_buffer_size);
     
@@ -115,7 +115,7 @@ void kernel_main(kernel_info_t *info)
     domain_id_t core_domain;
     domain_create(DOMAIN_TYPE_CORE, 0, &core_quota, &core_domain);
     
-    console_puts("\n=== HIK Core-0 Initialization Complete ===\n");
+    console_puts("\n=== HIC Core-0 Initialization Complete ===\n");
     console_puts("Total Memory: ");
     console_putu64(info->total_memory);
     console_puts(" bytes\n");

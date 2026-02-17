@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 支持 RISC-V 架构，利用其简洁的指令集和模块化设计。本文档介绍了 HIK 在 RISC-V 架构上的实现。
+HIC 支持 RISC-V 架构，利用其简洁的指令集和模块化设计。本文档介绍了 HIC 在 RISC-V 架构上的实现。
 
 ## 架构特性
 

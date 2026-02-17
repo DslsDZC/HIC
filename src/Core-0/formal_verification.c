@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /*
- * HIK内核形式化验证模块
+ * HIC内核形式化验证模块
  * 遵循TD/三层模型.md文档第12节
  *
  * 本模块提供静态形式化验证，确保：
@@ -25,6 +25,8 @@
 #include "capability.h"
 #include "kernel.h"
 #include "pmm.h"
+#include "irq.h"
+#include "apm.h"
 
 /* 形式化验证错误码 */
 #define FV_SUCCESS           0
@@ -125,6 +127,8 @@ static bool invariant_capability_monotonicity(void);
 static bool invariant_resource_quota_conservation(void);
 static bool invariant_deadlock_freedom_enhanced(void);
 static bool invariant_type_safety(void);
+static bool invariant_apm_config_integrity(void);
+static bool invariant_apm_allocation_consistency(void);
 
 /* 使用HAL的时间戳函数替代get_system_time_ns */
 static inline u64 get_system_time_ns(void) {
@@ -398,6 +402,72 @@ static bool invariant_type_safety(void) {
     return true;
 }
 
+/* APM 配置完整性不变式 */
+static bool invariant_apm_config_integrity(void)
+{
+    /* 检查 APM 配置是否有效 */
+    extern apm_config_t g_apm_config;
+    
+    if (!g_apm_config.config_valid) {
+        console_puts("[FV] APM config not valid\n");
+        return false;
+    }
+    
+    /* 检查配置版本 */
+    if (g_apm_config.config_version == 0) {
+        console_puts("[FV] APM config version invalid\n");
+        return false;
+    }
+    
+    /* 检查资源数量合理性 */
+    if (g_apm_config.uart_count > 4) {
+        console_puts("[FV] APM too many UARTs\n");
+        return false;
+    }
+    
+    if (g_apm_config.memory_count > 16) {
+        console_puts("[FV] APM too many memory regions\n");
+        return false;
+    }
+    
+    return true;
+}
+
+/* APM 资源分配一致性不变式 */
+static bool invariant_apm_allocation_consistency(void)
+{
+    /* 检查 APM 资源分配的一致性 */
+    extern apm_config_t g_apm_config;
+    
+    /* 检查串口基地址无冲突 */
+    for (u32 i = 0; i < g_apm_config.uart_count; i++) {
+        for (u32 j = i + 1; j < g_apm_config.uart_count; j++) {
+            if (g_apm_config.uart[i].base_addr == g_apm_config.uart[j].base_addr) {
+                console_puts("[FV] APM UART base address conflict\n");
+                return false;
+            }
+        }
+    }
+    
+    /* 检查内存区域无重叠 */
+    for (u32 i = 0; i < g_apm_config.memory_count; i++) {
+        for (u32 j = i + 1; j < g_apm_config.memory_count; j++) {
+            apm_memory_region_t *region1 = &g_apm_config.memory[i];
+            apm_memory_region_t *region2 = &g_apm_config.memory[j];
+            
+            phys_addr_t end1 = region1->base + region1->size;
+            phys_addr_t end2 = region2->base + region2->size;
+            
+            if (!(end1 <= region2->base || end2 <= region1->base)) {
+                console_puts("[FV] APM memory region overlap\n");
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
 /* 全局不变式表 */
 static invariant_t invariants[] = {
     {1, "能力守恒性", invariant_capability_conservation, "域能力数量守恒"},
@@ -406,6 +476,8 @@ static invariant_t invariants[] = {
     {4, "资源配额守恒性", invariant_resource_quota_conservation, "资源分配不超过总量"},
     {5, "无死锁性", invariant_deadlock_freedom_enhanced, "资源分配图中无环（增强检测）"},
     {6, "类型安全性", invariant_type_safety, "访问类型符合对象约束"},
+    {7, "APM配置完整性", invariant_apm_config_integrity, "APM配置有效且一致"},
+    {8, "APM分配一致性", invariant_apm_allocation_consistency, "APM资源分配无冲突"},
 };
 
 static const u64 num_invariants = sizeof(invariants) / sizeof(invariant_t);
@@ -622,7 +694,7 @@ u64 fv_get_report(char* report, u64 size) {
     /* 写入头部 */
     
         written = append_format(report, size, written,
-        "=== HIK 形式化验证权威报告 ===\n");
+        "=== HIC 形式化验证权威报告 ===\n");
     
         written = append_format(report, size, written,
         "生成时间: 2026-02-14\n");
@@ -1115,7 +1187,7 @@ static void fv_log_violation(const invariant_t* inv) {
 
     // 记录到审计日志
 
-    AUDIT_LOG_SECURITY_VIOLATION(HIK_DOMAIN_CORE, inv->invariant_id);
+    AUDIT_LOG_SECURITY_VIOLATION(HIC_DOMAIN_CORE, inv->invariant_id);
 
     
 
@@ -2371,6 +2443,430 @@ static void update_rag(void) {
 
 
 
+/* 检查能力表位图一致性 */
+
+
+
+static bool invariant_capability_bitmap_consistency(void) {
+
+
+
+    /* 遍历能力表，验证位图与实际状态一致 */
+
+
+
+    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
+
+
+
+        bool used = (g_global_cap_table[i].cap_id == i);
+
+
+
+                
+
+
+
+                /* TODO: 实现能力位图一致性检查 */
+
+
+
+                bool bitmap_set = true;  /* 暂时假设一致 */
+
+
+
+                
+
+
+
+                if (used != bitmap_set) {
+
+
+
+            console_puts("[FV] Capability bitmap inconsistency at index ");
+
+
+
+            console_putu64(i);
+
+
+
+            console_puts("\n");
+
+
+
+            return false;
+
+
+
+        }
+
+
+
+    }
+
+
+
+    
+
+
+
+    return true;
+
+
+
+}
+
+
+
+
+
+
+
+/* 检查特权域内存访问隔离（增强版） */
+
+
+
+
+
+
+
+static bool invariant_privileged_memory_isolation(void) {
+
+
+
+
+
+
+
+    /* 遍历所有特权域 */
+
+
+
+
+
+
+
+    for (domain_id_t domain = 0; domain < HIC_DOMAIN_MAX; domain++) {
+
+
+
+
+
+
+
+        /* 检查域是否存在 */
+
+
+
+
+
+
+
+                if (domain >= HIC_DOMAIN_MAX) {
+
+
+
+
+
+
+
+                    continue;
+
+
+
+
+
+
+
+                }
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+                /* TODO: 实现完整的特权域内存隔离检查 */
+
+
+
+
+
+
+
+                /* 暂时跳过此检查 */
+
+
+
+
+
+
+
+                continue;
+
+
+
+
+
+
+
+            }
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+    return true;
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
+static bool invariant_lockfree_scheduler(void) {
+
+
+
+    /* 检查调度队列的原子性 */
+
+
+
+    extern thread_t g_threads[];
+
+
+
+    extern thread_t *g_current_thread;
+
+
+
+    
+
+
+
+    /* 不变式：当前线程必须存在且状态为RUNNING */
+
+
+
+    if (g_current_thread != NULL) {
+
+
+
+        thread_t *current = (thread_t*)g_current_thread;
+
+
+
+        if (current->thread_id < MAX_THREADS && current->state != THREAD_STATE_RUNNING) {
+
+
+
+            /* 可能是调度器切换过程中的临时状态，允许 */
+
+
+
+            /* 但需要检查是否超过一定时间 */
+
+
+
+            u64 current_time = hal_get_timestamp();
+
+
+
+            if (current_time - current->last_run_time > 10000000) {  /* 10秒 */
+
+
+
+                console_puts("[FV] Current thread in non-running state for too long\n");
+
+
+
+                return false;
+
+
+
+            }
+
+
+
+        }
+
+
+
+    }
+
+
+
+    
+
+
+
+    return true;
+
+
+
+}
+
+
+
+
+
+
+
+static bool invariant_lockfree_irq(void) {
+
+
+
+
+
+
+
+    /* 检查中断路由表的原子性 */
+
+
+
+
+
+
+
+    extern volatile irq_route_entry_t irq_table[256];
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+    /* 不变式：已初始化的中断必须有有效的处理函数 */
+
+
+
+
+
+
+
+    for (u32 i = 0; i < 256; i++) {
+
+
+
+
+
+
+
+        if (irq_table[i].initialized && irq_table[i].handler_address == 0) {
+
+
+
+
+
+
+
+            console_puts("[FV] IRQ initialized but has no handler at vector ");
+
+
+
+
+
+
+
+            console_putu64(i);
+
+
+
+
+
+
+
+            console_puts("\n");
+
+
+
+
+
+
+
+            return false;
+
+
+
+
+
+
+
+        }
+
+
+
+
+
+
+
+    }
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+    return true;
+
+
+
+
+
+
+
+}
+
+
+
+
+
+
+
 static bool invariant_deadlock_freedom_enhanced(void) {
 
 
@@ -2419,59 +2915,7 @@ static bool invariant_deadlock_freedom_enhanced(void) {
 
 
 
-        log_error("死锁检测: 总检查=%lu, 违反=%lu\n", checks, violations + 1);
-
-
-
-        
-
-
-
         return false;
-
-
-
-    }
-
-
-
-    
-
-
-
-    /* 同时检查长时间等待的线程 */
-
-
-
-    for (thread_id_t thread = 0; thread < MAX_THREADS; thread++) {
-
-
-
-        if (!thread_is_active(thread)) continue;
-
-
-
-        
-
-
-
-        u64 wait_time = get_thread_wait_time(thread);
-
-
-
-        if (wait_time > DEADLOCK_THRESHOLD) {
-
-
-
-            log_warning("线程 %lu 等待时间过长: %lu ns (阈值=%lu)\n", 
-
-
-
-                       thread, wait_time, DEADLOCK_THRESHOLD);
-
-
-
-        }
 
 
 

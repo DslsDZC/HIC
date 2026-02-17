@@ -1,23 +1,23 @@
-#ifndef HIK_BOOTLOADER_BOOT_INFO_H
-#define HIK_BOOTLOADER_BOOT_INFO_H
+#ifndef HIC_BOOTLOADER_BOOT_INFO_H
+#define HIC_BOOTLOADER_BOOT_INFO_H
 
 #include <stdint.h>
 
-// HIK引导信息结构魔数
-#define HIK_BOOT_INFO_MAGIC  0x48494B21  // "HIK!"
+// HIC引导信息结构魔数
+#define HIC_BOOT_INFO_MAGIC  0x48494B21  // "HIC!"
 
 // 引导信息结构版本
-#define HIK_BOOT_INFO_VERSION 1
+#define HIC_BOOT_INFO_VERSION 1
 
 // 内存映射条目类型
-#define HIK_MEM_TYPE_USABLE      1
-#define HIK_MEM_TYPE_RESERVED    2
-#define HIK_MEM_TYPE_ACPI        3
-#define HIK_MEM_TYPE_NVS         4
-#define HIK_MEM_TYPE_UNUSABLE    5
-#define HIK_MEM_TYPE_BOOTLOADER  6
-#define HIK_MEM_TYPE_KERNEL      7
-#define HIK_MEM_TYPE_MODULE      8
+#define HIC_MEM_TYPE_USABLE      1
+#define HIC_MEM_TYPE_RESERVED    2
+#define HIC_MEM_TYPE_ACPI        3
+#define HIC_MEM_TYPE_NVS         4
+#define HIC_MEM_TYPE_UNUSABLE    5
+#define HIC_MEM_TYPE_BOOTLOADER  6
+#define HIC_MEM_TYPE_KERNEL      7
+#define HIC_MEM_TYPE_MODULE      8
 
 // 内存映射条目
 typedef struct {
@@ -25,16 +25,16 @@ typedef struct {
     uint64_t length;
     uint32_t type;
     uint32_t flags;
-} hik_mem_entry_t;
+} hic_mem_entry_t;
 
-// HIK引导信息结构
+// HIC引导信息结构
 typedef struct {
-    uint32_t magic;                    // 魔数 "HIK!"
+    uint32_t magic;                    // 魔数 "HIC!"
     uint32_t version;                  // 结构版本
     uint64_t flags;                    // 特性标志位
     
     // 内存信息
-    hik_mem_entry_t *mem_map;
+    hic_mem_entry_t *mem_map;
     uint64_t mem_map_size;
     uint64_t mem_map_desc_size;
     uint64_t mem_map_entry_count;
@@ -123,18 +123,18 @@ typedef struct {
         uint64_t platform_hash;         // platform.yaml哈希值
     } platform;
 
-} hik_boot_info_t;
+} hic_boot_info_t;
 
 // 标志位定义
-#define HIK_BOOT_FLAG_SECURE_BOOT   (1ULL << 0)
-#define HIK_BOOT_FLAG_ACPI_ENABLED  (1ULL << 1)
-#define HIK_BOOT_FLAG_VIDEO_ENABLED (1ULL << 2)
-#define HIK_BOOT_FLAG_DEBUG_ENABLED (1ULL << 3)
-#define HIK_BOOT_FLAG_RECOVERY_MODE (1ULL << 4)
-#define HIK_BOOT_FLAG_FAST_BOOT     (1ULL << 5)
-#define HIK_BOOT_FLAG_QUIET_BOOT    (1ULL << 6)
+#define HIC_BOOT_FLAG_SECURE_BOOT   (1ULL << 0)
+#define HIC_BOOT_FLAG_ACPI_ENABLED  (1ULL << 1)
+#define HIC_BOOT_FLAG_VIDEO_ENABLED (1ULL << 2)
+#define HIC_BOOT_FLAG_DEBUG_ENABLED (1ULL << 3)
+#define HIC_BOOT_FLAG_RECOVERY_MODE (1ULL << 4)
+#define HIC_BOOT_FLAG_FAST_BOOT     (1ULL << 5)
+#define HIC_BOOT_FLAG_QUIET_BOOT    (1ULL << 6)
 
 // 引导信息总大小
-#define HIK_BOOT_INFO_SIZE  4096
+#define HIC_BOOT_INFO_SIZE  4096
 
-#endif // HIK_BOOTLOADER_BOOT_INFO_H
+#endif // HIC_BOOTLOADER_BOOT_INFO_H

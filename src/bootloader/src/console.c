@@ -101,7 +101,7 @@ void console_puts(const char *str)
 void console_printf(const char *fmt, ...)
 {
     va_list args;
-    char buffer[32];
+    char buffer[64];  // 增加缓冲区大小以支持64位指针
     
     va_start(args, fmt);
     
@@ -410,7 +410,7 @@ void serial_puts(uint16_t port, const char *str)
 void serial_printf(uint16_t port, const char *fmt, ...)
 {
     va_list args;
-    char buffer[256];
+    char buffer[256];  // 保持大缓冲区
     
     va_start(args, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, args);
@@ -455,8 +455,13 @@ static void int_to_str(int64_t value, char *buffer, int base)
 static void uint_to_str(uint64_t value, char *buffer, int base)
 {
     char digits[] = "0123456789abcdef";
-    char temp[32];
+    char temp[64];  // 增加缓冲区大小以支持64位整数
     int i = 0;
+    
+    // 清零temp缓冲区
+    for (int j = 0; j < 64; j++) {
+        temp[j] = 0;
+    }
     
     if (value == 0) {
         *buffer++ = '0';
@@ -489,10 +494,10 @@ static void uint64_to_str(uint64_t value, char *buffer, int base)
 static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
 {
     size_t written = 0;
-    char temp[32];
+    char temp[64];  // 增加缓冲区大小以支持64位整数
     
     // 清零temp缓冲区
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 64; i++) {
         temp[i] = 0;
     }
     

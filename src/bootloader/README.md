@@ -1,6 +1,6 @@
-# HIK UEFI Bootloader
+# HIC UEFI Bootloader
 
-HIK (Hierarchical Isolation Kernel) 的第一引导层 - UEFI引导加载程序。
+HIC (Hierarchical Isolation Core) 的第一引导层 - UEFI引导加载程序。
 
 ## 项目结构
 
@@ -8,8 +8,8 @@ HIK (Hierarchical Isolation Kernel) 的第一引导层 - UEFI引导加载程序�
 bootloader/
 ├── include/           # 头文件
 │   ├── efi.h         # UEFI定义和结构
-│   ├── boot_info.h   # HIK启动信息结构
-│   ├── kernel_image.h # HIK内核映像格式
+│   ├── boot_info.h   # HIC启动信息结构
+│   ├── kernel_image.h # HIC内核映像格式
 │   ├── crypto.h      # 加密算法（SHA-384, RSA）
 │   ├── string.h      # 字符串操作
 │   ├── console.h     # 控制台输出
@@ -37,11 +37,11 @@ bootloader/
 - 获取加载的映像协议
 
 ### 2. 配置文件加载
-- 从`\EFI\HIK\boot.conf`读取引导配置
+- 从`\EFI\HIC\boot.conf`读取引导配置
 - 支持内核路径、命令行、超时等配置
 
 ### 3. 内核映像加载
-- 从文件系统加载HIK内核映像
+- 从文件系统加载HIC内核映像
 - 支持FAT32/EXT2等文件系统
 - 解析内核映像头部和段表
 
@@ -53,7 +53,7 @@ bootloader/
 
 ### 5. 内存映射获取
 - 获取UEFI内存映射
-- 转换为HIK格式
+- 转换为HIC格式
 - 保留内核所需内存区域
 
 ### 6. 启动信息结构(BIS)
@@ -119,8 +119,8 @@ sudo make install EFI_MOUNT=/mnt/efi
 
 ```bash
 # 创建测试磁盘
-mkdir -p test_disk/EFI/HIK
-cp bin/bootx64.efi test_disk/EFI/HIK/
+mkdir -p test_disk/EFI/HIC
+cp bin/bootx64.efi test_disk/EFI/HIC/
 
 # 在QEMU中运行
 make qemu
@@ -136,10 +136,10 @@ make qemu-gui
 
 ```bash
 # 创建USB镜像
-make usb-image USB_IMAGE=hik-boot.img
+make usb-image USB_IMAGE=hic-boot.img
 
 # 写入USB设备
-sudo dd if=hik-boot.img of=/dev/sdX bs=1M status=progress
+sudo dd if=hic-boot.img of=/dev/sdX bs=1M status=progress
 ```
 
 ## 配置文件示例
@@ -147,10 +147,10 @@ sudo dd if=hik-boot.img of=/dev/sdX bs=1M status=progress
 `boot.conf` 文件格式：
 
 ```
-# HIK Bootloader Configuration
+# HIC Bootloader Configuration
 
 # 内核路径
-kernel=\EFI\HIK\kernel.hik
+kernel=\EFI\HIC\kernel.hic
 
 # 启动参数
 cmdline=quiet debug=1
@@ -162,13 +162,13 @@ timeout=5
 debug=1
 ```
 
-## HIK内核映像格式
+## HIC内核映像格式
 
 ### 映像头部
 
 ```c
 typedef struct {
-    char     magic[8];              // "HIK_IMG"
+    char     magic[8];              // "HIC_IMG"
     uint16_t arch_id;               // 1=x86_64
     uint16_t version;               // 版本号
     uint64_t entry_point;           // 入口点偏移
@@ -180,16 +180,16 @@ typedef struct {
     uint64_t signature_offset;      // 签名偏移
     uint64_t signature_size;        // 签名大小
     uint8_t  reserved[64];          // 预留
-} hik_image_header_t;
+} hic_image_header_t;
 ```
 
 ### 段类型
 
-- `HIK_SEGMENT_TYPE_CODE`    - 代码段
-- `HIK_SEGMENT_TYPE_DATA`    - 数据段
-- `HIK_SEGMENT_TYPE_RODATA`  - 只读数据段
-- `HIK_SEGMENT_TYPE_BSS`     - BSS段
-- `HIK_SEGMENT_TYPE_CONFIG`  - 配置段
+- `HIC_SEGMENT_TYPE_CODE`    - 代码段
+- `HIC_SEGMENT_TYPE_DATA`    - 数据段
+- `HIC_SEGMENT_TYPE_RODATA`  - 只读数据段
+- `HIC_SEGMENT_TYPE_BSS`     - BSS段
+- `HIC_SEGMENT_TYPE_CONFIG`  - 配置段
 
 ## 启动流程
 
@@ -208,7 +208,7 @@ typedef struct {
 4. 跳转到内核入口点
    - 传递启动信息结构
    ↓
-5. HIK Core-0内核
+5. HIC Core-0内核
 ```
 
 ## 安全特性
@@ -309,13 +309,13 @@ log_trace("Trace message\n");
 
 ## 许可证
 
-本项目遵循 HIK 项目许可证。
+本项目遵循 HIC 项目许可证。
 
 ## 联系方式
 
 - 作者：DslsDZC
 - 邮箱：dsls.dzc@gmail.com
-- 项目：https://github.com/DslsDZC/HIK
+- 项目：https://github.com/DslsDZC/HIC
 
 ## 参考文献
 

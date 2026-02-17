@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 的性能目标是提供极致的系统调用、中断处理和上下文切换性能，同时保持安全性和可靠性。本文档定义了 HIK 的性能指标和测量方法。
+HIC 的性能目标是提供极致的系统调用、中断处理和上下文切换性能，同时保持安全性和可靠性。本文档定义了 HIC 的性能指标和测量方法。
 
 ## 性能目标
 
@@ -96,7 +96,7 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2,
     u64 start = rdtsc();
     
     // 执行系统调用
-    hik_status_t status = execute_syscall(syscall_num, arg1, arg2, arg3, arg4);
+    hic_status_t status = execute_syscall(syscall_num, arg1, arg2, arg3, arg4);
     
     u64 end = rdtsc();
     u64 cycles = end - start;

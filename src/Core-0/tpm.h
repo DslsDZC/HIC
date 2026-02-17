@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK TPM集成
+ * HIC TPM集成
  * 提供硬件信任根和安全启动支持
  */
 
-#ifndef HIK_KERNEL_TPM_H
-#define HIK_KERNEL_TPM_H
+#ifndef HIC_KERNEL_TPM_H
+#define HIC_KERNEL_TPM_H
 
 #include "types.h"
 
@@ -71,4 +71,4 @@ int tpm_seal(const u8* data, u32 length, u8* sealed, u32* sealed_len);
  */
 int tpm_unseal(const u8* sealed, u32 sealed_len, u8* data, u32* length);
 
-#endif /* HIK_KERNEL_TPM_H */
+#endif /* HIC_KERNEL_TPM_H */

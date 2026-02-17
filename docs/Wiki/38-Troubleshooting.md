@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-本文档提供了 HIK 系统常见问题的诊断和解决方案。
+本文档提供了 HIC 系统常见问题的诊断和解决方案。
 
 ## 启动问题
 
@@ -62,13 +62,13 @@ SPDX-License-Identifier: CC-BY-4.0
 // 检查能力有效性
 if (!cap_is_valid(cap)) {
     log_error("Invalid capability");
-    return HIK_ERROR_INVALID;
+    return HIC_ERROR_INVALID;
 }
 
 // 检查权限
 if (!cap_check_access(current_domain, cap, CAP_READ)) {
     log_error("Permission denied");
-    return HIK_ERROR_PERMISSION;
+    return HIC_ERROR_PERMISSION;
 }
 ```
 
@@ -89,7 +89,7 @@ pmm_get_stats(&stats);
 
 if (stats.free_memory < required_size) {
     log_error("Insufficient memory");
-    return HIK_ERROR_NO_MEMORY;
+    return HIC_ERROR_NO_MEMORY;
 }
 
 // 使用更大的页
@@ -117,7 +117,7 @@ spinlock_unlock(&lock_a);
 // 使用超时
 if (!spinlock_trylock_timeout(&lock, 1000)) {
     log_error("Lock timeout");
-    return HIK_ERROR_TIMEOUT;
+    return HIC_ERROR_TIMEOUT;
 }
 ```
 
@@ -209,7 +209,7 @@ log_error("Access denied");  // 而不是 "Access denied for user X"
 
 ```c
 // 在构建配置中启用调试
-#define HIK_DEBUG 1
+#define HIC_DEBUG 1
 
 // 使用调试日志
 log_debug("Function called with parameter %d", param);

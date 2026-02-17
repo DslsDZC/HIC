@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK硬件抽象层（HAL）接口 - CR3扩展
+ * HIC硬件抽象层（HAL）接口 - CR3扩展
  * 提供页表管理相关的硬件抽象
  */
 
-#ifndef HIK_KERNEL_HAL_CR3_H
-#define HIK_KERNEL_HAL_CR3_H
+#ifndef HIC_KERNEL_HAL_CR3_H
+#define HIC_KERNEL_HAL_CR3_H
 
 #include "types.h"
 
@@ -39,4 +39,4 @@ static inline void hal_invalidate_page(void* addr) {
     __asm__ volatile ("invlpg (%0)" : : "r"(addr) : "memory");
 }
 
-#endif /* HIK_KERNEL_HAL_CR3_H */
+#endif /* HIC_KERNEL_HAL_CR3_H */

@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK审计日志系统实现
+ * HIC审计日志系统实现
  * 遵循文档第3.3节：安全审计与防篡改日志
  */
 
@@ -53,8 +53,8 @@ void audit_system_init_buffer(phys_addr_t base, size_t size)
 
 /* 记录审计事件 */
 void audit_log_event(audit_event_type_t type, domain_id_t domain, 
-                     cap_id_t cap_id, thread_id_t thread_id, 
-                     u64* data, u32 data_count, bool result)
+                     cap_id_t cap, thread_id_t thread_id,
+                     u64 *data, u32 data_count, u8 result)
 {
     if (!g_audit_buffer.initialized) {
         /* 缓冲区未初始化，跳过记录 */
@@ -78,9 +78,9 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
     entry.sequence = g_audit_buffer.sequence++;
     entry.type = type;
     entry.domain = domain;
-    entry.cap_id = cap_id;
+    entry.cap_id = cap;
     entry.thread_id = thread_id;
-    entry.result = result ? 1 : 0;
+    entry.result = result;
     
     /* 复制数据 */
     if (data && data_count > 0) {

@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK域切换实现（完整版）
+ * HIC域切换实现（完整版）
  * 遵循文档第2.1节：跨域通信和隔离
  */
 
@@ -19,7 +19,7 @@
 #include "lib/console.h"
 
 /* 当前域ID */
-static domain_id_t g_current_domain = HIK_DOMAIN_CORE;
+static domain_id_t g_current_domain = HIC_DOMAIN_CORE;
 
 /* 调用栈（用于恢复到调用者域） */
 static struct {
@@ -30,16 +30,16 @@ static struct {
 static u32 g_call_stack_depth = 0;
 
 /* 域上下文保存 */
-static hal_context_t g_domain_contexts[HIK_DOMAIN_MAX];
+static hal_context_t g_domain_contexts[HIC_DOMAIN_MAX];
 
 /* 域页表 */
-static page_table_t* g_domain_pagetables[HIK_DOMAIN_MAX];
+static page_table_t* g_domain_pagetables[HIC_DOMAIN_MAX];
 
 /* 域切换初始化 */
 void domain_switch_init(void)
 {
     /* 初始化域上下文 */
-    for (domain_id_t i = 0; i < HIK_DOMAIN_MAX; i++) {
+    for (domain_id_t i = 0; i < HIC_DOMAIN_MAX; i++) {
         memzero(&g_domain_contexts[i], sizeof(hal_context_t));
         g_domain_pagetables[i] = NULL;
     }
@@ -49,39 +49,42 @@ void domain_switch_init(void)
     g_call_stack_depth = 0;
     
     /* 设置Core-0为当前域 */
-    g_current_domain = HIK_DOMAIN_CORE;
+    g_current_domain = HIC_DOMAIN_CORE;
     
     console_puts("[DOMAIN] Domain switch initialized\n");
 }
 
 /* 执行域切换（完整实现） */
-hik_status_t domain_switch(domain_id_t from, domain_id_t to, 
+hic_status_t domain_switch(domain_id_t from, domain_id_t to, 
                            cap_id_t endpoint_cap, u64 syscall_num,
                            u64* args, u32 arg_count)
 {
     (void)arg_count;  /* 避免未使用参数警告 */
     (void)args;       /* 避免未使用参数警告 */
     /* 验证参数 */
-    if (from >= HIK_DOMAIN_MAX || to >= HIK_DOMAIN_MAX) {
-        return HIK_ERROR_INVALID_PARAM;
+    if (from >= HIC_DOMAIN_MAX || to >= HIC_DOMAIN_MAX) {
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 验证端点能力 */
-    hik_status_t status = cap_check_access(from, endpoint_cap, 0);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_PERMISSION;
+    hic_status_t status = cap_check_access(from, endpoint_cap, 0);
+    if (status != HIC_SUCCESS) {
+        return HIC_ERROR_PERMISSION;
     }
     
     /* 获取端点信息 */
-    cap_entry_t endpoint;
-    status = cap_get_info(endpoint_cap, &endpoint);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_CAP_INVALID;
+    if (endpoint_cap >= CAP_TABLE_SIZE) {
+        return HIC_ERROR_CAP_INVALID;
+    }
+    
+    cap_entry_t *endpoint = &g_global_cap_table[endpoint_cap];
+    if (endpoint->cap_id != endpoint_cap) {
+        return HIC_ERROR_CAP_INVALID;
     }
     
     /* 验证目标域 */
-    if (endpoint.endpoint.target_domain != to) {
-        return HIK_ERROR_PERMISSION;
+    if (endpoint->endpoint.target != to) {
+        return HIC_ERROR_PERMISSION;
     }
     
     /* 保存调用者上下文到调用栈 */
@@ -106,27 +109,25 @@ hik_status_t domain_switch(domain_id_t from, domain_id_t to,
     /* 恢复目标域上下文 */
     hal_restore_context(&g_domain_contexts[to]);
     
-    /* 记录审计日志 */
-    u64 audit_data[4] = {from, to, endpoint_cap, syscall_num};
-    audit_log_event(AUDIT_EVENT_IPC_CALL, from, endpoint_cap, 0, 
-                   audit_data, 4, true);
+    /* 记录域切换审计日志 */
+    AUDIT_LOG_DOMAIN_SWITCH(from, to, endpoint_cap);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 从域切换返回（完整实现） */
-void __attribute__((unused)) domain_switch_return(hik_status_t result)
+void __attribute__((unused)) domain_switch_return(hic_status_t result)
 {
     (void)result;  /* 避免未使用参数警告 */
     if (g_call_stack_depth == 0) {
         /* 调用栈为空，返回Core-0 */
-        g_current_domain = HIK_DOMAIN_CORE;
+        g_current_domain = HIC_DOMAIN_CORE;
         
-        if (g_domain_pagetables[HIK_DOMAIN_CORE]) {
-            pagetable_switch(g_domain_pagetables[HIK_DOMAIN_CORE]);
+        if (g_domain_pagetables[HIC_DOMAIN_CORE]) {
+            pagetable_switch(g_domain_pagetables[HIC_DOMAIN_CORE]);
         }
         
-        hal_restore_context(&g_domain_contexts[HIK_DOMAIN_CORE]);
+        hal_restore_context(&g_domain_contexts[HIC_DOMAIN_CORE]);
         return;
     }
     
@@ -149,7 +150,7 @@ void __attribute__((unused)) domain_switch_return(hik_status_t result)
 /* 保存当前域上下文 */
 void __attribute__((unused)) domain_switch_save_context(domain_id_t domain, hal_context_t* ctx)
 {
-    if (domain < HIK_DOMAIN_MAX && ctx) {
+    if (domain < HIC_DOMAIN_MAX && ctx) {
         memcopy(&g_domain_contexts[domain], ctx, sizeof(hal_context_t));
     }
 }
@@ -157,7 +158,7 @@ void __attribute__((unused)) domain_switch_save_context(domain_id_t domain, hal_
 /* 恢复域上下文 */
 void __attribute__((unused)) domain_switch_restore_context(domain_id_t domain, hal_context_t* ctx)
 {
-    if (domain < HIK_DOMAIN_MAX && ctx) {
+    if (domain < HIC_DOMAIN_MAX && ctx) {
         memcopy(ctx, &g_domain_contexts[domain], sizeof(hal_context_t));
     }
 }
@@ -171,26 +172,26 @@ __attribute__((unused)) domain_id_t domain_switch_get_current(void)
 /* 设置当前域ID */
 __attribute__((unused)) void domain_switch_set_current(domain_id_t domain)
 {
-    if (domain < HIK_DOMAIN_MAX) {
+    if (domain < HIC_DOMAIN_MAX) {
         g_current_domain = domain;
     }
 }
 
 /* 设置域页表 */
-__attribute__((unused)) hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
+__attribute__((unused)) hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
 {
-    if (domain >= HIK_DOMAIN_MAX) {
-        return HIK_ERROR_INVALID_PARAM;
+    if (domain >= HIC_DOMAIN_MAX) {
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     g_domain_pagetables[domain] = pagetable;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 获取域页表 */
 __attribute__((unused)) page_table_t* domain_switch_get_pagetable(domain_id_t domain)
 {
-    if (domain >= HIK_DOMAIN_MAX) {
+    if (domain >= HIC_DOMAIN_MAX) {
         return NULL;
     }
     

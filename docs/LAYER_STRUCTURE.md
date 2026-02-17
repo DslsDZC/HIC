@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK内核三层目录结构说明
+# HIC内核三层目录结构说明
 
 ## 目录组织
 
-HIK内核严格按照三层模型组织代码，每一层都有独立的目录：
+HIC内核严格按照三层模型组织代码，每一层都有独立的目录：
 
 ```
 kernel/
@@ -296,7 +296,7 @@ extern core0_data_t g_core0_data;  // 错误：不应该访问
 #include "../core0/types.h"  // 正确：只包含类型定义
 
 // 通过系统调用请求内存
-hik_status_t status = syscall_alloc_memory(size, &addr);
+hic_status_t status = syscall_alloc_memory(size, &addr);
 ```
 
 ### ❌ 错误：Core-0包含Privileged-1头文件
@@ -314,7 +314,7 @@ status = service_init(instance_id, service_name);
 
 ## 总结
 
-HIK内核的三层目录结构确保了：
+HIC内核的三层目录结构确保了：
 1. **清晰的职责分离**：每层有明确的职责
 2. **严格的安全隔离**：通过MMU和能力系统强制隔离
 3. **易于维护**：代码组织清晰，便于理解和修改

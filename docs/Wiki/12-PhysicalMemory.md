@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 采用物理内存直接映射策略，避免了传统内核的虚拟内存管理开销。这种设计简化了内存管理，提高了性能，同时通过能力系统保证了安全性。
+HIC 采用物理内存直接映射策略，避免了传统内核的虚拟内存管理开销。这种设计简化了内存管理，提高了性能，同时通过能力系统保证了安全性。
 
 ## 设计目标
 
@@ -23,7 +23,7 @@ HIK 采用物理内存直接映射策略，避免了传统内核的虚拟内存�
 
 ```
 传统内核: 虚拟地址 → 页表 → TLB → 物理地址
-HIK 内核:  物理地址 → 直接访问
+HIC 内核:  物理地址 → 直接访问
 ```
 
 ### 内存层次
@@ -86,21 +86,21 @@ static u64 free_frames = 0;
 ### 分配算法
 
 ```c
-hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
+hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
                                page_frame_type_t type, phys_addr_t *out) {
     // 检查域配额
-    if (owner != HIK_DOMAIN_CORE) {
+    if (owner != HIC_DOMAIN_CORE) {
         domain_t *domain = get_domain(owner);
         if (domain->usage.memory_used + count * PAGE_SIZE > 
             domain->quota.max_memory) {
-            return HIK_ERROR_QUOTA_EXCEEDED;
+            return HIC_ERROR_QUOTA_EXCEEDED;
         }
     }
     
     // 查找连续空闲页帧
     u64 start_frame = find_free_frames(count);
     if (start_frame == INVALID_FRAME) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     // 标记为已分配
@@ -112,7 +112,7 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     used_memory += count * PAGE_SIZE;
     
     *out = start_frame * PAGE_SIZE;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -133,7 +133,7 @@ typedef struct mem_region {
 
 ```c
 // 添加内存区域
-hik_status_t pmm_add_region(phys_addr_t base, size_t size) {
+hic_status_t pmm_add_region(phys_addr_t base, size_t size) {
     // 对齐到页边界
     phys_addr_t aligned_base = (base + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     size_t aligned_size = size - (aligned_base - base);
@@ -159,7 +159,7 @@ hik_status_t pmm_add_region(phys_addr_t base, size_t size) {
     total_frames += num_frames;
     free_frames += num_frames;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -179,22 +179,22 @@ typedef struct domain {
 } domain_t;
 
 // 域内存分配
-hik_status_t domain_alloc_memory(domain_id_t domain, size_t size, 
+hic_status_t domain_alloc_memory(domain_id_t domain, size_t size, 
                                   phys_addr_t *out) {
     domain_t *d = get_domain(domain);
     
     // 检查配额
     if (d->usage.memory_used + size > d->quota.max_memory) {
-        return HIK_ERROR_QUOTA_EXCEEDED;
+        return HIC_ERROR_QUOTA_EXCEEDED;
     }
     
     // 分配内存
-    hik_status_t status = pmm_alloc_frames(domain, 
+    hic_status_t status = pmm_alloc_frames(domain, 
                                            (size + PAGE_SIZE - 1) / PAGE_SIZE,
                                            PAGE_FRAME_APPLICATION, 
                                            out);
     
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         d->usage.memory_used += size;
     }
     
@@ -205,15 +205,15 @@ hik_status_t domain_alloc_memory(domain_id_t domain, size_t size,
 ### 域内存释放
 
 ```c
-hik_status_t domain_free_memory(domain_id_t domain, phys_addr_t addr, 
+hic_status_t domain_free_memory(domain_id_t domain, phys_addr_t addr, 
                                  size_t size) {
     domain_t *d = get_domain(domain);
     
     // 释放内存
-    hik_status_t status = pmm_free_frames(addr, 
+    hic_status_t status = pmm_free_frames(addr, 
                                           (size + PAGE_SIZE - 1) / PAGE_SIZE);
     
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         d->usage.memory_used -= size;
     }
     
@@ -227,18 +227,18 @@ hik_status_t domain_free_memory(domain_id_t domain, phys_addr_t addr,
 
 ```c
 // 创建共享内存
-hik_status_t cap_create_shared_memory(domain_id_t owner, 
+hic_status_t cap_create_shared_memory(domain_id_t owner, 
                                       size_t size, 
                                       cap_rights_t rights,
                                       cap_id_t *out) {
     // 分配共享内存
     phys_addr_t phys_addr;
-    hik_status_t status = pmm_alloc_frames(owner, 
+    hic_status_t status = pmm_alloc_frames(owner, 
                                            (size + PAGE_SIZE - 1) / PAGE_SIZE,
                                            PAGE_FRAME_SHARED, 
                                            &phys_addr);
     
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
@@ -247,7 +247,7 @@ hik_status_t cap_create_shared_memory(domain_id_t owner,
 }
 
 // 共享内存到其他域
-hik_status_t share_memory(domain_id_t from, domain_id_t to, 
+hic_status_t share_memory(domain_id_t from, domain_id_t to, 
                           cap_id_t mem_cap) {
     // 转移能力
     return cap_transfer(from, to, mem_cap);
@@ -298,7 +298,7 @@ void domain_get_memory_stats(domain_id_t domain,
 
 ```c
 // 检查内存访问权限
-hik_status_t check_memory_access(domain_id_t domain, 
+hic_status_t check_memory_access(domain_id_t domain, 
                                   phys_addr_t addr, 
                                   size_t size, 
                                   cap_rights_t required) {
@@ -306,7 +306,7 @@ hik_status_t check_memory_access(domain_id_t domain,
     cap_id_t mem_cap = find_memory_capability(domain, addr, size);
     
     if (mem_cap == INVALID_CAP_ID) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
     // 检查权限

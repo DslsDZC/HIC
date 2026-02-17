@@ -34,7 +34,7 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
         subprocess.run(['cp', bootloader_path, boot_efi_path], check=True)
         
         # 复制内核
-        kernel_copy_path = os.path.join(tmpdir, "hik-kernel.bin")
+        kernel_copy_path = os.path.join(tmpdir, "hic-kernel.bin")
         subprocess.run(['cp', kernel_path, kernel_copy_path], check=True)
         
         # 使用mkfs.vfat创建FAT32镜像
@@ -77,7 +77,7 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
                 
                 subprocess.run([
                     'sudo', 'cp', kernel_path,
-                    os.path.join(mount_point, 'hik-kernel.bin')
+                    os.path.join(mount_point, 'hic-kernel.bin')
                 ], check=True)
                 
             finally:

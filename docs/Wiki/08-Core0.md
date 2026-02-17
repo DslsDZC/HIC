@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # Core-0层：内核核心与仲裁者
 
-Core-0是HIK系统的核心层，负责系统的可信计算基（TCB）功能。
+Core-0是HIC系统的核心层，负责系统的可信计算基（TCB）功能。
 
 ## 概述
 
@@ -230,8 +230,8 @@ status_t cap_create(domain_id_t owner, cap_type_t type,
 {
     /* 分配能力ID */
     cap_id_t id = allocate_cap_id();
-    if (id == HIK_INVALID_CAP_ID) {
-        return HIK_ERROR_NO_RESOURCE;
+    if (id == HIC_INVALID_CAP_ID) {
+        return HIC_ERROR_NO_RESOURCE;
     }
 
     /* 初始化能力 */
@@ -249,7 +249,7 @@ status_t cap_create(domain_id_t owner, cap_type_t type,
     AUDIT_LOG_CAP_CREATE(owner, id);
 
     *out = id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -270,31 +270,31 @@ status_t cap_verify(domain_id_t domain, cap_id_t cap_id,
 {
     /* 检查能力ID有效性 */
     if (cap_id >= MAX_CAPABILITIES) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     cap_entry_t *entry = &g_cap_table[cap_id];
 
     /* 检查能力是否被撤销 */
     if (entry->flags & CAP_FLAG_REVOKED) {
-        return HIK_ERROR_REVOKED;
+        return HIC_ERROR_REVOKED;
     }
 
     /* 检查所有权 */
     if (entry->owner != domain) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 检查权限 */
     if ((entry->rights & required_rights) != required_rights) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 记录审计日志 */
     AUDIT_LOG_CAP_VERIFY(domain, cap_id, true);
 
     *out = entry;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -316,7 +316,7 @@ status_t cap_transfer(domain_id_t from_domain, domain_id_t to_domain,
 
     /* 验证发送方能力 */
     status = cap_verify(from_domain, cap_id, CAP_PERM_TRANSFER, &entry);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
@@ -325,14 +325,14 @@ status_t cap_transfer(domain_id_t from_domain, domain_id_t to_domain,
     status = cap_create(to_domain, entry->type,
                        sub_rights ? sub_rights : entry->rights,
                        &entry->resource, &new_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
     /* 记录审计日志 */
     AUDIT_LOG_CAP_TRANSFER(from_domain, to_domain, cap_id);
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -377,15 +377,15 @@ status_t thread_create(domain_id_t domain_id, void (*entry)(void),
 {
     /* 分配线程ID */
     thread_id_t tid = allocate_thread_id();
-    if (tid == HIK_INVALID_THREAD) {
-        return HIK_ERROR_NO_RESOURCE;
+    if (tid == HIC_INVALID_THREAD) {
+        return HIC_ERROR_NO_RESOURCE;
     }
 
     /* 分配栈 */
     phys_addr_t stack_base;
     status = pmm_alloc_frames(domain_id, stack_size / PAGE_SIZE,
                              PAGE_FRAME_USER, &stack_base);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
@@ -407,7 +407,7 @@ status_t thread_create(domain_id_t domain_id, void (*entry)(void),
     AUDIT_LOG_THREAD_CREATE(domain_id, tid);
 
     *out = tid;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -533,7 +533,7 @@ void handle_page_fault(exception_frame_t *frame)
 
     /* 查找所属域 */
     domain_id_t domain = find_domain_by_address(fault_addr);
-    if (domain == HIK_INVALID_DOMAIN) {
+    if (domain == HIC_INVALID_DOMAIN) {
         /* 非法访问，终止线程 */
         terminate_current_thread();
         return;
@@ -581,7 +581,7 @@ void syscall_entry(syscall_frame_t *frame)
 
     /* 验证系统调用号 */
     if (syscall_num >= 256 || g_syscall_table[syscall_num] == NULL) {
-        frame->rax = HIK_ERROR_INVALID_SYSCALL;
+        frame->rax = HIC_ERROR_INVALID_SYSCALL;
         return;
     }
 
@@ -590,7 +590,7 @@ void syscall_entry(syscall_frame_t *frame)
 
     /* 记录审计日志 */
     domain_id_t domain = get_current_domain();
-    AUDIT_LOG_SYSCALL(domain, syscall_num, (status == HIK_SUCCESS));
+    AUDIT_LOG_SYSCALL(domain, syscall_num, (status == HIC_SUCCESS));
 }
 ```
 
@@ -606,7 +606,7 @@ status_t syscall_cap_query(syscall_frame_t *frame)
     cap_entry_t *entry;
 
     status = cap_verify(get_current_domain(), cap_id, 0, &entry);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
@@ -615,7 +615,7 @@ status_t syscall_cap_query(syscall_frame_t *frame)
     frame->rbx = entry->rights;
     frame->rcx = entry->flags;
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /**
@@ -631,7 +631,7 @@ status_t syscall_ipc_call(syscall_frame_t *frame)
     cap_entry_t *cap;
     status = cap_verify(get_current_domain(), endpoint_cap,
                        CAP_PERM_CALL, &cap);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
@@ -743,10 +743,10 @@ status_t syscall_debug(syscall_frame_t *frame)
         debug_dump_memory_map();
         break;
     default:
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 

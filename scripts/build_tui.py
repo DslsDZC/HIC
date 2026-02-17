@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """
-HIK系统构建系统 - 文本GUI模式
+HIC系统构建系统 - 文本GUI模式
 使用curses库实现文本用户界面
 遵循TD/滚动更新.md文档
 """
@@ -28,7 +28,7 @@ COLOR_PAIR_ERROR = 6
 COLOR_PAIR_WARNING = 7
 
 # 项目信息
-PROJECT = "HIK System"
+PROJECT = "HIC System"
 VERSION = "0.1.0"
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BUILD_DIR = os.path.join(ROOT_DIR, "build")
@@ -326,7 +326,7 @@ class BuildTUI:
     
     def show_help(self):
         """显示帮助"""
-        self.log("=== HIK系统构建系统帮助 ===")
+        self.log("=== HIC系统构建系统帮助 ===")
         self.log("命令行模式: make 或 make console")
         self.log("文本GUI模式: make tui 或 ./build_tui.py")
         self.log("图形化GUI模式: make gui")

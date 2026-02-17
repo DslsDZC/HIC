@@ -1,17 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK监控服务
+ * HIC监控服务
  * 遵循文档第2.1节：故障隔离与恢复
  * 负责系统监控、服务恢复、资源统计
  */
 
-#ifndef HIK_KERNEL_MONITOR_H
-#define HIK_KERNEL_MONITOR_H
+#ifndef HIC_KERNEL_MONITOR_H
+#define HIC_KERNEL_MONITOR_H
 
 #include "types.h"
 #include "domain.h"
@@ -63,7 +63,7 @@ void monitor_report_event(monitor_event_t* event);
 service_info_t* monitor_get_service_info(domain_id_t domain);
 
 /* 重启服务 */
-hik_status_t monitor_restart_service(domain_id_t domain);
+hic_status_t monitor_restart_service(domain_id_t domain);
 
 /* 获取系统统计 */
 void monitor_get_system_stats(u64* running_services, u64* crashed_services,
@@ -72,4 +72,4 @@ void monitor_get_system_stats(u64* running_services, u64* crashed_services,
 /* 监控循环 */
 void monitor_service_loop(void);
 
-#endif /* HIK_KERNEL_MONITOR_H */
+#endif /* HIC_KERNEL_MONITOR_H */

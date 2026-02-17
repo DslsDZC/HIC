@@ -1,5 +1,5 @@
 #!/bin/bash
-# HIK 根目录构建脚本
+# HIC 根目录构建脚本
 # 支持在根目录直接运行 ./build.sh
 
 set -e
@@ -14,7 +14,7 @@ RESET='\033[0m'
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo -e "${CYAN}HIK 构建系统${RESET}"
+echo -e "${CYAN}HIC 构建系统${RESET}"
 echo "===================="
 echo ""
 
@@ -106,9 +106,9 @@ case "$1" in
             cp "${SCRIPT_DIR}/src/bootloader/bin/bios.bin" "${SCRIPT_DIR}/output/"
             echo "已复制 bios.bin"
         fi
-        if [ -f "${SCRIPT_DIR}/build/bin/hik-kernel.bin" ]; then
-            cp "${SCRIPT_DIR}/build/bin/hik-kernel.bin" "${SCRIPT_DIR}/output/"
-            echo "已复制 hik-kernel.bin"
+        if [ -f "${SCRIPT_DIR}/build/bin/hic-kernel.bin" ]; then
+            cp "${SCRIPT_DIR}/build/bin/hic-kernel.bin" "${SCRIPT_DIR}/output/"
+            echo "已复制 hic-kernel.bin"
         fi
         echo -e "${GREEN}安装完成${RESET}"
         ;;
@@ -173,9 +173,9 @@ case "$1" in
             cp "${SCRIPT_DIR}/src/bootloader/bin/bios.bin" "${SCRIPT_DIR}/output/"
             echo "已复制 bios.bin"
         fi
-        if [ -f "${SCRIPT_DIR}/build/bin/hik-kernel.bin" ]; then
-            cp "${SCRIPT_DIR}/build/bin/hik-kernel.bin" "${SCRIPT_DIR}/output/"
-            echo "已复制 hik-kernel.bin"
+        if [ -f "${SCRIPT_DIR}/build/bin/hic-kernel.bin" ]; then
+            cp "${SCRIPT_DIR}/build/bin/hic-kernel.bin" "${SCRIPT_DIR}/output/"
+            echo "已复制 hic-kernel.bin"
         fi
         echo -e "${GREEN}安装完成${RESET}"
         

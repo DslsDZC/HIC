@@ -1,15 +1,15 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
  * x86-64汇编接口
  */
 
-#ifndef HIK_ARCH_X86_64_ASM_H
-#define HIK_ARCH_X86_64_ASM_H
+#ifndef HIC_ARCH_X86_64_ASM_H
+#define HIC_ARCH_X86_64_ASM_H
 
 #include <stdint.h>
 
@@ -138,4 +138,4 @@ extern void gdt_load(void *gdt_ptr);
 /* 延迟函数声明 */
 void hal_udelay(u32 us);
 
-#endif /* HIK_ARCH_X86_64_ASM_H */
+#endif /* HIC_ARCH_X86_64_ASM_H */

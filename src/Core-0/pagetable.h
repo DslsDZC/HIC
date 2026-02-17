@@ -1,17 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK页表管理器
+ * HIC页表管理器
  * 遵循文档第2.1节：物理资源管理与分配
  * 实现直接物理内存映射和MMU隔离
  */
 
-#ifndef HIK_KERNEL_PAGETABLE_H
-#define HIK_KERNEL_PAGETABLE_H
+#ifndef HIC_KERNEL_PAGETABLE_H
+#define HIC_KERNEL_PAGETABLE_H
 
 #include "types.h"
 #include "domain.h"
@@ -64,14 +64,14 @@ page_table_t* pagetable_create(void);
 void pagetable_destroy(page_table_t* root);
 
 /* 映射物理页 */
-hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phys, 
+hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phys, 
                            size_t size, page_perm_t perm, map_type_t type);
 
 /* 取消映射 */
-hik_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size);
+hic_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size);
 
 /* 更改权限 */
-hik_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt, 
+hic_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt, 
                                 size_t size, page_perm_t perm);
 
 /* 获取物理地址 */
@@ -85,7 +85,7 @@ void pagetable_flush_tlb(virt_addr_t addr);
 void pagetable_flush_tlb_all(void);
 
 /* 域页表管理 */
-hik_status_t pagetable_setup_domain(domain_id_t domain, page_table_t* root);
+hic_status_t pagetable_setup_domain(domain_id_t domain, page_table_t* root);
 void pagetable_cleanup_domain(domain_id_t domain);
 
-#endif /* HIK_KERNEL_PAGETABLE_H */
+#endif /* HIC_KERNEL_PAGETABLE_H */

@@ -1,15 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核控制台实现
+ * HIC内核控制台实现
  */
 
 #include <stdarg.h>
 #include "console.h"
+#include "minimal_uart.h"
 #include "mem.h"
 #include "hal.h"
 
@@ -59,13 +60,12 @@ static void serial_putchar(char c)
 /* 初始化控制台 */
 void console_init(console_type_t type)
 {
-    g_console_type = type;
+    /* 尝试从 boot_info 初始化极简UART */
+    minimal_uart_init_from_bootinfo();
     
-    if (type == CONSOLE_TYPE_SERIAL) {
-        serial_init(g_serial_port, 115200);
-    } else {
-        console_clear();
-    }
+    g_console_type = CONSOLE_TYPE_SERIAL;
+    
+    console_puts("[CONSOLE] Minimal UART initialized (115200 8N1)\n");
 }
 
 /* 清屏 */

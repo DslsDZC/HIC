@@ -5,7 +5,7 @@
  */
 
 /**
- * HIK Privileged-1服务管理实现
+ * HIC Privileged-1服务管理实现
  * 遵循三层模型文档第2.2节：Privileged-1层特权服务沙箱
  */
 
@@ -51,35 +51,35 @@ void privileged_service_init(void)
 }
 
 /* 从模块加载服务 */
-hik_status_t privileged_service_load(u64 module_instance_id,
+hic_status_t privileged_service_load(u64 module_instance_id,
                                       const char *service_name,
                                       service_type_t type,
                                       const domain_quota_t *quota,
                                       domain_id_t *out_domain_id)
 {
     if (!service_name || !quota || !out_domain_id) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
 
     /* 查找模块实例 */
-    hikmod_instance_t *module = module_get_instance(module_instance_id);
+    hicmod_instance_t *module = module_get_instance(module_instance_id);
     if (!module) {
         console_puts("[PRIV-SVC] Module instance not found: ");
         console_putu32(module_instance_id);
         console_puts("\n");
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     /* 检查服务数量限制 */
     if (g_service_manager.service_count >= MAX_SERVICES) {
         console_puts("[PRIV-SVC] Maximum services reached\n");
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     /* 创建域 */
     domain_id_t domain_id;
-    hik_status_t status = domain_create(DOMAIN_TYPE_PRIVILEGED, 0, quota, &domain_id);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = domain_create(DOMAIN_TYPE_PRIVILEGED, 0, quota, &domain_id);
+    if (status != HIC_SUCCESS) {
         console_puts("[PRIV-SVC] Failed to create domain\n");
         return status;
     }
@@ -87,16 +87,16 @@ hik_status_t privileged_service_load(u64 module_instance_id,
     /* 分配服务结构 */
     phys_addr_t service_phys;
     status = pmm_alloc_frames(domain_id, 1, PAGE_FRAME_PRIVILEGED, &service_phys);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         domain_destroy(domain_id);
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
 
     privileged_service_t *service = (privileged_service_t *)(virt_addr_t)service_phys;
 
     if (!service) {
         domain_destroy(domain_id);
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
 
     memzero(service, sizeof(privileged_service_t));
@@ -120,8 +120,8 @@ hik_status_t privileged_service_load(u64 module_instance_id,
     service->code_base = module->code_base;
     
     /* 从模块头获取代码段大小 */
-    hikmod_header_t* module_header = (hikmod_header_t*)module->code_base;
-    if (module_header->magic == HIKMOD_MAGIC) {
+    hicmod_header_t* module_header = (hicmod_header_t*)module->code_base;
+    if (module_header->magic == HICMOD_MAGIC) {
         service->code_size = module_header->code_size;
     } else {
         service->code_size = 4096; /* 默认4KB */
@@ -130,7 +130,7 @@ hik_status_t privileged_service_load(u64 module_instance_id,
     service->data_base = module->data_base;
     
     /* 从模块头获取数据段大小 */
-    if (module_header->magic == HIKMOD_MAGIC) {
+    if (module_header->magic == HICMOD_MAGIC) {
         service->data_size = module_header->data_size;
     } else {
         service->data_size = 4096; /* 默认4KB */
@@ -141,10 +141,10 @@ hik_status_t privileged_service_load(u64 module_instance_id,
     u32 stack_pages = (stack_size + PAGE_SIZE - 1) / PAGE_SIZE;
     phys_addr_t stack_phys;
     status = pmm_alloc_frames(domain_id, stack_pages, PAGE_FRAME_PRIVILEGED, &stack_phys);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         pmm_free_frames(service_phys, 1);
         domain_destroy(domain_id);
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
 
     service->stack_base = stack_phys;
@@ -181,25 +181,25 @@ hik_status_t privileged_service_load(u64 module_instance_id,
     console_puts(")\n");
     
     *out_domain_id = domain_id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 启动服务 */
-hik_status_t privileged_service_start(domain_id_t domain_id)
+hic_status_t privileged_service_start(domain_id_t domain_id)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     if (service->state == DOMAIN_STATE_RUNNING) {
-        return HIK_ERROR_ALREADY_EXISTS;
+        return HIC_ERROR_ALREADY_EXISTS;
     }
     
     /* 检查依赖 */
     if (!privileged_service_check_dependencies(domain_id)) {
         console_puts("[PRIV-SVC] Service dependencies not satisfied\n");
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 通知监控服务 */
@@ -221,19 +221,19 @@ hik_status_t privileged_service_start(domain_id_t domain_id)
     
     g_service_manager.running_services++;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 停止服务 */
-hik_status_t privileged_service_stop(domain_id_t domain_id)
+hic_status_t privileged_service_stop(domain_id_t domain_id)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     if (service->state != DOMAIN_STATE_RUNNING) {
-        return HIK_ERROR_INVALID_STATE;
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 通知监控服务 */
@@ -255,15 +255,15 @@ hik_status_t privileged_service_stop(domain_id_t domain_id)
     
     g_service_manager.running_services--;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 重启服务 */
-hik_status_t privileged_service_restart(domain_id_t domain_id)
+hic_status_t privileged_service_restart(domain_id_t domain_id)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     console_puts("[PRIV-SVC] Restarting service: ");
@@ -271,14 +271,14 @@ hik_status_t privileged_service_restart(domain_id_t domain_id)
     console_puts("\n");
     
     /* 停止服务 */
-    hik_status_t status = privileged_service_stop(domain_id);
-    if (status != HIK_SUCCESS && status != HIK_ERROR_INVALID_STATE) {
+    hic_status_t status = privileged_service_stop(domain_id);
+    if (status != HIC_SUCCESS && status != HIC_ERROR_INVALID_STATE) {
         return status;
     }
     
     /* 重新启动 */
     status = privileged_service_start(domain_id);
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         service->restart_count++;
     }
     
@@ -286,11 +286,11 @@ hik_status_t privileged_service_restart(domain_id_t domain_id)
 }
 
 /* 卸载服务 */
-hik_status_t privileged_service_unload(domain_id_t domain_id)
+hic_status_t privileged_service_unload(domain_id_t domain_id)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     /* 停止服务 */
@@ -330,11 +330,11 @@ hik_status_t privileged_service_unload(domain_id_t domain_id)
     console_putu32(domain_id);
     console_puts("\n");
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 注册服务端点 */
-hik_status_t privileged_service_register_endpoint(domain_id_t domain_id,
+hic_status_t privileged_service_register_endpoint(domain_id_t domain_id,
                                                   const char *name,
                                                   virt_addr_t handler_addr,
                                                   u32 syscall_num,
@@ -342,20 +342,20 @@ hik_status_t privileged_service_register_endpoint(domain_id_t domain_id,
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service || !name || !out_cap_id) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
 
     /* 分配端点结构 */
     phys_addr_t endpoint_phys;
-    hik_status_t status = pmm_alloc_frames(domain_id, 1, PAGE_FRAME_PRIVILEGED, &endpoint_phys);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_NO_MEMORY;
+    hic_status_t status = pmm_alloc_frames(domain_id, 1, PAGE_FRAME_PRIVILEGED, &endpoint_phys);
+    if (status != HIC_SUCCESS) {
+        return HIC_ERROR_NO_MEMORY;
     }
 
     service_endpoint_t *endpoint = (service_endpoint_t *)(virt_addr_t)endpoint_phys;
 
     if (!endpoint) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
 
     memzero(endpoint, sizeof(service_endpoint_t));
@@ -375,7 +375,7 @@ hik_status_t privileged_service_register_endpoint(domain_id_t domain_id,
     /* 创建端点能力 - 使用 endpoint 类型的能力 */
     cap_id_t cap_id;
     status = cap_create_memory(domain_id, handler_addr, 4096, CAP_MEM_READ | CAP_MEM_EXEC, &cap_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         pmm_free_frames((phys_addr_t)endpoint, 1);
         return status;
     }
@@ -399,7 +399,7 @@ hik_status_t privileged_service_register_endpoint(domain_id_t domain_id,
     console_puts(")\n");
     
     *out_cap_id = cap_id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 查找端点 */
@@ -433,7 +433,7 @@ service_endpoint_t* privileged_service_find_endpoint_by_syscall(u32 syscall_num)
 }
 
 /* 注册中断处理函数 */
-hik_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
+hic_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
                                                      u32 irq_vector,
                                                      virt_addr_t handler_addr)
 {
@@ -442,11 +442,11 @@ hik_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
 
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     if (service->irq_count >= 8) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     service->irq_vectors[service->irq_count] = irq_vector;
@@ -458,7 +458,7 @@ hik_status_t privileged_service_register_irq_handler(domain_id_t domain_id,
     console_puts(service->name);
     console_puts("\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 分发中断到服务 */
@@ -475,17 +475,17 @@ void privileged_service_dispatch_irq(u32 irq_vector)
                 
                 /* 保存当前上下文 */
                 hal_context_t old_context;
-                domain_switch_save_context(HIK_DOMAIN_CORE, &old_context);
+                domain_switch_save_context(HIC_DOMAIN_CORE, &old_context);
                 
                 /* 切换到服务上下文 */
-                domain_switch(HIK_DOMAIN_CORE, service->domain_id, 0, 0, 0, 0);
+                domain_switch(HIC_DOMAIN_CORE, service->domain_id, 0, 0, 0, 0);
                 
                 /* 调用服务的中断处理函数 */
                 /* 服务应该通过系统调用注册中断处理函数 */
                 /* 这里简化处理，直接返回 */
                 
                 /* 恢复上下文 */
-                domain_switch_restore_context(HIK_DOMAIN_CORE, &old_context);
+                domain_switch_restore_context(HIC_DOMAIN_CORE, &old_context);
                 
                 return;
             }
@@ -495,18 +495,18 @@ void privileged_service_dispatch_irq(u32 irq_vector)
 }
 
 /* 分配MMIO区域 */
-hik_status_t privileged_service_map_mmio(domain_id_t domain_id,
+hic_status_t privileged_service_map_mmio(domain_id_t domain_id,
                                          phys_addr_t mmio_phys,
                                          size_t size,
                                          virt_addr_t *out_virt_addr)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service || !out_virt_addr) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     if (service->mmio_count >= 8) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     /* 记录MMIO区域 */
@@ -523,7 +523,7 @@ hik_status_t privileged_service_map_mmio(domain_id_t domain_id,
     console_putu32(size);
     console_puts(")\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 获取服务信息 */
@@ -568,44 +568,44 @@ void privileged_service_foreach(service_callback_t callback, void *arg)
 }
 
 /* 检查内存配额 */
-hik_status_t privileged_service_check_memory_quota(domain_id_t domain_id,
+hic_status_t privileged_service_check_memory_quota(domain_id_t domain_id,
                                                    size_t size)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
 
     domain_t *domain = NULL;
-    hik_status_t status = domain_get_info(domain_id, domain);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = domain_get_info(domain_id, domain);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
     if (domain->usage.memory_used + size > domain->quota.max_memory) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 添加依赖 */
-hik_status_t privileged_service_add_dependency(domain_id_t domain_id,
+hic_status_t privileged_service_add_dependency(domain_id_t domain_id,
                                                domain_id_t dep_domain_id)
 {
     privileged_service_t *service = privileged_service_get_info(domain_id);
     if (!service) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     if (service->dep_count >= 8) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     service->dependencies[service->dep_count] = dep_domain_id;
     service->dep_count++;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 检查依赖是否满足 */

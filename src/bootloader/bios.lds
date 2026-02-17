@@ -1,5 +1,5 @@
 /**
- * HIK BIOS Bootloader链接脚本
+ * HIC BIOS Bootloader链接脚本
  * 
  * 内存布局：
  * 0x00000000 - 0x000FFFFF: BIOS区域

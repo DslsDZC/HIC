@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK内核架构抽象层文档
+# HIC内核架构抽象层文档
 
 ## 概述
 
-HIK内核通过引入架构抽象层(Architecture Abstraction Layer)，减少了对特定架构(如x86_64)的依赖，使得内核核心代码可以在不同架构之间更容易移植。
+HIC内核通过引入架构抽象层(Architecture Abstraction Layer)，减少了对特定架构(如x86_64)的依赖，使得内核核心代码可以在不同架构之间更容易移植。
 
 ## 架构抽象层设计
 
@@ -236,4 +236,4 @@ typedef enum {
 
 ## 总结
 
-通过引入架构抽象层，HIK内核显著减少了对x86_64架构的依赖，为未来支持ARM64、RISC-V等架构奠定了基础。核心代码的架构无关性提升了代码的可移植性、可维护性和可扩展性。
+通过引入架构抽象层，HIC内核显著减少了对x86_64架构的依赖，为未来支持ARM64、RISC-V等架构奠定了基础。核心代码的架构无关性提升了代码的可移植性、可维护性和可扩展性。

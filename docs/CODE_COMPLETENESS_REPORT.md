@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK 代码完整性报告
+# HIC 代码完整性报告
 
 **日期**: 2026-02-14  
-**检查范围**: 整个HIK项目  
+**检查范围**: 整个HIC项目  
 **检查方法**: 搜索"简化|TODO|FIXME|XXX|占位符|placeholder|示例|未实现|简化实现"关键字
 
 ## 检查结果摘要
@@ -71,7 +71,7 @@ SPDX-License-Identifier: CC-BY-4.0
    - 这是文档说明
 
 7. **Core-0/examples/example_service.c:2**
-   - "HIK示例Privileged-1服务"
+   - "HIC示例Privileged-1服务"
    - 这是代码文件头注释
 
 8. **Core-0/examples/example_service.c:5**

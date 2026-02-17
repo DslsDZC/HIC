@@ -1,5 +1,5 @@
-#ifndef HIK_BOOTLOADER_CRYPTO_H
-#define HIK_BOOTLOADER_CRYPTO_H
+#ifndef HIC_BOOTLOADER_CRYPTO_H
+#define HIC_BOOTLOADER_CRYPTO_H
 
 #include <stdint.h>
 
@@ -54,4 +54,4 @@ int ed25519_verify(const ed25519_public_key_t *pubkey,
                    const uint8_t *message, uint64_t message_len,
                    const ed25519_signature_t *signature);
 
-#endif // HIK_BOOTLOADER_CRYPTO_H
+#endif // HIC_BOOTLOADER_CRYPTO_H

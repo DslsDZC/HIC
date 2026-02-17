@@ -1,5 +1,5 @@
 #!/bin/bash
-# HIK Bootloader测试脚本
+# HIC Bootloader测试脚本
 
 set -e
 
@@ -86,17 +86,17 @@ setup_test_environment() {
     log_info "创建测试环境..."
     
     # 创建测试目录
-    mkdir -p "$TEST_DIR/EFI/HIK"
+    mkdir -p "$TEST_DIR/EFI/HIC"
     
     # 复制引导加载程序
-    cp "$BUILD_DIR/bootx64.efi" "$TEST_DIR/EFI/HIK/"
+    cp "$BUILD_DIR/bootx64.efi" "$TEST_DIR/EFI/HIC/"
     
     # 创建配置文件
-    cat > "$TEST_DIR/EFI/HIK/boot.conf" << 'EOF'
-# HIK Bootloader Configuration
+    cat > "$TEST_DIR/EFI/HIC/boot.conf" << 'EOF'
+# HIC Bootloader Configuration
 
 # 内核路径
-kernel=\EFI\HIK\kernel.hik
+kernel=\EFI\HIC\kernel.hic
 
 # 启动参数
 cmdline=quiet debug=1
@@ -109,8 +109,8 @@ debug=1
 EOF
     
     # 创建虚拟内核文件（用于测试）
-    cat > "$TEST_DIR/EFI/HIK/kernel.hik" << 'EOF'
-HIK_IMG\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+    cat > "$TEST_DIR/EFI/HIC/kernel.hic" << 'EOF'
+HIC_IMG\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
 EOF
     
     log_success "测试环境创建完成"
@@ -146,7 +146,7 @@ run_qemu_test() {
 
 # 创建USB镜像
 create_usb_image() {
-    local image_name="${1:-hik-boot.img}"
+    local image_name="${1:-hic-boot.img}"
     
     log_info "创建USB镜像: $image_name"
     
@@ -160,11 +160,11 @@ create_usb_image() {
     
     # 创建EFI目录
     mmd -i "$image_name" ::/EFI
-    mmd -i "$image_name" ::/EFI/HIK
+    mmd -i "$image_name" ::/EFI/HIC
     
     # 复制文件
-    mcopy -i "$image_name" "$BUILD_DIR/bootx64.efi" ::/EFI/HIK/
-    mcopy -i "$image_name" "$TEST_DIR/EFI/HIK/boot.conf" ::/EFI/HIK/
+    mcopy -i "$image_name" "$BUILD_DIR/bootx64.efi" ::/EFI/HIC/
+    mcopy -i "$image_name" "$TEST_DIR/EFI/HIC/boot.conf" ::/EFI/HIC/
     
     log_success "USB镜像创建完成: $image_name"
 }
@@ -189,7 +189,7 @@ cleanup() {
 # 显示帮助
 show_help() {
     cat << EOF
-HIK Bootloader 测试脚本
+HIC Bootloader 测试脚本
 
 用法: $0 [选项] [命令]
 
@@ -211,7 +211,7 @@ HIK Bootloader 测试脚本
   $0 build              # 编译
   $0 test               # 运行测试
   $0 all                # 完整测试
-  $0 usb hik-boot.img   # 创建USB镜像
+  $0 usb hic-boot.img   # 创建USB镜像
 
 EOF
 }

@@ -1,17 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK域切换接口
+ * HIC域切换接口
  * 遵循文档第2.1节：跨域通信和隔离
  * 实现安全的域间上下文切换
  */
 
-#ifndef HIK_KERNEL_DOMAIN_SWITCH_H
-#define HIK_KERNEL_DOMAIN_SWITCH_H
+#ifndef HIC_KERNEL_DOMAIN_SWITCH_H
+#define HIC_KERNEL_DOMAIN_SWITCH_H
 
 #include "types.h"
 #include "domain.h"
@@ -34,7 +34,7 @@ typedef struct {
     u64 args[4];
     
     /* 返回值 */
-    hik_status_t result;
+    hic_status_t result;
     
     /* 保存的上下文 */
     hal_context_t saved_context;
@@ -44,12 +44,12 @@ typedef struct {
 void domain_switch_init(void);
 
 /* 执行域切换 */
-hik_status_t domain_switch(domain_id_t from, domain_id_t to, 
+hic_status_t domain_switch(domain_id_t from, domain_id_t to, 
                            cap_id_t endpoint_cap, u64 syscall_num,
                            u64* args, u32 arg_count);
 
 /* 从域切换返回 */
-void domain_switch_return(hik_status_t result);
+void domain_switch_return(hic_status_t result);
 
 /* 保存当前域上下文 */
 void domain_switch_save_context(domain_id_t domain, hal_context_t* ctx);
@@ -64,9 +64,9 @@ domain_id_t domain_switch_get_current(void);
 void domain_switch_set_current(domain_id_t domain);
 
 /* 设置域页表 */
-hik_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable);
+hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable);
 
 /* 获取域页表 */
 page_table_t* domain_switch_get_pagetable(domain_id_t domain);
 
-#endif /* HIK_KERNEL_DOMAIN_SWITCH_H */
+#endif /* HIC_KERNEL_DOMAIN_SWITCH_H */

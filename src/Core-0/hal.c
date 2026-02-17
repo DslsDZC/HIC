@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK硬件抽象层 (HAL) 实现
+ * HIC硬件抽象层 (HAL) 实现
  * 
  * 本文件提供架构无关的HAL接口实现
  * 通过编译时宏检测架构并调用对应的架构特定函数

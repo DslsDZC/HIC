@@ -1,10 +1,10 @@
 #!/bin/bash
-# HIK形式化验证一致性检查脚本
+# HIC形式化验证一致性检查脚本
 # 确保代码实现与数学证明一致
 
 set -e
 
-echo "=== HIK 形式化验证一致性检查 ==="
+echo "=== HIC 形式化验证一致性检查 ==="
 echo ""
 
 # 颜色定义
@@ -125,7 +125,7 @@ echo "7. 检查代码质量"
 echo "-----------------------------------"
 
 check_item "包含中文注释" \
-    "grep -q 'HIK内核形式化验证模块' src/Core-0/formal_verification.c"
+    "grep -q 'HIC内核形式化验证模块' src/Core-0/formal_verification.c"
 check_item "遵循编码规范（缩进使用空格）" \
     "! grep -P '\t' src/Core-0/formal_verification.c"
 check_item "包含函数文档注释" \

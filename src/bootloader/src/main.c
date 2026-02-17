@@ -1,6 +1,6 @@
 
 /**
- * HIK UEFI Bootloader
+ * HIC UEFI Bootloader
  * 第一引导层：UEFI引导加载程序
  * 
  * 负责：
@@ -33,19 +33,19 @@ static uint64_t g_platform_size = 0;
 static BOOLEAN g_debug_mode = FALSE;
 
 // 内核路径
-__attribute__((unused)) static CHAR16 gKernelPath[] = L"\\EFI\\HIK\\kernel.hik";
-__attribute__((unused)) static CHAR16 gPlatformPath[] = L"\\EFI\\HIK\\platform.yaml";
+__attribute__((unused)) static CHAR16 gKernelPath[] = L"\\EFI\\HIC\\kernel.hic";
+__attribute__((unused)) static CHAR16 gPlatformPath[] = L"\\EFI\\HIC\\platform.yaml";
 
 // 函数前置声明
 EFI_STATUS load_platform_config(void);
 void parse_platform_config(char *config_data);
 EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size);
-hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size);
-EFI_STATUS get_memory_map(hik_boot_info_t *boot_info);
-void find_acpi_tables(hik_boot_info_t *boot_info);
-EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size, hik_boot_info_t *boot_info);
-EFI_STATUS exit_boot_services(hik_boot_info_t *boot_info);
-__attribute__((noreturn)) void jump_to_kernel(hik_boot_info_t *boot_info);
+hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size);
+EFI_STATUS get_memory_map(hic_boot_info_t *boot_info);
+void find_acpi_tables(hic_boot_info_t *boot_info);
+EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size, hic_boot_info_t *boot_info);
+EFI_STATUS exit_boot_services(hic_boot_info_t *boot_info);
+__attribute__((noreturn)) void jump_to_kernel(hic_boot_info_t *boot_info);
 static void *allocate_pool(UINTN size);
 static void *allocate_pages(UINTN pages);
 static void *allocate_pages_aligned(UINTN size, UINTN alignment);
@@ -168,7 +168,7 @@ static EFI_STATUS find_file_system_handle(EFI_HANDLE *result_handle) {
 __attribute__((unused)) static const uint8_t gProductionPublicKey[] = {
     /* RSA-3072 公钥完整实现 */
     /* 这是一个示例公钥，实际部署时应该使用真实的密钥对 */
-    /* 密钥ID: 0x48494B01 (ASCII: "HIK" + 0x01) */
+    /* 密钥ID: 0x48494B01 (ASCII: "HIC" + 0x01) */
     
     /* DER编码的RSA-3072公钥 */
     0x30, 0x82, 0x01, 0x0a, 0x02, 0x82, 0x01, 0x01,
@@ -223,8 +223,8 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     bootlog_event(BOOTLOG_UEFI_INIT, NULL, 0);
     
     /* 输出启动信息 */
-    console_puts("HIK UEFI Bootloader v0.1\n");
-    console_puts("Starting HIK Hierarchical Isolation Kernel...\n");
+    console_puts("HIC UEFI Bootloader v0.1\n");
+    console_puts("Starting HIC Hierarchical Isolation Core...\n");
     console_puts("\n");
     bootlog_info("UEFI initialized");
     
@@ -304,7 +304,7 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     
     console_puts("[BOOTLOADER AUDIT] Stage 4: Preparing boot info...\n");
     /* 准备启动信息 */
-    hik_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
+    hic_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
     if (!boot_info) {
         console_puts("[BOOTLOADER AUDIT] ERROR: Failed to prepare boot info\n");
         return EFI_OUT_OF_RESOURCES;
@@ -429,17 +429,76 @@ EFI_STATUS load_platform_config(void)
         }
         console_puts("[BOOTLOADER AUDIT] Stage 2: Volume Opened\n");
     
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Opening platform.yaml\n");
-        // 打开platform.yaml文件
-        status = root->Open(root, &file, gPlatformPath,
-                           EFI_FILE_MODE_READ, 0);
-        if (EFI_ERROR(status)) {
-            root->Close(root);
-            // platform.yaml是可选的，返回成功但警告
-            console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml not found (OK)\n");
-            return EFI_SUCCESS;
-        }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml Opened\n");
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Opening platform.yaml\n");
+    // 打开platform.yaml文件
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Before Open() call\n");
+    status = root->Open(root, &file, gPlatformPath,
+                       EFI_FILE_MODE_READ, 0);
+    console_puts("[BOOTLOADER AUDIT] Stage 2: After Open() call\n");
+    if (EFI_ERROR(status)) {
+        root->Close(root);
+        // platform.yaml是可选的，返回成功但警告
+        console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml not found (OK)\n");
+        return EFI_SUCCESS;
+    }
+    console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml Opened\n");
+    
+    /* 尝试读取 YAML 配置 */
+    UINT64 yaml_size = 0;
+    UINT64 buffer_size = 4096;  // 4KB 缓冲区（更小以避免问题）
+    char *yaml_buffer = (char *)allocate_pool(buffer_size + 1);
+    
+    if (yaml_buffer == NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Failed to allocate YAML buffer\n");
+        file->Close(file);
+        root->Close(root);
+        return EFI_SUCCESS;
+    }
+    
+    console_puts("[BOOTLOADER AUDIT] Stage 2: YAML buffer allocated\n");
+    
+    /* 读取文件 */
+    UINT64 bytes_read = buffer_size;
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Calling Read()...\n");
+    status = file->Read(file, &bytes_read, yaml_buffer);
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Read() returned\n");
+    
+    if (EFI_ERROR(status)) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Read() failed, using default config\n");
+        file->Close(file);
+        root->Close(root);
+        return EFI_SUCCESS;
+    }
+    
+    yaml_size = bytes_read;
+    console_printf("[BOOTLOADER AUDIT] Stage 2: YAML size: %d bytes\n", (int)yaml_size);
+    
+    if (yaml_size == 0) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: YAML file is empty, using default config\n");
+        file->Close(file);
+        root->Close(root);
+        return EFI_SUCCESS;
+    }
+    
+    /* 添加字符串终止符 */
+    if (yaml_size < buffer_size) {
+        yaml_buffer[yaml_size] = '\0';
+    } else {
+        yaml_buffer[buffer_size] = '\0';
+    }
+    
+    /* 设置平台配置数据 */
+    platform_data = yaml_buffer;
+    g_platform_size = yaml_size;
+    
+    console_printf("[BOOTLOADER AUDIT] Stage 2: YAML config loaded: %d bytes\n", (int)yaml_size);
+    
+    /* 关闭文件 */
+    file->Close(file);
+    root->Close(root);
+    
+    console_puts("[BOOTLOADER AUDIT] Stage 2: YAML config loaded successfully\n");
+    return EFI_SUCCESS;
     
         console_puts("[BOOTLOADER AUDIT] Stage 2: Getting File Size using GetPosition\n");
         
@@ -449,11 +508,28 @@ EFI_STATUS load_platform_config(void)
             root->Close(root);
             return EFI_INVALID_PARAMETER;
         }
+        console_puts("[BOOTLOADER AUDIT] Stage 2: file pointer is valid\n");
+        
+        /* 检查file->GetPosition的有效性 */
+        if (file->GetPosition == NULL) {
+            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - file->GetPosition is NULL\n");
+            file->Close(file);
+            root->Close(root);
+            return EFI_INVALID_PARAMETER;
+        }
+        console_puts("[BOOTLOADER AUDIT] Stage 2: file->GetPosition is valid\n");
         
         /* 使用GetPosition获取文件大小（安全方法） */
         UINT64 original_pos = 0;
-        console_printf("[BOOTLOADER AUDIT] Stage 2: file=%p, GetPosition=%p\n", file, file->GetPosition);
-        status = file->GetPosition(file, &original_pos);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: About to call GetPosition\n");
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling file->GetPosition...\n");
+        
+        /* 使用函数指针调用GetPosition */
+        EFI_STATUS (*getpos_func)(struct _EFI_FILE_PROTOCOL *, uint64_t *) = file->GetPosition;
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Function pointer extracted\n");
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling through function pointer...\n");
+        status = getpos_func(file, &original_pos);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition returned\n");
         if (EFI_ERROR(status)) {
             console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition failed, skipping platform.yaml\n");
             file->Close(file);
@@ -462,6 +538,7 @@ EFI_STATUS load_platform_config(void)
         }
         
         status = file->SetPosition(file, (UINT64)-1);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: SetPosition called\n");
         if (EFI_ERROR(status)) {
             console_puts("[BOOTLOADER AUDIT] Stage 2: SetPosition failed, skipping platform.yaml\n");
             file->Close(file);
@@ -470,7 +547,9 @@ EFI_STATUS load_platform_config(void)
         }
         
         UINT64 file_size_pos = 0;
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling GetPosition(EOF)...\n");
         status = file->GetPosition(file, &file_size_pos);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition(EOF) returned\n");
         if (EFI_ERROR(status)) {
             console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition(EOF) failed, skipping platform.yaml\n");
             file->Close(file);
@@ -611,7 +690,7 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
     }
     
     // 使用默认内核路径
-    utf8_to_utf16("\\hik-kernel.bin", kernel_path, 256);
+    utf8_to_utf16("\\hic-kernel.hic", kernel_path, 256);
     
     // 打开卷的根目录
     EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
@@ -834,22 +913,22 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
 /**
  * 准备启动信息结构
  */
-hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
+hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 {
-    hik_boot_info_t *boot_info;
+    hic_boot_info_t *boot_info;
     
     // 分配启动信息结构
-    boot_info = allocate_pool_aligned(sizeof(hik_boot_info_t), 4096);
+    boot_info = allocate_pool_aligned(sizeof(hic_boot_info_t), 4096);
     if (!boot_info) {
         return NULL;
     }
     
     // 清零结构
-    memset(boot_info, 0, sizeof(hik_boot_info_t));
+    memset(boot_info, 0, sizeof(hic_boot_info_t));
     
     // 填充基本信息
-    boot_info->magic = HIK_BOOT_INFO_MAGIC;
-    boot_info->version = HIK_BOOT_INFO_VERSION;
+    boot_info->magic = HIC_BOOT_INFO_MAGIC;
+    boot_info->version = HIC_BOOT_INFO_VERSION;
     boot_info->flags = 0;
     boot_info->firmware_type = 0;  // UEFI
     
@@ -882,17 +961,17 @@ hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     strcpy(boot_info->cmdline, "");  // 默认空命令行
 
     // 系统信息
-    boot_info->system.architecture = HIK_ARCH_X86_64;
+    boot_info->system.architecture = HIC_ARCH_X86_64;
     boot_info->system.platform_type = 1;  // UEFI
 
     // 应用platform.yaml中的配置（将在内核中详细解析）
     // 这里只设置基本的启动标志
 
     // 启用ACPI（默认）
-    boot_info->flags |= HIK_BOOT_FLAG_ACPI_ENABLED;
+    boot_info->flags |= HIC_BOOT_FLAG_ACPI_ENABLED;
 
     // 启用调试（默认）
-    boot_info->flags |= HIK_BOOT_FLAG_DEBUG_ENABLED;
+    boot_info->flags |= HIC_BOOT_FLAG_DEBUG_ENABLED;
 
     // 设置栈
     boot_info->stack_size = 0x10000;  // 64KB栈
@@ -910,13 +989,13 @@ hik_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 /**
  * 获取内存映射
  */
-EFI_STATUS __attribute__((unused)) get_memory_map(hik_boot_info_t *boot_info)
+EFI_STATUS __attribute__((unused)) get_memory_map(hic_boot_info_t *boot_info)
 {
     EFI_STATUS status;
     UINTN map_size, map_key, desc_size;
     UINT32 desc_version;
     EFI_MEMORY_DESCRIPTOR *map;
-    hik_mem_entry_t *hik_map;
+    hic_mem_entry_t *hic_map;
     UINTN entry_count;
     
     // 第一次调用获取所需大小
@@ -939,50 +1018,50 @@ EFI_STATUS __attribute__((unused)) get_memory_map(hik_boot_info_t *boot_info)
         return status;
     }
     
-    // 转换为HIK格式
+    // 转换为HIC格式
     entry_count = map_size / desc_size;
-    hik_map = allocate_pool(entry_count * sizeof(hik_mem_entry_t));
-    if (!hik_map) {
+    hic_map = allocate_pool(entry_count * sizeof(hic_mem_entry_t));
+    if (!hic_map) {
         free_pool(map);
         return EFI_OUT_OF_RESOURCES;
     }
     
     EFI_MEMORY_DESCRIPTOR *desc = map;
     for (UINTN i = 0; i < entry_count; i++) {
-        hik_map[i].base = desc->physical_start;
-        hik_map[i].length = desc->number_of_pages * 4096;
-        hik_map[i].flags = 0;
+        hic_map[i].base = desc->physical_start;
+        hic_map[i].length = desc->number_of_pages * 4096;
+        hic_map[i].flags = 0;
         
         // 转换内存类型
         switch (desc->type) {
             case EfiConventionalMemory:
-                hik_map[i].type = HIK_MEM_TYPE_USABLE;
+                hic_map[i].type = HIC_MEM_TYPE_USABLE;
                 break;
             case EfiLoaderCode:
             case EfiLoaderData:
             case EfiBootServicesCode:
             case EfiBootServicesData:
-                hik_map[i].type = HIK_MEM_TYPE_BOOTLOADER;
+                hic_map[i].type = HIC_MEM_TYPE_BOOTLOADER;
                 break;
             case EfiRuntimeServicesCode:
             case EfiRuntimeServicesData:
             case EfiACPIReclaimMemory:
-                hik_map[i].type = HIK_MEM_TYPE_ACPI;
+                hic_map[i].type = HIC_MEM_TYPE_ACPI;
                 break;
             case EfiACPIMemoryNVS:
-                hik_map[i].type = HIK_MEM_TYPE_NVS;
+                hic_map[i].type = HIC_MEM_TYPE_NVS;
                 break;
             default:
-                hik_map[i].type = HIK_MEM_TYPE_RESERVED;
+                hic_map[i].type = HIC_MEM_TYPE_RESERVED;
                 break;
         }
         
         desc = (EFI_MEMORY_DESCRIPTOR *)((uint8_t *)desc + desc_size);
     }
     
-    boot_info->mem_map = hik_map;
+    boot_info->mem_map = hic_map;
     boot_info->mem_map_size = map_size;
-    boot_info->mem_map_desc_size = sizeof(hik_mem_entry_t);
+    boot_info->mem_map_desc_size = sizeof(hic_mem_entry_t);
     boot_info->mem_map_entry_count = entry_count;
     
     free_pool(map);
@@ -992,7 +1071,7 @@ EFI_STATUS __attribute__((unused)) get_memory_map(hik_boot_info_t *boot_info)
 /**
  * 查找ACPI表
  */
-void find_acpi_tables(hik_boot_info_t *boot_info)
+void find_acpi_tables(hic_boot_info_t *boot_info)
 {
     // 遍历配置表查找ACPI
     for (UINTN i = 0; i < gST->NumberOfTableEntries; i++) {
@@ -1001,14 +1080,14 @@ void find_acpi_tables(hik_boot_info_t *boot_info)
         if (memcmp(&entry->vendor_guid, &gEfiAcpi20TableGuid, sizeof(EFI_GUID)) == 0) {
             boot_info->xsdp = entry->vendor_table;
             boot_info->rsdp = entry->vendor_table;
-            boot_info->flags |= HIK_BOOT_FLAG_ACPI_ENABLED;
+            boot_info->flags |= HIC_BOOT_FLAG_ACPI_ENABLED;
             log_info("Found ACPI 2.0 RSDP at 0x%llx\n", (uint64_t)entry->vendor_table);
             break;
         }
         
         if (memcmp(&entry->vendor_guid, &gEfiAcpiTableGuid, sizeof(EFI_GUID)) == 0) {
             boot_info->rsdp = entry->vendor_table;
-            boot_info->flags |= HIK_BOOT_FLAG_ACPI_ENABLED;
+            boot_info->flags |= HIC_BOOT_FLAG_ACPI_ENABLED;
             log_info("Found ACPI 1.0 RSDP at 0x%llx\n", (uint64_t)entry->vendor_table);
         }
     }
@@ -1018,7 +1097,7 @@ void find_acpi_tables(hik_boot_info_t *boot_info)
  * 加载内核段
  */
 EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
-                                       hik_boot_info_t *boot_info)
+                                       hic_boot_info_t *boot_info)
 {
     console_puts("[BOOTLOADER] load_kernel_segments called\n");
     
@@ -1034,21 +1113,18 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
     
     uint8_t *raw_bytes = (uint8_t *)image_data;
     
-    // 检查是否是HIK镜像格式（有魔数）
-    if (image_size >= 8 && memcmp(raw_bytes, HIK_IMG_MAGIC, 8) == 0) {
-        console_puts("[BOOTLOADER] Detected HIK image format\n");
+    // 检查是否是HIC镜像格式（有魔数）
+    if (image_size >= 8 && memcmp(raw_bytes, HIC_IMG_MAGIC, 8) == 0) {
+        console_puts("[BOOTLOADER] Detected HIC image format\n");
         
-        // 手动读取HIK镜像头部字段
+        // 手动读取HIC镜像头部字段
         uint64_t entry_point = *((uint64_t*)(raw_bytes + 12));
         uint64_t manual_image_size = *((uint64_t*)(raw_bytes + 20));
         
-        char debug_str[128];
-        snprintf(debug_str, sizeof(debug_str), "[BOOTLOADER] HIK image: entry=0x%lx, size=%d\n",
-                 entry_point, (int)manual_image_size);
-        console_puts(debug_str);
+        console_puts("[BOOTLOADER] HIC image loaded\n");
         
-        // 计算内核代码在HIK镜像中的偏移量
-        uint64_t kernel_offset = 160;  // HIK镜像格式: header(120) + segment_table(40)
+        // 计算内核代码在HIC镜像中的偏移量
+        uint64_t kernel_offset = 160;  // HIC镜像格式: header(120) + segment_table(40)
         uint64_t kernel_code_size = manual_image_size - kernel_offset;
         
         // 将内核代码复制到物理地址0x100000
@@ -1061,7 +1137,9 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         // 更新启动信息
         boot_info->kernel_base = kernel_phys_base;
         boot_info->kernel_size = manual_image_size;
-        boot_info->entry_point = 0x100000;  // kernel_start的绝对地址
+        boot_info->entry_point = entry_point;  // 使用从HIC镜像头部读取的入口点
+        
+        console_puts("[BOOTLOADER] Entry point loaded from HIC image\n");
         
     } else {
         // 纯二进制格式，直接复制
@@ -1083,8 +1161,6 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         boot_info->entry_point = 0x100000;  // kernel_start的绝对地址
     }
     
-    console_puts("[BOOTLOADER] Entry point set to 0x100000\n");
-    
     char debug2_str[256];
     snprintf(debug2_str, sizeof(debug2_str), "[BOOTLOADER] boot_info=%p, entry_point=%p\n",
              boot_info, (void*)boot_info->entry_point);
@@ -1098,7 +1174,7 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
 /**
  * 退出UEFI启动服务
  */
-EFI_STATUS exit_boot_services(__attribute__((unused)) hik_boot_info_t *boot_info)
+EFI_STATUS exit_boot_services(__attribute__((unused)) hic_boot_info_t *boot_info)
 {
     EFI_STATUS status;
     UINTN map_key;
@@ -1147,7 +1223,7 @@ EFI_STATUS exit_boot_services(__attribute__((unused)) hik_boot_info_t *boot_info
  * - 记录详细的跳转信息
  */
 __attribute__((noreturn))
-void jump_to_kernel(hik_boot_info_t *boot_info) {
+void jump_to_kernel(hic_boot_info_t *boot_info) {
     // 【安全检查1】验证boot_info指针
     if (boot_info == NULL) {
         console_puts("[JUMP] ERROR: boot_info is NULL!\n");
@@ -1347,8 +1423,8 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     console_puts("\n");
     
     /* 使用简单的console_puts代替console_printf进行测试 */
-    console_puts("HIK UEFI Bootloader v0.1\n");
-    console_puts("Starting HIK Hierarchical Isolation Kernel...\n\n");
+    console_puts("HIC UEFI Bootloader v0.1\n");
+    console_puts("Starting HIC Hierarchical Isolation Core...\n\n");
     
     /* 引导程序审计日志 - 步骤2 */
     console_puts("[BOOTLOADER AUDIT] Stage 2: Console Output Complete\n");
@@ -1393,7 +1469,7 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     console_puts("[BOOTLOADER AUDIT] Stage 5: Kernel Image Loaded\n");
     
     /* 准备启动信息 */
-    hik_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
+    hic_boot_info_t *boot_info = prepare_boot_info(kernel_data, kernel_size);
     if (!boot_info) {
         console_printf("ERROR: Failed to prepare boot info\n");
         return EFI_OUT_OF_RESOURCES;

@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 通过快速路径（Fast Path）优化技术，针对高频操作实现极致性能。快速路径绕过常规的检查流程，直接执行操作，大幅减少延迟。
+HIC 通过快速路径（Fast Path）优化技术，针对高频操作实现极致性能。快速路径绕过常规的检查流程，直接执行操作，大幅减少延迟。
 
 ## 快速路径设计原则
 
@@ -71,7 +71,7 @@ void fast_syscall_dispatch(u64 num, u64 arg1, u64 arg2, u64 arg3, u64 arg4) {
 
 ```c
 // 快速 IPC 调用
-hik_status_t fast_ipc_call(ipc_call_params_t *params) {
+hic_status_t fast_ipc_call(ipc_call_params_t *params) {
     // 直接访问，跳过能力检查（在调用方已验证）
     domain_id_t caller = get_current_domain();
     cap_entry_t *endpoint = &g_cap_table[params->endpoint_cap];
@@ -146,14 +146,14 @@ static inline bool fast_capability_check(cap_id_t cap, cap_rights_t required) {
 
 ```c
 // 快速能力转移
-hik_status_t fast_cap_transfer(cap_id_t cap, domain_id_t to) {
+hic_status_t fast_cap_transfer(cap_id_t cap, domain_id_t to) {
     cap_entry_t *entry = &g_cap_table[cap];
     
     // 直接修改所有者
     entry->owner = to;
     entry->ref_count++;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -163,7 +163,7 @@ hik_status_t fast_cap_transfer(cap_id_t cap, domain_id_t to) {
 
 ```c
 // 快速域切换
-hik_status_t fast_domain_switch(domain_id_t from, domain_id_t to,
+hic_status_t fast_domain_switch(domain_id_t from, domain_id_t to,
                                  cap_id_t endpoint, u64 flags,
                                  void *data, u64 data_len) {
     // 直接切换页表基址
@@ -174,7 +174,7 @@ hik_status_t fast_domain_switch(domain_id_t from, domain_id_t to,
     // 记录切换
     g_current_domain = to;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 // 目标: 100-200 ns (300-600 周期 @ 3GHz)

@@ -1,5 +1,5 @@
-#ifndef HIK_BOOTLOADER_CONSOLE_H
-#define HIK_BOOTLOADER_CONSOLE_H
+#ifndef HIC_BOOTLOADER_CONSOLE_H
+#define HIC_BOOTLOADER_CONSOLE_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -73,4 +73,4 @@ void serial_putchar(uint16_t port, char c);
 void serial_puts(uint16_t port, const char *str);
 void serial_printf(uint16_t port, const char *fmt, ...);
 
-#endif // HIK_BOOTLOADER_CONSOLE_H
+#endif // HIC_BOOTLOADER_CONSOLE_H

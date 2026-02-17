@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK形式化验证 - 补充验证
+ * HIC形式化验证 - 补充验证
  * 完善math_proofs.tex中的所有证明
  */
 
-#ifndef HIK_KERNEL_FORMAL_VERIFICATION_EXT_H
-#define HIK_KERNEL_FORMAL_VERIFICATION_EXT_H
+#ifndef HIC_KERNEL_FORMAL_VERIFICATION_EXT_H
+#define HIC_KERNEL_FORMAL_VERIFICATION_EXT_H
 
 #include "types.h"
 #include "capability.h"
@@ -29,9 +29,9 @@ static bool invariant_transfer_atomicity(void) {
     
     /* 获取当前系统能力总数 */
     u64 caps_total = 0;
-    for (cap_id_t i = 0; i < HIK_DOMAIN_MAX * 256; i++) {
+    for (cap_id_t i = 0; i < HIC_DOMAIN_MAX * 256; i++) {
         cap_entry_t entry;
-        if (cap_get_info(i, &entry) == HIK_SUCCESS) {
+        if (cap_get_info(i, &entry) == HIC_SUCCESS) {
             if (!(entry.flags & CAP_FLAG_REVOKED)) {
                 caps_total++;
             }
@@ -41,7 +41,7 @@ static bool invariant_transfer_atomicity(void) {
     /* 检查能力总数是否稳定 */
     /* 在实际运行中，这个不变式应该在能力传递前后都检查 */
     /* 这里检查能力总数是否在合理范围内 */
-    if (caps_total > HIK_DOMAIN_MAX * 256) {
+    if (caps_total > HIC_DOMAIN_MAX * 256) {
         return false;
     }
     
@@ -58,13 +58,13 @@ static bool invariant_derive_safety(void) {
     /* 检查所有派生能力的权限是否为父能力的子集 */
     
     /* 遍历所有能力 */
-    for (cap_id_t i = 0; i < HIK_DOMAIN_MAX * 256; i++) {
+    for (cap_id_t i = 0; i < HIC_DOMAIN_MAX * 256; i++) {
         cap_entry_t entry;
-        if (cap_get_info(i, &entry) == HIK_SUCCESS) {
+        if (cap_get_info(i, &entry) == HIC_SUCCESS) {
             if (entry.type == CAP_TYPE_CAP_DERIVE) {
                 /* 获取父能力 */
                 cap_entry_t parent;
-                if (cap_get_info(entry.derive.parent_cap, &parent) == HIK_SUCCESS) {
+                if (cap_get_info(entry.derive.parent_cap, &parent) == HIC_SUCCESS) {
                     /* 检查权限子集关系 */
                     if ((entry.derive.sub_rights & parent.rights) != 
                         entry.derive.sub_rights) {
@@ -89,22 +89,22 @@ static bool invariant_revoke_consistency(void) {
     /* 检查所有已撤销的能力都不在任何域的能力空间中 */
     
     /* 遍历所有域 */
-    for (domain_id_t d = 0; d < HIK_DOMAIN_MAX; d++) {
+    for (domain_id_t d = 0; d < HIC_DOMAIN_MAX; d++) {
         domain_t domain;
-        if (domain_get_info(d, &domain) != HIK_SUCCESS) {
+        if (domain_get_info(d, &domain) != HIC_SUCCESS) {
             continue;
         }
         
         /* 检查该域的每个能力句柄 */
         for (u32 i = 0; i < 256; i++) {
             cap_id_t cap_id = domain.capabilities[i];
-            if (cap_id == HIK_INVALID_CAP_ID) {
+            if (cap_id == HIC_INVALID_CAP_ID) {
                 continue;
             }
             
             /* 获取能力信息 */
             cap_entry_t entry;
-            if (cap_get_info(cap_id, &entry) == HIK_SUCCESS) {
+            if (cap_get_info(cap_id, &entry) == HIC_SUCCESS) {
                 /* 如果能力已撤销但域还持有，返回false */
                 if (entry.flags & CAP_FLAG_REVOKED) {
                     return false;
@@ -126,9 +126,9 @@ static bool invariant_domain_memory_isolation(void) {
     /* 检查所有域的内存区域是否不相交 */
     
     /* 遍历所有域对 */
-    for (domain_id_t d1 = 0; d1 < HIK_DOMAIN_MAX; d1++) {
+    for (domain_id_t d1 = 0; d1 < HIC_DOMAIN_MAX; d1++) {
         domain_t domain1;
-        if (domain_get_info(d1, &domain1) != HIK_SUCCESS) {
+        if (domain_get_info(d1, &domain1) != HIC_SUCCESS) {
             continue;
         }
         
@@ -136,9 +136,9 @@ static bool invariant_domain_memory_isolation(void) {
         phys_addr_t start1 = domain1.memory_base;
         phys_addr_t end1 = start1 + domain1.memory_size;
         
-        for (domain_id_t d2 = d1 + 1; d2 < HIK_DOMAIN_MAX; d2++) {
+        for (domain_id_t d2 = d1 + 1; d2 < HIC_DOMAIN_MAX; d2++) {
             domain_t domain2;
-            if (domain_get_info(d2, &domain2) != HIK_SUCCESS) {
+            if (domain_get_info(d2, &domain2) != HIC_SUCCESS) {
                 continue;
             }
             
@@ -167,9 +167,9 @@ static bool invariant_quota_enforcement(void) {
     /* 检查所有域的资源使用量是否不超过配额 */
     
     /* 遍历所有域 */
-    for (domain_id_t d = 0; d < HIK_DOMAIN_MAX; d++) {
+    for (domain_id_t d = 0; d < HIC_DOMAIN_MAX; d++) {
         domain_t domain;
-        if (domain_get_info(d, &domain) != HIK_SUCCESS) {
+        if (domain_get_info(d, &domain) != HIC_SUCCESS) {
             continue;
         }
         
@@ -207,4 +207,4 @@ bool formal_verification_run_extended_checks(void);
 /* 生成验证报告 */
 void formal_verification_generate_report(void);
 
-#endif /* HIK_KERNEL_FORMAL_VERIFICATION_EXT_H */
+#endif /* HIC_KERNEL_FORMAL_VERIFICATION_EXT_H */

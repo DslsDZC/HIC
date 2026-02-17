@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 监控服务提供系统监控、性能分析和调试功能。通过监控服务，可以查看系统状态、性能指标和调试信息。
+HIC 监控服务提供系统监控、性能分析和调试功能。通过监控服务，可以查看系统状态、性能指标和调试信息。
 
 ## 监控功能
 
@@ -16,7 +16,7 @@ HIK 监控服务提供系统监控、性能分析和调试功能。通过监控�
 
 ```c
 // 获取系统状态
-hik_status_t monitor_get_system_status(system_status_t *status) {
+hic_status_t monitor_get_system_status(system_status_t *status) {
     // 获取域状态
     status->domain_count = g_domain_count;
     
@@ -29,7 +29,7 @@ hik_status_t monitor_get_system_status(system_status_t *status) {
     status->free_memory = g_free_memory;
     status->used_memory = g_used_memory;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -37,7 +37,7 @@ hik_status_t monitor_get_system_status(system_status_t *status) {
 
 ```c
 // 获取性能指标
-hik_status_t monitor_get_performance_metrics(performance_metrics_t *metrics) {
+hic_status_t monitor_get_performance_metrics(performance_metrics_t *metrics) {
     // 获取系统调用延迟
     metrics->syscall_latency_ns = g_syscall_latency_ns;
     
@@ -47,7 +47,7 @@ hik_status_t monitor_get_performance_metrics(performance_metrics_t *metrics) {
     // 获取上下文切换延迟
     metrics->context_switch_latency_ns = g_context_switch_latency_ns;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -55,7 +55,7 @@ hik_status_t monitor_get_performance_metrics(performance_metrics_t *metrics) {
 
 ```c
 // 获取审计日志
-hik_status_t monitor_get_audit_logs(audit_log_t *logs, u32 count) {
+hic_status_t monitor_get_audit_logs(audit_log_t *logs, u32 count) {
     // 从审计日志中读取
     u32 log_count = min(count, g_audit_log_count);
     
@@ -63,7 +63,7 @@ hik_status_t monitor_get_audit_logs(audit_log_t *logs, u32 count) {
         logs[i] = g_audit_logs[g_audit_log_index - log_count + i];
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 

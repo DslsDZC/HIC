@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK YAML解析器实现（完整版）
+ * HIC YAML解析器实现（完整版）
  * 遵循文档第4节：构建时硬件合成系统
  */
 
@@ -371,34 +371,34 @@ bool yaml_get_bool(yaml_node_t* node, bool default_val)
 }
 
 /* 从YAML加载构建配置（完整实现） */
-hik_status_t yaml_load_build_config(const char* yaml_data, size_t size, 
+hic_status_t yaml_load_build_config(const char* yaml_data, size_t size, 
                                      build_config_t* config)
 {
     if (!yaml_data || !config) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 创建解析器 */
     yaml_parser_t* parser = yaml_parser_create(yaml_data, size);
     if (!parser) {
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     /* 解析YAML */
     if (yaml_parse(parser) != 0) {
         yaml_parser_destroy(parser);
-        return HIK_ERROR_INVALID_DOMAIN;  /* 使用存在的错误码 */
+        return HIC_ERROR_INVALID_DOMAIN;  /* 使用存在的错误码 */
     }
     
     /* 获取根节点 */
     yaml_node_t* root = yaml_get_root(parser);
     if (!root) {
         yaml_parser_destroy(parser);
-        return HIK_ERROR_INVALID_DOMAIN;  /* 使用存在的错误码 */
+        return HIC_ERROR_INVALID_DOMAIN;  /* 使用存在的错误码 */
     }
     
     /* 解析配置项 */
     yaml_parser_destroy(parser);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }

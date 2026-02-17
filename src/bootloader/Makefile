@@ -1,4 +1,4 @@
-# HIK Bootloader Makefile
+# HIC Bootloader Makefile
 # 支持UEFI和BIOS两种引导方式
 
 # 编译器和工具
@@ -67,7 +67,7 @@ BIOS_LDFLAGS = -nostdlib -T bios.lds -e _start \
 
 # 默认目标
 all:
-	@echo "Building HIK Bootloader..."
+	@echo "Building HIC Bootloader..."
 	@echo "Target: $(BUILD_TARGET)"
 	$(MAKE) $(BUILD_TARGET)
 
@@ -120,7 +120,7 @@ clean:
 
 # 帮助
 help:
-	@echo "HIK Bootloader Makefile"
+	@echo "HIC Bootloader Makefile"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make              - Build default target ($(BUILD_TARGET))"

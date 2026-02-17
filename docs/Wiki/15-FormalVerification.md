@@ -8,13 +8,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 形式化验证系统提供数学层面的安全保证，通过严格的数学证明和运行时检查确保系统安全属性。这是 HIK 与传统内核最显著的区别之一。
+HIC 形式化验证系统提供数学层面的安全保证，通过严格的数学证明和运行时检查确保系统安全属性。这是 HIC 与传统内核最显著的区别之一。
 
 ## 数学基础
 
 ### 核心定理
 
-HIK 基于以下 7 个数学定理：
+HIC 基于以下 7 个数学定理：
 
 1. **能力守恒定理**
    - 定理: ∀d ∈ Domains, |Capabilities(d)| = InitialQuota(d) + Granted(d) - Revoked(d)
@@ -52,7 +52,7 @@ HIK 基于以下 7 个数学定理：
 
 ### 不变式检查
 
-HIK 在运行时检查 6 个核心不变式：
+HIC 在运行时检查 6 个核心不变式：
 
 ```c
 typedef struct invariant {
@@ -260,12 +260,12 @@ void fv_init(void) {
 
 ```c
 // 内存分配后验证
-hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
+hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
                                page_frame_type_t type, phys_addr_t *out) {
     // 分配内存
-    hik_status_t status = allocate_frames(owner, count, type, out);
+    hic_status_t status = allocate_frames(owner, count, type, out);
     
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         // 记录分配大小
         set_last_allocation_size(count * PAGE_SIZE);
         
@@ -273,7 +273,7 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
         if (fv_check_all_invariants() != FV_SUCCESS) {
             console_puts("[PMM] Invariant violation detected!\n");
             // 回滚分配
-            return HIK_ERROR_INTERNAL;
+            return HIC_ERROR_INTERNAL;
         }
     }
     
@@ -281,15 +281,15 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
 }
 
 // 能力操作后验证
-hik_status_t cap_transfer(domain_id_t from, domain_id_t to, cap_id_t cap) {
+hic_status_t cap_transfer(domain_id_t from, domain_id_t to, cap_id_t cap) {
     // 转移能力
-    hik_status_t status = transfer_capability(from, to, cap);
+    hic_status_t status = transfer_capability(from, to, cap);
     
-    if (status == HIK_SUCCESS) {
+    if (status == HIC_SUCCESS) {
         // 验证不变式
         if (fv_check_all_invariants() != FV_SUCCESS) {
             console_puts("[CAP] Invariant violation detected!\n");
-            return HIK_ERROR_INTERNAL;
+            return HIC_ERROR_INTERNAL;
         }
     }
     

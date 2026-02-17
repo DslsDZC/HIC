@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIK 滚动更新机制允许在不中断服务的情况下更新模块和内核组件。通过模块化和版本管理，实现零停机时间的服务更新。
+HIC 滚动更新机制允许在不中断服务的情况下更新模块和内核组件。通过模块化和版本管理，实现零停机时间的服务更新。
 
 ## 设计目标
 
@@ -23,29 +23,29 @@ HIK 滚动更新机制允许在不中断服务的情况下更新模块和内核�
 
 ```c
 // 准备滚动更新
-hik_status_t prepare_rolling_update(const char *module_name,
+hic_status_t prepare_rolling_update(const char *module_name,
                                     const char *new_version) {
     // 1. 检查当前模块状态
     module_instance_t *current = find_module_by_name(module_name);
     if (!current) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     // 2. 检查依赖关系
     if (has_active_dependents(current)) {
-        return HIK_ERROR_DEPENDENT;
+        return HIC_ERROR_DEPENDENT;
     }
     
     // 3. 备份当前模块状态
     backup_module_state(current);
     
     // 4. 验证新版本
-    hik_status_t status = verify_new_version(module_name, new_version);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = verify_new_version(module_name, new_version);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -53,12 +53,12 @@ hik_status_t prepare_rolling_update(const char *module_name,
 
 ```c
 // 加载新版本模块
-hik_status_t load_new_version(const char *module_name,
+hic_status_t load_new_version(const char *module_name,
                                const char *new_version,
                                u64 *new_instance_id) {
     // 构造新版本路径
     char new_path[256];
-    snprintf(new_path, sizeof(new_path), "/modules/%s-%s.hikmod",
+    snprintf(new_path, sizeof(new_path), "/modules/%s-%s.hicmod",
              module_name, new_version);
     
     // 加载新版本
@@ -70,7 +70,7 @@ hik_status_t load_new_version(const char *module_name,
 
 ```c
 // 迁移模块状态
-hik_status_t migrate_module_state(u64 old_instance_id,
+hic_status_t migrate_module_state(u64 old_instance_id,
                                     u64 new_instance_id) {
     module_instance_t *old_inst = g_module_table[old_instance_id];
     module_instance_t *new_inst = g_module_table[new_instance_id];
@@ -84,7 +84,7 @@ hik_status_t migrate_module_state(u64 old_instance_id,
     // 3. 迁移状态数据
     migrate_state_data(old_inst, new_inst);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -92,7 +92,7 @@ hik_status_t migrate_module_state(u64 old_instance_id,
 
 ```c
 // 切换到新版本
-hik_status_t switch_to_new_version(const char *module_name,
+hic_status_t switch_to_new_version(const char *module_name,
                                    u64 new_instance_id) {
     // 1. 暂停模块
     module_instance_t *current = find_module_by_name(module_name);
@@ -108,7 +108,7 @@ hik_status_t switch_to_new_version(const char *module_name,
     // 4. 清理旧版本
     module_unload(current->instance_id);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -116,17 +116,17 @@ hik_status_t switch_to_new_version(const char *module_name,
 
 ```c
 // 回滚到旧版本
-hik_status_t rollback_to_old_version(const char *module_name) {
+hic_status_t rollback_to_old_version(const char *module_name) {
     // 1. 从备份恢复旧版本
     module_state_t *backup = get_module_backup(module_name);
     if (!backup) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     // 2. 重新加载旧版本
     u64 old_instance_id;
-    hik_status_t status = module_load(backup->module_path, &old_instance_id);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = module_load(backup->module_path, &old_instance_id);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
@@ -171,31 +171,31 @@ bool is_version_compatible(u32 old_major, u32 old_minor,
 
 ```c
 // 蓝绿部署更新
-hik_status_t blue_green_update(const char *module_name,
+hic_status_t blue_green_update(const char *module_name,
                                 const char *new_version) {
     // 1. 加载新版本到备用实例
     u64 new_instance_id;
-    hik_status_t status = load_new_version(module_name, new_version, &new_instance_id);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = load_new_version(module_name, new_version, &new_instance_id);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
     // 2. 测试新版本
     status = test_new_version(new_instance_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         module_unload(new_instance_id);
         return status;
     }
     
     // 3. 切换流量
     status = switch_traffic(module_name, new_instance_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         // 回滚
         rollback_to_old_version(module_name);
         return status;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -203,14 +203,14 @@ hik_status_t blue_green_update(const char *module_name,
 
 ```c
 // 金丝雀发布
-hik_status_t canary_update(const char *module_name,
+hic_status_t canary_update(const char *module_name,
                              const char *new_version) {
     // 1. 选择金丝雀节点
     u32 canary_node = select_canary_node();
     
     // 2. 在金丝雀节点更新
-    hik_status_t status = update_node(module_name, new_version, canary_node);
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = update_node(module_name, new_version, canary_node);
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
@@ -220,7 +220,7 @@ hik_status_t canary_update(const char *module_name,
         return update_all_nodes(module_name, new_version);
     } else {
         // 金丝雀异常，停止更新
-        return HIK_ERROR_CANARY_FAILED;
+        return HIC_ERROR_CANARY_FAILED;
     }
 }
 ```

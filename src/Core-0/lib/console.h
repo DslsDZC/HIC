@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
-#ifndef HIK_LIB_CONSOLE_H
-#define HIK_LIB_CONSOLE_H
+#ifndef HIC_LIB_CONSOLE_H
+#define HIC_LIB_CONSOLE_H
 
 #include <stdarg.h>
 #include "types.h"
@@ -67,4 +67,4 @@ void log_info(const char *fmt, ...);
 void log_warning(const char *fmt, ...);
 void log_error(const char *fmt, ...);
 
-#endif /* HIK_LIB_CONSOLE_H */
+#endif /* HIC_LIB_CONSOLE_H */

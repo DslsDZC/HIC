@@ -1,12 +1,35 @@
-# HIK 内核 Makefile（架构无关版本）
+# HIC 内核 Makefile（架构无关版本）
 
 CC = gcc
 LD = ld
 
+# 包含构建配置
+-include ../build_config.mk
+
+# 基础编译标志
 CFLAGS = -ffreestanding -nostdlib -fno-stack-protector -fno-builtin \
          -m64 -mno-red-zone -mcmodel=large -mno-mmx -mno-sse -mno-sse2 \
          -fno-pic -fno-pie -Wall -Wextra \
          -Wno-unused-function -Wno-unused-variable -O2
+
+# 架构配置选项
+ifeq ($(CONFIG_MMU),0)
+    CFLAGS += -DCONFIG_MMU=0 -DNOMMU
+else
+    CFLAGS += -DCONFIG_MMU=1
+endif
+
+ifeq ($(CONFIG_MPU),1)
+    CFLAGS += -DCONFIG_MPU=1
+else
+    CFLAGS += -DCONFIG_MPU=0
+endif
+
+ifeq ($(CONFIG_PHYSICAL_MAPPING),1)
+    CFLAGS += -DCONFIG_PHYSICAL_MAPPING=1
+else
+    CFLAGS += -DCONFIG_PHYSICAL_MAPPING=0
+endif
 
 LDFLAGS = -nostdlib -m elf_x86_64
 
@@ -16,7 +39,7 @@ LD_SCRIPT = kernel.ld
 
 .PHONY: all clean
 
-all: $(BIN_DIR)/hik-kernel.elf
+all: $(BIN_DIR)/hic-kernel.elf
 
 $(OBJ_DIR) $(BIN_DIR):
 	mkdir -p $@
@@ -52,7 +75,10 @@ OTHER_OBJS = $(OBJ_DIR)/capability.o \
              $(OBJ_DIR)/privileged_service.o \
              $(OBJ_DIR)/console.o \
              $(OBJ_DIR)/mem.o \
-             $(OBJ_DIR)/string.o
+             $(OBJ_DIR)/string.o \
+             $(OBJ_DIR)/nommu.o \
+             $(OBJ_DIR)/minimal_uart.o \
+             $(OBJ_DIR)/apm.o
 
 # 架构特定汇编文件
 ALL_OBJS = $(OBJ_DIR)/entry.o $(CORE_OBJS) $(OTHER_OBJS)
@@ -60,6 +86,18 @@ ALL_OBJS = $(OBJ_DIR)/entry.o $(CORE_OBJS) $(OTHER_OBJS)
 # 架构特定汇编文件
 $(OBJ_DIR)/entry.o: ../src/Core-0/arch/x86_64/entry.S | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# 无MMU架构支持
+$(OBJ_DIR)/nommu.o: ../src/Core-0/nommu.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+# 极简串口驱动
+$(OBJ_DIR)/minimal_uart.o: ../src/Core-0/minimal_uart.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+# APM 系统
+$(OBJ_DIR)/apm.o: ../src/Core-0/apm.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
 
 # Core-0 C文件
 $(OBJ_DIR)/kernel_start.o: ../src/Core-0/kernel_start.c | $(OBJ_DIR)
@@ -157,7 +195,7 @@ $(OBJ_DIR)/string.o: ../src/Core-0/lib/string.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
 
 # 链接
-$(BIN_DIR)/hik-kernel.elf: $(ALL_OBJS) $(LD_SCRIPT) | $(BIN_DIR)
+$(BIN_DIR)/hic-kernel.elf: $(ALL_OBJS) $(LD_SCRIPT) | $(BIN_DIR)
 	$(LD) $(LDFLAGS) -T $(LD_SCRIPT) -e kernel_entry --allow-multiple-definition $(ALL_OBJS) -o $@
 
 clean:

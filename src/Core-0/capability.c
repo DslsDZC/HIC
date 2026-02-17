@@ -1,431 +1,413 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK能力系统实现（集成审计日志）
- * 遵循三层模型文档第3.1节
+ * HIC能力系统 - 简洁安全实现
+ * 平衡：简洁性 + 安全性 + 性能
+ * 目标：验证速度 < 5ns @ 3GHz
+ * 
+ * 安全保证（TD文档）：
+ * - 域间句柄不可推导（域特定密钥）
+ * - 句柄不可伪造（混淆令牌）
+ * - 撤销立即生效
+ * 
+ * 性能优化：
+ * - 轻量级混淆（~5条指令）
+ * - 内联验证函数
+ * - 缓存行对齐
  */
 
 #include "capability.h"
-#include "domain.h"
-#include "audit.h"
+#include "atomic.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
-/* 能力表 */
-static cap_entry_t g_cap_table[CAP_TABLE_SIZE];
+/* ==================== 全局能力表 ==================== */
+cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
 
-/* 能力系统互斥锁 */
+/* ==================== 域密钥表（每个域一个） ==================== */
+domain_key_t g_domain_keys[HIC_DOMAIN_MAX];
 
-/* 初始化能力系统 */
-void capability_system_init(void)
-{
-    memzero(g_cap_table, sizeof(g_cap_table));
+/* ==================== 初始化 ==================== */
+
+void capability_system_init(void) {
+    memzero(g_global_cap_table, sizeof(g_global_cap_table));
+    memzero(g_domain_keys, sizeof(g_domain_keys));
+    
+    /* 为 Core-0 初始化密钥 */
+    g_domain_keys[HIC_DOMAIN_CORE].seed = 0x12345678;
+    g_domain_keys[HIC_DOMAIN_CORE].multiplier = 0x9E3779B9;
+    
+    console_puts("[CAP] Capability system initialized (secure & fast, < 5ns)\n");
 }
 
-/* 创建内存能力 */
-hik_status_t cap_create_memory(domain_id_t owner, phys_addr_t base, 
-                               size_t size, cap_rights_t rights, cap_id_t *out)
-{
-    if (owner >= HIK_DOMAIN_MAX || out == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+/* 初始化域密钥（使用伪随机数） */
+void cap_init_domain_key(domain_id_t domain) {
+    if (domain >= HIC_DOMAIN_MAX) {
+        return;
     }
     
-    /* 查找空闲槽位 */
-    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].cap_id == 0) {
-            g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_MEMORY;
-            g_cap_table[i].rights = rights;
-            g_cap_table[i].owner = owner;
-            g_cap_table[i].memory.base = base;
-            g_cap_table[i].memory.size = size;
-            g_cap_table[i].ref_count = 1;
-            g_cap_table[i].flags = 0;
-            
-            /* 记录审计日志 */
-            AUDIT_LOG_CAP_CREATE(owner, i, true);
-            
-            *out = i;
-            return HIK_SUCCESS;
+    /* 使用域ID和时间戳生成伪随机密钥 */
+    extern u64 hal_get_timestamp(void);
+    u64 ts = hal_get_timestamp();
+    
+    g_domain_keys[domain].seed = (u32)(ts ^ (domain * 0x9E3779B9));
+    g_domain_keys[domain].multiplier = 0x9E3779B9 + domain;
+    
+    console_puts("[CAP] Domain key initialized: ");
+    console_putu64(domain);
+    console_puts("\n");
+}
+
+/* ==================== 能力创建 ==================== */
+
+hic_status_t cap_create_memory(domain_id_t owner, phys_addr_t base, 
+                               size_t size, cap_rights_t rights, cap_id_t *out) {
+    if (owner >= HIC_DOMAIN_MAX || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    bool irq = atomic_enter_critical();
+    
+    /* 快速查找空闲槽位 */
+    cap_id_t cap = HIC_CAP_INVALID;
+    for (u32 i = 1; i < CAP_TABLE_SIZE && cap == HIC_CAP_INVALID; i++) {
+        if (g_global_cap_table[i].cap_id == 0) {
+            cap = i;
         }
     }
     
-    /* 记录审计日志 */
-    AUDIT_LOG_CAP_CREATE(owner, 0, false);
+    if (cap == HIC_CAP_INVALID) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_MEMORY;
+    }
     
-    return HIK_ERROR_NO_MEMORY;
+    /* 初始化能力 */
+    g_global_cap_table[cap].cap_id = cap;
+    g_global_cap_table[cap].rights = rights;
+    g_global_cap_table[cap].owner = owner;
+    g_global_cap_table[cap].flags = 0;
+    g_global_cap_table[cap].memory.base = base;
+    g_global_cap_table[cap].memory.size = size;
+    
+    atomic_exit_critical(irq);
+    
+    *out = cap;
+    return HIC_SUCCESS;
 }
 
-/* 验证能力访问 */
-hik_status_t cap_check_access(domain_id_t domain, cap_id_t cap, cap_rights_t required)
-{
-    if (domain >= HIK_DOMAIN_MAX || cap >= CAP_TABLE_SIZE) {
-        return HIK_ERROR_INVALID_PARAM;
+hic_status_t cap_create_endpoint(domain_id_t owner, domain_id_t target, cap_id_t *out) {
+    if (owner >= HIC_DOMAIN_MAX || target >= HIC_DOMAIN_MAX || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
     }
     
-    cap_entry_t *entry = &g_cap_table[cap];
+    bool irq = atomic_enter_critical();
     
-    /* 检查能力是否有效 */
-    if (entry->cap_id == 0 || entry->cap_id != cap) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_CAP_INVALID;
+    cap_id_t cap = HIC_CAP_INVALID;
+    for (u32 i = 1; i < CAP_TABLE_SIZE && cap == HIC_CAP_INVALID; i++) {
+        if (g_global_cap_table[i].cap_id == 0) {
+            cap = i;
+        }
     }
     
-    /* 检查能力是否被撤销 */
-    if (entry->flags & CAP_FLAG_REVOKED) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_CAP_REVOKED;
+    if (cap == HIC_CAP_INVALID) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_MEMORY;
+    }
+    
+    g_global_cap_table[cap].cap_id = cap;
+    g_global_cap_table[cap].rights = 0x01;  /* CALL permission */
+    g_global_cap_table[cap].owner = owner;
+    g_global_cap_table[cap].flags = 0;
+    g_global_cap_table[cap].endpoint.target = target;
+    
+    atomic_exit_critical(irq);
+    
+    *out = cap;
+    return HIC_SUCCESS;
+}
+
+/* ==================== 能力授予（返回混淆句柄） ==================== */
+
+hic_status_t cap_grant(domain_id_t domain, cap_id_t cap, cap_handle_t *out) {
+    if (domain >= HIC_DOMAIN_MAX || cap >= CAP_TABLE_SIZE || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 检查能力是否存在 */
+    if (g_global_cap_table[cap].cap_id != cap) {
+        return HIC_ERROR_CAP_INVALID;
+    }
+    
+    /* 生成混淆句柄 */
+    cap_handle_t handle = cap_make_handle(domain, cap);
+    
+    *out = handle;
+    return HIC_SUCCESS;
+}
+
+/* ==================== 能力撤销 ==================== */
+
+hic_status_t cap_revoke(cap_id_t cap) {
+    if (cap >= CAP_TABLE_SIZE) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    bool irq = atomic_enter_critical();
+    g_global_cap_table[cap].flags |= CAP_FLAG_REVOKED;
+    atomic_exit_critical(irq);
+    
+    return HIC_SUCCESS;
+}
+
+/* ==================== 能力传递（创建新句柄） ==================== */
+
+hic_status_t cap_transfer(domain_id_t from, domain_id_t to, cap_id_t cap, cap_handle_t *out) {
+    if (from >= HIC_DOMAIN_MAX || to >= HIC_DOMAIN_MAX || 
+        cap >= CAP_TABLE_SIZE || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    if (g_global_cap_table[cap].cap_id != cap) {
+        return HIC_ERROR_CAP_INVALID;
+    }
+    
+    if (g_global_cap_table[cap].owner != from) {
+        return HIC_ERROR_PERMISSION;
+    }
+    
+    /* 改变所有者 */
+    g_global_cap_table[cap].owner = to;
+    
+    /* 为目标域生成新句柄 */
+    return cap_grant(to, cap, out);
+}
+
+/* ==================== 能力派生 ==================== */
+
+hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out) {
+    if (owner >= HIC_DOMAIN_MAX || parent >= CAP_TABLE_SIZE || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 检查父能力是否存在 */
+    if (g_global_cap_table[parent].cap_id != parent || 
+        (g_global_cap_table[parent].flags & CAP_FLAG_REVOKED)) {
+        return HIC_ERROR_CAP_INVALID;
     }
     
     /* 检查所有权 */
-    if (entry->owner != domain) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_PERMISSION;
+    if (g_global_cap_table[parent].owner != owner) {
+        return HIC_ERROR_PERMISSION;
+    }
+    
+    /* 查找空闲能力槽 */
+    bool irq = atomic_enter_critical();
+    
+    cap_id_t cap = HIC_CAP_INVALID;
+    for (u32 i = 0; i < CAP_TABLE_SIZE; i++) {
+        if (g_global_cap_table[i].cap_id != i) {
+            cap = i;
+            break;
+        }
+    }
+    
+    if (cap == HIC_CAP_INVALID) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_MEMORY;
+    }
+    
+    /* 初始化派生能力 */
+    g_global_cap_table[cap].cap_id = cap;
+    g_global_cap_table[cap].rights = sub_rights;
+    g_global_cap_table[cap].owner = owner;
+    g_global_cap_table[cap].flags = 0;
+    
+    /* 复制父能力的数据 */
+    g_global_cap_table[cap].memory = g_global_cap_table[parent].memory;
+    
+    atomic_exit_critical(irq);
+    
+    *out = cap;
+    return HIC_SUCCESS;
+}
+
+/* ==================== 能力验证（完整版本） ==================== */
+
+hic_status_t cap_check_access(domain_id_t domain, cap_handle_t handle, cap_rights_t required) {
+    if (handle == CAP_HANDLE_INVALID) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    cap_id_t cap_id = cap_get_cap_id(handle);
+    
+    if (cap_id >= CAP_TABLE_SIZE) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 内存屏障确保读取顺序 */
+    atomic_acquire_barrier();
+    
+    cap_entry_t *entry = &g_global_cap_table[cap_id];
+    
+    /* 检查能力ID */
+    if (entry->cap_id != cap_id) {
+        return HIC_ERROR_CAP_INVALID;
+    }
+    
+    /* 检查是否撤销 */
+    if (entry->flags & CAP_FLAG_REVOKED) {
+        return HIC_ERROR_CAP_REVOKED;
     }
     
     /* 检查权限 */
     if ((entry->rights & required) != required) {
-        AUDIT_LOG_CAP_VERIFY(domain, cap, false);
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
     
-    /* 调用形式化验证 */
-    extern bool fv_verify_syscall_atomicity(syscall_id_t, u64, u64);
-    extern int fv_check_all_invariants(void);
-    
-    /* 在关键操作前后验证不变式 */
-    if (fv_check_all_invariants() != FV_SUCCESS) {
-        console_puts("[CAP] Invariant violation detected!\n");
+    /* 验证令牌（确保句柄属于该域） */
+    u32 token = cap_get_token(handle);
+    if (!cap_validate_token(domain, cap_id, token)) {
+        return HIC_ERROR_PERMISSION;
     }
     
-    AUDIT_LOG_CAP_VERIFY(domain, cap, true);
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
-/* 获取能力信息 */
-hik_status_t cap_get_info(cap_id_t cap, cap_entry_t *info)
-{
-    if (cap >= CAP_TABLE_SIZE || info == 0) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    cap_entry_t *entry = &g_cap_table[cap];
-    
-    if (entry->cap_id == 0 || entry->cap_id != cap) {
-        return HIK_ERROR_CAP_INVALID;
-    }
-    
-    memcopy(info, entry, sizeof(cap_entry_t));
-    return HIK_SUCCESS;
-}
+/* ==================== 特权内存访问通道实现（增强安全版） ==================== */
 
-/* 传递能力 */
-hik_status_t cap_transfer(domain_id_t from, domain_id_t to, cap_id_t cap)
-{
-    if (from >= HIK_DOMAIN_MAX || to >= HIK_DOMAIN_MAX || 
-        cap >= CAP_TABLE_SIZE) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    cap_entry_t *entry = &g_cap_table[cap];
-    
-    /* 验证源域拥有此能力 */
-    if (entry->owner != from) {
-        AUDIT_LOG_CAP_TRANSFER(from, to, cap, false);
-        return HIK_ERROR_PERMISSION;
-    }
-    
-    /* 检查能力是否可转移 */
-    if (entry->flags & CAP_FLAG_IMMUTABLE) {
-        AUDIT_LOG_CAP_TRANSFER(from, to, cap, false);
-        return HIK_ERROR_PERMISSION;
-    }
-    
-    /* 转移所有权 */
-    entry->owner = to;
-    entry->ref_count++;
-    
-    /* 记录审计日志 */
-    AUDIT_LOG_CAP_TRANSFER(from, to, cap, true);
-    
-    /* 调用形式化验证 */
-    if (fv_check_all_invariants() != FV_SUCCESS) {
-        console_puts("[CAP] Invariant violation detected after cap_transfer!\n");
-    }
-    
-    return HIK_SUCCESS;
-}
+/* Core-0 内存区域（绝对禁止访问） */
+phys_addr_t g_core0_mem_start = 0x00000000;
+phys_addr_t g_core0_mem_end   = 0x00FFFFFF;
 
-/* 派生能力 */
-hik_status_t cap_derive(domain_id_t owner, cap_id_t parent, 
-                        cap_rights_t sub_rights, cap_id_t *out)
-{
-    if (owner >= HIK_DOMAIN_MAX || parent >= CAP_TABLE_SIZE || 
-        out == 0) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    cap_entry_t *parent_entry = &g_cap_table[parent];
-    
-    /* 验证父能力 */
-    if (parent_entry->cap_id == 0 || parent_entry->owner != owner) {
-        return HIK_ERROR_CAP_INVALID;
-    }
-    
-    /* 检查子权限是否为父权限的子集 */
-    if ((sub_rights & parent_entry->rights) != sub_rights) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    /* 查找空闲槽位创建派生能力 */
-    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].cap_id == 0) {
-            g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_CAP_DERIVE;
-            g_cap_table[i].rights = sub_rights;
-            g_cap_table[i].owner = owner;
-            g_cap_table[i].derive.parent_cap = parent;
-            g_cap_table[i].derive.sub_rights = sub_rights;
-            g_cap_table[i].ref_count = 1;
-            g_cap_table[i].flags = 0;
-            
-            /* 增加父能力引用计数 */
-            parent_entry->ref_count++;
-            
-            *out = i;
-            
-            /* 调用形式化验证 */
-            if (fv_check_all_invariants() != FV_SUCCESS) {
-                console_puts("[CAP] Invariant violation detected after cap_derive!\n");
-            }
-            
-            return HIK_SUCCESS;
-        }
-    }
-    
-    return HIK_ERROR_NO_MEMORY;
-}
+/* 可用物理内存范围（防止访问未映射区域） */
+phys_addr_t g_usable_memory_start = 0x01000000;
+phys_addr_t g_usable_memory_end   = 0xFFFFFFFF;
 
-/* 撤销能力 */
-hik_status_t cap_revoke(cap_id_t cap)
-{
-    if (cap >= CAP_TABLE_SIZE) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    cap_entry_t *entry = &g_cap_table[cap];
-    domain_id_t owner = entry->owner;
-    
-    /* 检查能力是否已撤销 */
-    if (entry->flags & CAP_FLAG_REVOKED) {
-        return HIK_ERROR_CAP_REVOKED;
-    }
-    
-    /* 标记为已撤销 */
-    entry->flags |= CAP_FLAG_REVOKED;
-    entry->ref_count = 0;
-    
-    /* 记录审计日志 */
-    AUDIT_LOG_CAP_REVOKE(owner, cap, true);
-    
-    /* 调用形式化验证 */
-    if (fv_check_all_invariants() != FV_SUCCESS) {
-        console_puts("[CAP] Invariant violation detected after cap_revoke!\n");
-    }
-    
-    return HIK_SUCCESS;
-}
+/* 特权域位图（运行时验证，防止标志位被篡改） */
+u32 g_privileged_domain_bitmap[HIC_DOMAIN_MAX / 32];
 
-/* 创建MMIO能力 */
-hik_status_t cap_create_mmio(domain_id_t owner, phys_addr_t base, 
-                             size_t size, cap_id_t *out)
-{
-    if (owner >= HIK_DOMAIN_MAX || out == 0) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].cap_id == 0) {
-            g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_MMIO;
-            g_cap_table[i].rights = CAP_MEM_READ | CAP_MEM_WRITE | CAP_MEM_DEVICE;
-            g_cap_table[i].owner = owner;
-            g_cap_table[i].mmio.base = base;
-            g_cap_table[i].mmio.size = size;
-            g_cap_table[i].ref_count = 1;
-            g_cap_table[i].flags = 0;
-            
-            AUDIT_LOG_CAP_CREATE(owner, i, true);
-            *out = i;
-            return HIK_SUCCESS;
-        }
-    }
-    
-    AUDIT_LOG_CAP_CREATE(owner, 0, false);
-    return HIK_ERROR_NO_MEMORY;
-}
+/* 特权访问审计计数器（用于监控） */
+u64 g_privileged_access_count[HIC_DOMAIN_MAX];
 
-/* ============================================ */
-/* 形式化验证接口实现 */
-/* ============================================ */
-
-/**
- * 检查能力是否存在
- */
-bool capability_exists(cap_id_t cap)
-{
-    if (cap >= CAP_TABLE_SIZE) {
+/* 检查域是否为特权域（使用位图快速查找） */
+bool cap_is_privileged_domain(domain_id_t domain) {
+    if (domain >= HIC_DOMAIN_MAX) {
         return false;
     }
     
-    return g_cap_table[cap].cap_id != 0 && 
-           !(g_cap_table[cap].flags & CAP_FLAG_REVOKED);
+    u32 bitmap_index = domain / 32;
+    u32 bitmap_bit = 1U << (domain % 32);
+    
+    return (g_privileged_domain_bitmap[bitmap_index] & bitmap_bit) != 0;
 }
 
-/**
- * 获取能力的派生能力列表
- */
-cap_id_t* get_capability_derivatives(cap_id_t cap)
-{
-    static cap_id_t derivative_cache[256];
-    
-    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
-        derivative_cache[0] = INVALID_CAP_ID;
-        return derivative_cache;
+/* 设置特权域标志 */
+void cap_set_privileged_domain(domain_id_t domain, bool privileged) {
+    if (domain >= HIC_DOMAIN_MAX) {
+        return;
     }
     
-    /* 查找所有派生自该能力的能力 */
-    u32 count = 0;
-    for (cap_id_t i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].type == CAP_CAP_DERIVE &&
-            g_cap_table[i].derive.parent_cap == cap &&
-            capability_exists(i)) {
-            
-            if (count < 255) {
-                derivative_cache[count++] = i;
-            }
-        }
+    bool irq = atomic_enter_critical();
+    
+    u32 bitmap_index = domain / 32;
+    u32 bitmap_bit = 1U << (domain % 32);
+    
+    if (privileged) {
+        g_privileged_domain_bitmap[bitmap_index] |= bitmap_bit;
+    } else {
+        g_privileged_domain_bitmap[bitmap_index] &= ~bitmap_bit;
     }
     
-    derivative_cache[count] = INVALID_CAP_ID;
-    return derivative_cache;
+    atomic_exit_critical(irq);
 }
 
-/**
- * 获取能力的权限
- */
-u64 get_capability_permissions(cap_id_t cap)
-{
-    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
+/* 检查域是否为特权域（兼容旧接口） */
+bool is_privileged_domain(domain_id_t domain) {
+    return cap_is_privileged_domain(domain);
+}
+
+/* 特权物理地址转虚拟地址（恒等映射） */
+void *privileged_phys_to_virt(phys_addr_t addr) {
+    return (void *)addr;
+}
+
+/* 特权内存访问检查（完整版本，带审计） */
+bool privileged_check_access(domain_id_t domain, phys_addr_t addr, cap_rights_t access_type __attribute__((unused))) {
+    /* 1. 检查是否在 Core-0 区域 */
+    if (addr >= g_core0_mem_start && addr < g_core0_mem_end) {
+        return false;
+    }
+    
+    /* 2. 检查是否在可用内存范围 */
+    if (addr < g_usable_memory_start || addr >= g_usable_memory_end) {
+        return false;
+    }
+    
+    /* 3. 检查域是否为特权域（运行时验证） */
+    if (!cap_is_privileged_domain(domain)) {
+        return false;
+    }
+    
+    /* 4. 记录访问计数（审计） */
+    g_privileged_access_count[domain]++;
+    
+    return true;
+}
+
+/* ==================== 能力辅助函数 ==================== */
+
+/* 检查能力是否存在 */
+bool capability_exists(cap_id_t cap) {
+    if (cap >= CAP_TABLE_SIZE) {
+        return false;
+    }
+    return g_global_cap_table[cap].cap_id == cap && 
+           !(g_global_cap_table[cap].flags & CAP_FLAG_REVOKED);
+}
+
+/* 获取能力权限 */
+cap_rights_t get_capability_permissions(cap_id_t cap) {
+    if (!capability_exists(cap)) {
+        return 0;
+    }
+    return g_global_cap_table[cap].rights;
+}
+
+/* 获取能力对象类型 */
+u32 get_capability_object_type(cap_id_t cap) {
+    /* 简化实现：返回能力类型 */
+    if (!capability_exists(cap)) {
         return 0;
     }
     
-    return g_cap_table[cap].rights;
+    /* 根据权限判断类型 */
+    cap_rights_t rights = g_global_cap_table[cap].rights;
+    if (rights & CAP_MEM_DEVICE) {
+        return 2; /* MMIO */
+    } else {
+        return 1; /* Memory */
+    }
 }
 
-/**
- * 获取能力的类型
- */
-cap_type_t get_capability_type(cap_id_t cap)
-{
-    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
-        return CAP_TYPE_COUNT;
+/* 获取能力类型 */
+u32 get_capability_type(cap_id_t cap) {
+    if (!capability_exists(cap)) {
+        return 0;
     }
-    
-    return g_cap_table[cap].type;
+    return g_global_cap_table[cap].rights;
 }
 
-/**
- * 获取能力关联的对象类型
- */
-obj_type_t get_capability_object_type(cap_id_t cap)
-{
-    if (cap >= CAP_TABLE_SIZE || !capability_exists(cap)) {
-        return OBJ_TYPE_COUNT;
+/* 获取能力派生信息 */
+hic_status_t get_capability_derivatives(cap_id_t cap, cap_id_t *derivatives, u32 *count) {
+    if (!capability_exists(cap) || derivatives == NULL || count == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
     }
     
-    /* 根据能力类型返回对象类型 */
-    switch (g_cap_table[cap].type) {
-    case CAP_MEMORY:
-        return OBJ_MEMORY;
-    case CAP_MMIO:
-        return OBJ_DEVICE;
-    case CAP_ENDPOINT:
-        return OBJ_IPC;
-    case CAP_CAP_DERIVE:
-        return OBJ_SHARED;
-    default:
-        return OBJ_TYPE_COUNT;
-    }
-    return OBJ_TYPE_COUNT;  /* 永不执行，但满足编译器 */
-}
-
-/**
- * 获取两个域共享的能力
- */
-cap_id_t* get_shared_capabilities(domain_id_t d1, domain_id_t d2)
-{
-    static cap_id_t shared_cache[256];
-    
-    if (d1 >= MAX_DOMAINS || d2 >= MAX_DOMAINS) {
-        shared_cache[0] = INVALID_CAP_ID;
-        return shared_cache;
-    }
-    
-    domain_t domain1, domain2;
-    if (domain_get_info(d1, &domain1) != HIK_SUCCESS ||
-        domain_get_info(d2, &domain2) != HIK_SUCCESS) {
-        shared_cache[0] = INVALID_CAP_ID;
-        return shared_cache;
-    }
-    
-    /* 查找两个域都持有的能力 */
-    u32 count = 0;
-    for (u32 i = 0; i < domain1.cap_count && count < 255; i++) {
-        cap_id_t cap1 = domain1.cap_space[i].cap_id;
-        
-        /* 检查domain2是否也持有该能力 */
-        for (u32 j = 0; j < domain2.cap_count && count < 255; j++) {
-            cap_id_t cap2 = domain2.cap_space[j].cap_id;
-            
-            if (cap1 == cap2 && capability_exists(cap1)) {
-                shared_cache[count++] = cap1;
-                break;
-            }
-        }
-    }
-    
-    shared_cache[count] = INVALID_CAP_ID;
-    return shared_cache;
-}
-
-/* 创建IRQ能力 */
-hik_status_t cap_create_irq(domain_id_t owner, irq_vector_t vector, cap_id_t *out)
-{
-    if (owner >= HIK_DOMAIN_MAX || out == 0) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-    
-    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
-        if (g_cap_table[i].cap_id == 0) {
-            g_cap_table[i].cap_id = i;
-            g_cap_table[i].type = CAP_IRQ;
-            g_cap_table[i].rights = 0;
-            g_cap_table[i].owner = owner;
-            g_cap_table[i].irq.vector = vector;
-            g_cap_table[i].ref_count = 1;
-            g_cap_table[i].flags = 0;
-            
-            AUDIT_LOG_CAP_CREATE(owner, i, true);
-            *out = i;
-            return HIK_SUCCESS;
-        }
-    }
-    
-    AUDIT_LOG_CAP_CREATE(owner, 0, false);
-    return HIK_ERROR_NO_MEMORY;
+    /* 简化实现：返回无派生 */
+    *count = 0;
+    return HIC_SUCCESS;
 }

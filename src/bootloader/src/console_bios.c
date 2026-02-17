@@ -1,5 +1,5 @@
 /**
- * HIK BIOS Console实现
+ * HIC BIOS Console实现
  * 提供基于BIOS的控制台输出
  */
 

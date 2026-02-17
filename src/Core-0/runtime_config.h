@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核运行时配置系统
+ * HIC内核运行时配置系统
  * 支持通过引导层传递配置参数，实现无需重新编译即可调整内核行为
  */
 
-#ifndef HIK_RUNTIME_CONFIG_H
-#define HIK_RUNTIME_CONFIG_H
+#ifndef HIC_RUNTIME_CONFIG_H
+#define HIC_RUNTIME_CONFIG_H
 
 #include "types.h"
 
@@ -184,7 +184,7 @@ void runtime_config_load_from_yaml(const char* yaml_data, size_t yaml_size);
 config_item_t* runtime_config_get_item(const char* name);
 
 /* 设置配置项值 */
-hik_status_t runtime_config_set_item(const char* name, const void* value, config_type_t type);
+hic_status_t runtime_config_set_item(const char* name, const void* value, config_type_t type);
 
 /* 重置配置项为默认值 */
 void runtime_config_reset_item(const char* name);
@@ -207,4 +207,4 @@ void runtime_config_register_callback(const char* name, config_change_callback_t
 /* 检查配置是否可以运行时修改 */
 bool runtime_config_is_runtime_modifiable(const char* name);
 
-#endif /* HIK_RUNTIME_CONFIG_H */
+#endif /* HIC_RUNTIME_CONFIG_H */

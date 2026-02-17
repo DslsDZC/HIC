@@ -1,15 +1,15 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
  * x86-64全局描述符表(GDT)
  */
 
-#ifndef HIK_ARCH_X86_64_GDT_H
-#define HIK_ARCH_X86_64_GDT_H
+#ifndef HIC_ARCH_X86_64_GDT_H
+#define HIC_ARCH_X86_64_GDT_H
 
 #include <stdint.h>
 
@@ -89,4 +89,4 @@ extern void tss_load(uint16_t tss_selector);
 /* 设置TSS */
 void tss_set_stack(uint64_t rsp);
 
-#endif /* HIK_ARCH_X86_64_GDT_H */
+#endif /* HIC_ARCH_X86_64_GDT_H */

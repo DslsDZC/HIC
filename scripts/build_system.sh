@@ -1,5 +1,5 @@
 #!/bin/bash
-# HIK系统构建系统 (Shell版本)
+# HIC系统构建系统 (Shell版本)
 # 功能：
 # 1. 自动获取签名
 # 2. 构建引导程序和内核
@@ -17,7 +17,7 @@ MAGENTA='\033[0;35m'
 RESET='\033[0m'
 
 # 配置
-PROJECT="HIK System"
+PROJECT="HIC System"
 VERSION="0.1.0"
 
 # 自动检测ROOT_DIR：如果在scripts目录中，则返回上级；如果在根目录，则保持
@@ -113,7 +113,7 @@ generate_signing_keys() {
         -key "${SIGN_KEY_FILE}" \
         -out "${SIGN_CERT_FILE}" \
         -days 3650 \
-        -subj "/C=CN/ST=Beijing/O=HIK/CN=HIK-${VERSION}" \
+        -subj "/C=CN/ST=Beijing/O=HIC/CN=HIC-${VERSION}" \
         2>/dev/null
 
     if [ $? -ne 0 ]; then
@@ -232,7 +232,7 @@ build_kernel() {
         return 1
     fi
 
-    local output="${kernel_dir}/bin/hik-kernel.elf"
+    local output="${kernel_dir}/bin/hic-kernel.elf"
 
     if [ ! -f "${output}" ]; then
         log_error "内核构建失败: ${output} 不存在"
@@ -252,7 +252,7 @@ create_output_structure() {
     # 复制UEFI引导程序
     local bootloader_uefi="${ROOT_DIR}/../src/bootloader/bin/bootx64.efi"
     local bootloader_bios="${ROOT_DIR}/../src/bootloader/bin/bios.bin"
-    local kernel="${ROOT_DIR}/bin/hik-kernel.elf"
+    local kernel="${ROOT_DIR}/bin/hic-kernel.elf"
 
     # UEFI镜像
     if [ -f "${bootloader_uefi}" ]; then
@@ -329,7 +329,7 @@ generate_build_report() {
     fi
 
     # 检查内核
-    local kernel="${ROOT_DIR}/bin/hik-kernel.elf"
+    local kernel="${ROOT_DIR}/bin/hic-kernel.elf"
     if [ -f "${kernel}" ]; then
         if [ "$first" = true ]; then
             first=false
@@ -371,7 +371,7 @@ clean_build() {
 show_help() {
     cat <<EOF
 ${MAGENTA}========================================${RESET}
-${MAGENTA}HIK系统构建系统 v${VERSION}${RESET}
+${MAGENTA}HIC系统构建系统 v${VERSION}${RESET}
 ${MAGENTA}========================================${RESET}
 
 ${GREEN}用法:${RESET}

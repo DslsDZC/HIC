@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK域(Domain)管理头文件
+ * HIC域(Domain)管理头文件
  * 遵循三层模型文档第2.2节：Privileged-1层特权服务沙箱
  */
 
-#ifndef HIK_KERNEL_DOMAIN_H
-#define HIK_KERNEL_DOMAIN_H
+#ifndef HIC_KERNEL_DOMAIN_H
+#define HIC_KERNEL_DOMAIN_H
 
 #include "types.h"
 #include "capability.h"
@@ -74,8 +74,9 @@ typedef struct domain {
     
     /* 标志 */
     u32    flags;
-#define DOMAIN_FLAG_TRUSTED   (1U << 0)  /* 可信域 */
-#define DOMAIN_FLAG_CRITICAL   (1U << 1)  /* 关键域 */
+#define DOMAIN_FLAG_TRUSTED      (1U << 0)  /* 可信域 */
+#define DOMAIN_FLAG_CRITICAL     (1U << 1)  /* 关键域 */
+#define DOMAIN_FLAG_PRIVILEGED   (1U << 2)  /* 特权域（可绕过能力系统） */
     
     /* 父域（用于资源继承） */
     domain_id_t parent_domain;
@@ -85,21 +86,21 @@ typedef struct domain {
 void domain_system_init(void);
 
 /* 创建域 */
-hik_status_t domain_create(domain_type_t type, domain_id_t parent,
+hic_status_t domain_create(domain_type_t type, domain_id_t parent,
                            const domain_quota_t *quota, domain_id_t *out);
 
 /* 销毁域 */
-hik_status_t domain_destroy(domain_id_t domain_id);
+hic_status_t domain_destroy(domain_id_t domain_id);
 
 /* 查询域 */
-hik_status_t domain_get_info(domain_id_t domain_id, domain_t *info);
+hic_status_t domain_get_info(domain_id_t domain_id, domain_t *info);
 
 /* 暂停/恢复域 */
-hik_status_t domain_suspend(domain_id_t domain_id);
-hik_status_t domain_resume(domain_id_t domain_id);
+hic_status_t domain_suspend(domain_id_t domain_id);
+hic_status_t domain_resume(domain_id_t domain_id);
 
 /* 资源分配检查 */
-hik_status_t domain_check_memory_quota(domain_id_t domain_id, size_t size);
-hik_status_t domain_check_thread_quota(domain_id_t domain_id);
+hic_status_t domain_check_memory_quota(domain_id_t domain_id, size_t size);
+hic_status_t domain_check_thread_quota(domain_id_t domain_id);
 
-#endif /* HIK_KERNEL_DOMAIN_H */
+#endif /* HIC_KERNEL_DOMAIN_H */

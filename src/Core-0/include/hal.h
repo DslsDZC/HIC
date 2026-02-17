@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK硬件抽象层 (HAL) - 架构无关接口
+ * HIC硬件抽象层 (HAL) - 架构无关接口
  * 
  * 本文件提供架构无关的接口，用于核心代码
  * 核心代码应该只包含此文件，不应直接包含arch.h
@@ -17,8 +17,8 @@
  * 4. 架构检测在hal.c中完成
  */
 
-#ifndef HIK_HAL_H
-#define HIK_HAL_H
+#ifndef HIC_HAL_H
+#define HIC_HAL_H
 
 #include "types.h"
 
@@ -271,4 +271,4 @@ u64 hal_get_page_size(void);
  */
 bool hal_supports_io_ports(void);
 
-#endif /* HIK_HAL_H */
+#endif /* HIC_HAL_H */

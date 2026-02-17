@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核线程管理实现
+ * HIC内核线程管理实现
  */
 
 #include "thread.h"
@@ -30,7 +30,7 @@ void thread_system_init(void)
     extern thread_t idle_thread;
     idle_thread.thread_id = 0xFFFFFFFF;
     idle_thread.state = THREAD_STATE_READY;
-    idle_thread.priority = HIK_PRIORITY_IDLE;
+    idle_thread.priority = HIC_PRIORITY_IDLE;
     idle_thread.last_run_time = 0;
     idle_thread.time_slice = 0;
 }
@@ -94,15 +94,15 @@ cap_id_t get_thread_wait_resource(thread_id_t thread)
 }
 
 /* 终止线程 */
-hik_status_t thread_terminate(thread_id_t thread_id)
+hic_status_t thread_terminate(thread_id_t thread_id)
 {
     if (thread_id >= MAX_THREADS) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
 
     thread_t *t = &g_threads[thread_id];
     if (!t) {
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
 
     /* 将线程状态设置为已终止 */
@@ -129,5 +129,5 @@ hik_status_t thread_terminate(thread_id_t thread_id)
         t->stack_size = 0;
     }
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }

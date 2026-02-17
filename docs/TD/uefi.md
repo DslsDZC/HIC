@@ -6,13 +6,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # x86_64引导加载程序设计
 
-基于HIK架构需求，以下是x86_64平台引导加载程序的详细设计方案：
+基于HIC架构需求，以下是x86_64平台引导加载程序的详细设计方案：
 
 ## 一、总体架构
 
 ### 1.1 多阶段引导流程
 ```
-UEFI/BIOS → HIK Bootloader (多阶段) → HIK Core-0
+UEFI/BIOS → HIC Bootloader (多阶段) → HIC Core-0
     │               │
     ├─ UEFI模式     ├─ BIOS模式
     │   (UEFI应用)   │   (MBR+引导扇区)
@@ -36,7 +36,7 @@ UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
    - 获取内存映射服务（BootServices）
 
 2. **加载配置文件**
-   - 从`\EFI\HIK\boot.conf`读取引导配置
+   - 从`\EFI\HIC\boot.conf`读取引导配置
    - 解析启动项、内核路径、启动参数
 
 3. **安全启动验证**
@@ -45,8 +45,8 @@ UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
    - 准备内核验证公钥
 
 4. **加载内核映像**
-   - 打开内核文件`\EFI\HIK\kernel.hik`
-   - 读取文件头，验证魔数(`HIK_IMG`)
+   - 打开内核文件`\EFI\HIC\kernel.hic`
+   - 读取文件头，验证魔数(`HIC_IMG`)
    - 验证数字签名（RSA-3072 + SHA-384）
 
 5. **解析内核结构**
@@ -61,7 +61,7 @@ UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
    - 初始化串口调试（如果启用）
 
 7. **传递启动信息**
-   - 构建HIK Boot Information Structure (BIS)
+   - 构建HIC Boot Information Structure (BIS)
    - 包含：内存映射、ACPI表指针、SMBIOS表、UEFI System Table
 
 8. **退出启动服务**

@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 代码规范
 
-本文档定义了HIK项目的代码规范，确保代码质量和一致性。
+本文档定义了HIC项目的代码规范，确保代码质量和一致性。
 
 ## C语言规范
 
@@ -23,8 +23,8 @@ SPDX-License-Identifier: CC-BY-4.0
  * @date 创建日期
  */
 
-#ifndef HIK_FILENAME_H
-#define HIK_FILENAME_H
+#ifndef HIC_FILENAME_H
+#define HIC_FILENAME_H
 
 #include <types.h>
 
@@ -40,7 +40,7 @@ typedef struct {
 /* 函数声明 */
 void function_name(param_type param1, param_type param2);
 
-#endif /* HIK_FILENAME_H */
+#endif /* HIC_FILENAME_H */
 ```
 
 #### 源文件 (.c)
@@ -225,8 +225,8 @@ result = function_with_many_parameters(
  * @param param1 参数1描述
  * @param param2 参数2描述
  * @return 返回值描述
- * @retval HIK_SUCCESS 成功
- * @retval HIK_ERROR 失败
+ * @retval HIC_SUCCESS 成功
+ * @retval HIC_ERROR 失败
  *
  * @note 注意事项
  * @warning 警告信息
@@ -268,12 +268,12 @@ int value = 42;  /* 行尾注释 */
 #### 头文件保护
 
 ```c
-#ifndef HIK_FILENAME_H
-#define HIK_FILENAME_H
+#ifndef HIC_FILENAME_H
+#define HIC_FILENAME_H
 
 /* 内容 */
 
-#endif /* HIK_FILENAME_H */
+#endif /* HIC_FILENAME_H */
 ```
 
 #### 包含顺序
@@ -475,7 +475,7 @@ _private_variable = 42
 
 ```makefile
 # 变量定义
-PROJECT = hik-kernel
+PROJECT = hic-kernel
 VERSION = 0.1.0
 
 # 目标
@@ -500,7 +500,7 @@ clean:
 
 ```makefile
 # 变量：大写，下划线分隔
-PROJECT_NAME = hik
+PROJECT_NAME = hic
 BUILD_DIR = build
 
 # 目标：小写，下划线分隔
@@ -649,8 +649,8 @@ void print_string(char *str)
 ```c
 /* 好：检查返回值 */
 status = allocate_memory(&ptr);
-if (status != HIK_SUCCESS) {
-    return HIK_ERROR;
+if (status != HIC_SUCCESS) {
+    return HIC_ERROR;
 }
 
 /* 不好：不检查返回值 */
@@ -662,12 +662,12 @@ allocate_memory(&ptr);
 ```c
 /* 好：使用goto统一清理 */
 status = resource1_init(&r1);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     goto cleanup;
 }
 
 status = resource2_init(&r2);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     goto cleanup1;
 }
 
@@ -680,16 +680,16 @@ cleanup:
 
 /* 不好：分散的清理代码 */
 status = resource1_init(&r1);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     resource1_cleanup(&r1);
-    return HIK_ERROR;
+    return HIC_ERROR;
 }
 
 status = resource2_init(&r2);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     resource2_cleanup(&r2);
     resource1_cleanup(&r1);
-    return HIK_ERROR;
+    return HIC_ERROR;
 }
 ```
 

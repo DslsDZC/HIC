@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK构建时配置数据结构
+ * HIC构建时配置数据结构
  * 遵循文档第4节：构建时硬件合成系统
  */
 
-#ifndef HIK_BUILD_CONFIG_H
-#define HIK_BUILD_CONFIG_H
+#ifndef HIC_BUILD_CONFIG_H
+#define HIC_BUILD_CONFIG_H
 
 #include "types.h"
 #include "capability.h"
@@ -157,15 +157,15 @@ extern build_config_t g_build_config;
 void build_config_init(void);
 
 /* 加载platform.yaml */
-hik_status_t build_config_load_yaml(const char *filename);
+hic_status_t build_config_load_yaml(const char *filename);
 
 /* 解析和验证配置 */
-hik_status_t build_config_parse_and_validate(void);
+hic_status_t build_config_parse_and_validate(void);
 
 /* 生成静态配置表 */
-hik_status_t build_config_generate_tables(void);
+hic_status_t build_config_generate_tables(void);
 
 /* 解决资源冲突 */
-hik_status_t build_config_resolve_conflicts(void);
+hic_status_t build_config_resolve_conflicts(void);
 
-#endif /* HIK_BUILD_CONFIG_H */
+#endif /* HIC_BUILD_CONFIG_H */

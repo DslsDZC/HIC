@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK异常处理系统
+ * HIC异常处理系统
  * 遵循文档第2.1节：故障隔离与恢复
  */
 
-#ifndef HIK_KERNEL_EXCEPTION_H
-#define HIK_KERNEL_EXCEPTION_H
+#ifndef HIC_KERNEL_EXCEPTION_H
+#define HIC_KERNEL_EXCEPTION_H
 
 #include "types.h"
 #include "domain.h"
@@ -72,4 +72,4 @@ void exception_register_handler(exception_type_t type, exception_handler_fn hand
 /* 恐慌系统（不可恢复错误） */
 void kernel_panic(const char* message, ...);
 
-#endif /* HIK_KERNEL_EXCEPTION_H */
+#endif /* HIC_KERNEL_EXCEPTION_H */

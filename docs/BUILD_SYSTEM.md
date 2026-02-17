@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
-# HIK系统构建系统说明
+# HIC系统构建系统说明
 
 ## 概述
 
-HIK系统构建系统提供了一套完整的构建工具，支持：
+HIC系统构建系统提供了一套完整的构建工具，支持：
 
 1. **自动签名** - 构建时自动生成签名密钥并签名所有组件
 2. **多目标构建** - 支持UEFI、BIOS引导程序和内核的独立构建
@@ -129,7 +129,7 @@ output/
 
 ```json
 {
-  "project": "HIK System",
+  "project": "HIC System",
   "version": "0.1.0",
   "build_time": "2026-02-14T12:00:00+08:00",
   "build_type": "full",

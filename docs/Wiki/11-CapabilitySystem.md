@@ -6,13 +6,13 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 能力系统
 
-能力系统是HIK的核心安全机制，提供细粒度的权限控制和资源访问。
+能力系统是HIC的核心安全机制，提供细粒度的权限控制和资源访问。
 
 ## 概述
 
 ### 设计理念
 
-HIK的能力系统基于以下核心原则：
+HIC的能力系统基于以下核心原则：
 
 1. **不可伪造性** - 能力不能被伪造或复制
 2. **不可猜测性** - 能力ID不可预测
@@ -188,19 +188,19 @@ status_t cap_create(domain_id_t owner, cap_type_t type,
 {
     /* 验证参数 */
     if (owner >= MAX_DOMAINS) {
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
     if (type >= CAP_TYPE_MAX) {
-        return HIK_ERROR_INVALID_TYPE;
+        return HIC_ERROR_INVALID_TYPE;
     }
     if (rights == 0) {
-        return HIK_ERROR_INVALID_RIGHTS;
+        return HIC_ERROR_INVALID_RIGHTS;
     }
 
     /* 查找空闲槽位 */
     cap_id_t id = find_free_cap_slot();
-    if (id == HIK_INVALID_CAP_ID) {
-        return HIK_ERROR_NO_RESOURCE;
+    if (id == HIC_INVALID_CAP_ID) {
+        return HIC_ERROR_NO_RESOURCE;
     }
 
     /* 生成能力ID */
@@ -226,7 +226,7 @@ status_t cap_create(domain_id_t owner, cap_type_t type,
     AUDIT_LOG_CAP_CREATE(owner, cap_id);
 
     *out = cap_id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -247,40 +247,40 @@ status_t cap_verify(domain_id_t domain, cap_id_t cap_id,
 {
     /* 快速路径：验证能力ID格式 */
     if (!is_valid_cap_id(cap_id)) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 查找能力 */
     cap_id_t index = cap_id_to_index(cap_id);
     if (index >= MAX_CAPABILITIES) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     cap_entry_t *entry = &g_cap_table[index];
 
     /* 检查ID匹配 */
     if (entry->id != cap_id) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 检查类型 */
     if (entry->type == CAP_TYPE_INVALID) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 检查撤销状态 */
     if (entry->flags & CAP_FLAG_REVOKED) {
-        return HIK_ERROR_REVOKED;
+        return HIC_ERROR_REVOKED;
     }
 
     /* 检查所有权 */
     if (entry->owner != domain) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 检查权限 */
     if ((entry->rights & required_rights) != required_rights) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 增加引用计数 */
@@ -290,7 +290,7 @@ status_t cap_verify(domain_id_t domain, cap_id_t cap_id,
     AUDIT_LOG_CAP_VERIFY(domain, cap_id, true);
 
     *out = entry;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -340,20 +340,20 @@ status_t cap_transfer(domain_id_t from_domain, domain_id_t to_domain,
 
     /* 验证发送方能力 */
     status = cap_verify(from_domain, cap_id, CAP_PERM_TRANSFER, &src_entry);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
     /* 验证接收域 */
     if (to_domain >= MAX_DOMAINS) {
         cap_release(cap_id);
-        return HIK_ERROR_INVALID_DOMAIN;
+        return HIC_ERROR_INVALID_DOMAIN;
     }
 
     /* 验证子权限 */
     if (sub_rights != 0 && (sub_rights & src_entry->rights) != sub_rights) {
         cap_release(cap_id);
-        return HIK_ERROR_INVALID_RIGHTS;
+        return HIC_ERROR_INVALID_RIGHTS;
     }
 
     /* 创建派生能力 */
@@ -365,7 +365,7 @@ status_t cap_transfer(domain_id_t from_domain, domain_id_t to_domain,
 
     status = cap_create(to_domain, CAP_TYPE_CAP_DERIVE,
                        derive_info.sub_rights, &derive_info, &new_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         cap_release(cap_id);
         return status;
     }
@@ -375,7 +375,7 @@ status_t cap_transfer(domain_id_t from_domain, domain_id_t to_domain,
 
     cap_release(cap_id);
     *out = new_id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -394,14 +394,14 @@ status_t cap_revoke(domain_id_t domain, cap_id_t cap_id)
 
     /* 验证能力 */
     status = cap_verify(domain, cap_id, CAP_PERM_REVOKE, &entry);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
     /* 检查是否可撤销 */
     if (entry->flags & CAP_FLAG_IMMUTABLE) {
         cap_release(cap_id);
-        return HIK_ERROR_IMMUTABLE;
+        return HIC_ERROR_IMMUTABLE;
     }
 
     /* 标记为已撤销 */
@@ -417,7 +417,7 @@ status_t cap_revoke(domain_id_t domain, cap_id_t cap_id)
     AUDIT_LOG_CAP_REVOKE(domain, cap_id);
 
     cap_release(cap_id);
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -443,14 +443,14 @@ status_t cap_derive(domain_id_t domain, cap_id_t parent_cap_id,
 
     /* 验证父能力 */
     status = cap_verify(domain, parent_cap_id, CAP_PERM_DERIVE, &parent_entry);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
     /* 验证子权限 */
     if ((sub_rights & parent_entry->rights) != sub_rights) {
         cap_release(parent_cap_id);
-        return HIK_ERROR_INVALID_RIGHTS;
+        return HIC_ERROR_INVALID_RIGHTS;
     }
 
     /* 创建派生能力 */
@@ -462,7 +462,7 @@ status_t cap_derive(domain_id_t domain, cap_id_t parent_cap_id,
 
     status = cap_create(domain, CAP_TYPE_CAP_DERIVE,
                        sub_rights, &derive_info, &new_id);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         cap_release(parent_cap_id);
         return status;
     }
@@ -472,7 +472,7 @@ status_t cap_derive(domain_id_t domain, cap_id_t parent_cap_id,
 
     cap_release(parent_cap_id);
     *out = new_id;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -565,7 +565,7 @@ static cap_id_t generate_cap_id(cap_type_t type)
 /* 使用内存能力 */
 cap_entry_t *cap;
 status = cap_verify(domain, mem_cap, CAP_PERM_READ | CAP_PERM_WRITE, &cap);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     return status;
 }
 
@@ -601,7 +601,7 @@ static inline status_t cap_verify_fast(domain_id_t domain, cap_id_t cap_id,
 {
     /* 快速路径：检查能力ID格式 */
     if (UNLIKELY(!is_valid_cap_id(cap_id))) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     cap_id_t index = cap_id_to_index(cap_id);
@@ -609,28 +609,28 @@ static inline status_t cap_verify_fast(domain_id_t domain, cap_id_t cap_id,
 
     /* 快速路径：检查ID匹配 */
     if (UNLIKELY(entry->id != cap_id)) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 快速路径：检查撤销状态 */
     if (UNLIKELY(entry->flags & CAP_FLAG_REVOKED)) {
-        return HIK_ERROR_REVOKED;
+        return HIC_ERROR_REVOKED;
     }
 
     /* 快速路径：检查所有权 */
     if (UNLIKELY(entry->owner != domain)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 快速路径：检查权限 */
     if (UNLIKELY((entry->rights & required_rights) != required_rights)) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 增加引用计数 */
     entry->ref_count++;
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 

@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 安全机制
 
-HIK通过多层安全机制提供强安全隔离和防护。
+HIC通过多层安全机制提供强安全隔离和防护。
 
 ## 安全架构
 
@@ -61,52 +61,52 @@ status_t secure_cap_verify(domain_id_t domain, cap_id_t cap_id,
 {
     /* 1. 格式验证 */
     if (!is_valid_cap_id_format(cap_id)) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 2. 边界检查 */
     cap_id_t index = cap_id_to_index(cap_id);
     if (index >= MAX_CAPABILITIES) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 3. ID匹配验证 */
     cap_entry_t *entry = &g_cap_table[index];
     if (entry->id != cap_id) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 4. 类型验证 */
     if (entry->type == CAP_TYPE_INVALID) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 5. 撤销状态检查 */
     if (entry->flags & CAP_FLAG_REVOKED) {
-        return HIK_ERROR_REVOKED;
+        return HIC_ERROR_REVOKED;
     }
 
     /* 6. 所有权验证 */
     if (entry->owner != domain) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 7. 权限验证 */
     if ((entry->rights & required_rights) != required_rights) {
-        return HIK_ERROR_PERMISSION;
+        return HIC_ERROR_PERMISSION;
     }
 
     /* 8. 时间检查（防止重放攻击） */
     if (entry->create_time > get_timestamp()) {
-        return HIK_ERROR_INVALID_CAP;
+        return HIC_ERROR_INVALID_CAP;
     }
 
     /* 9. 引用计数检查 */
     if (entry->ref_count >= MAX_REF_COUNT) {
-        return HIK_ERROR_TOO_MANY_REFS;
+        return HIC_ERROR_TOO_MANY_REFS;
     }
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -120,14 +120,14 @@ status_t secure_cap_revoke(domain_id_t domain, cap_id_t cap_id)
 {
     /* 验证撤销权限 */
     status = cap_verify(domain, cap_id, CAP_PERM_REVOKE);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return status;
     }
 
     /* 检查不可变标志 */
     cap_entry_t *entry = &g_cap_table[cap_id_to_index(cap_id)];
     if (entry->flags & CAP_FLAG_IMMUTABLE) {
-        return HIK_ERROR_IMMUTABLE;
+        return HIC_ERROR_IMMUTABLE;
     }
 
     /* 原子操作：标记撤销 */
@@ -145,7 +145,7 @@ status_t secure_cap_revoke(domain_id_t domain, cap_id_t cap_id)
     /* 记录审计日志 */
     AUDIT_LOG_CAP_REVOKE(domain, cap_id);
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -162,7 +162,7 @@ status_t create_secure_pagetable(domain_id_t domain_id,
 {
     pagetable_t pt = allocate_pagetable();
     if (!pt) {
-        return HIK_ERROR_NO_RESOURCE;
+        return HIC_ERROR_NO_RESOURCE;
     }
 
     /* 1. 映射Core-0为不可访问 */
@@ -209,7 +209,7 @@ status_t create_secure_pagetable(domain_id_t domain_id,
     set_cr3(pt->physical_address);
 
     *out = pt;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -327,11 +327,11 @@ status_t check_ipc_quota(domain_id_t domain_id)
 
     /* 检查调用频率 */
     if (quota->current_calls >= quota->calls_per_second) {
-        return HIK_ERROR_RATE_LIMIT;
+        return HIC_ERROR_RATE_LIMIT;
     }
 
     quota->current_calls++;
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -551,17 +551,17 @@ status_t verify_module_signature(const u8 *module, u64 module_size,
     /* 2. 验证签名 */
     status = rsa_verify_pss(&g_public_key, hash, sizeof(hash),
                            signature, sig_size);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_SIGNATURE_INVALID;
+    if (status != HIC_SUCCESS) {
+        return HIC_ERROR_SIGNATURE_INVALID;
     }
 
     /* 3. 检查签名者证书 */
     status = verify_signer_certificate(signature, sig_size);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_CERTIFICATE_INVALID;
+    if (status != HIC_SUCCESS) {
+        return HIC_ERROR_CERTIFICATE_INVALID;
     }
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 

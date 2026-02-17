@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
-HIK系统构建系统
+HIC系统构建系统
 功能：
 1. 自动获取签名
 2. 构建引导程序和内核
@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple
 
 # 配置
 CONFIG = {
-    "project": "HIK System",
+    "project": "HIC System",
     "version": "0.1.0",
     "root_dir": Path(__file__).parent,
     "build_dir": Path(__file__).parent / "build",
@@ -38,7 +38,7 @@ class BuildError(Exception):
 
 
 class BuildSystem:
-    """HIK构建系统"""
+    """HIC构建系统"""
 
     def __init__(self):
         self.config = CONFIG
@@ -122,7 +122,7 @@ class BuildSystem:
                 "-key", str(key_file),
                 "-out", str(cert_file),
                 "-days", "3650",
-                "-subj", f"/C=CN/ST=Beijing/O=HIK/CN=HIK-{self.config['version']}"
+                "-subj", f"/C=CN/ST=Beijing/O=HIC/CN=HIC-{self.config['version']}"
             ], check=True, capture_output=True)
 
             self.log(f"密钥生成成功: {key_file}")
@@ -254,7 +254,7 @@ class BuildSystem:
                 capture_output=True
             )
 
-            output = kernel_dir / "bin" / "hik-kernel.elf"
+            output = kernel_dir / "bin" / "hic-kernel.elf"
 
             if not output.exists():
                 self.log(f"内核构建失败: {output} 不存在", "ERROR")
@@ -279,7 +279,7 @@ class BuildSystem:
             # 复制文件
             bootloader_uefi = self.config["root_dir"] / "bootloader" / "bin" / "bootx64.efi"
             bootloader_bios = self.config["root_dir"] / "bootloader" / "bin" / "bios.bin"
-            kernel = self.config["root_dir"] / "kernel" / "bin" / "hik-kernel.elf"
+            kernel = self.config["root_dir"] / "kernel" / "bin" / "hic-kernel.elf"
 
             # UEFI镜像
             if bootloader_uefi.exists():
@@ -326,7 +326,7 @@ class BuildSystem:
         # 检查组件
         bootloader_uefi = self.config["root_dir"].parent / "src" / "bootloader" / "bin" / "bootx64.efi"
         bootloader_bios = self.config["root_dir"].parent / "src" / "bootloader" / "bin" / "bios.bin"
-        kernel = self.config["root_dir"] / "bin" / "hik-kernel.elf"
+        kernel = self.config["root_dir"] / "bin" / "hic-kernel.elf"
 
         if bootloader_uefi.exists():
             report["components"]["uefi_bootloader"] = {
@@ -516,7 +516,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="HIK系统构建系统",
+        description="HIC系统构建系统",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:

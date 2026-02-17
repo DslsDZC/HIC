@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-本文档提供了 HIK 项目的 Git 提交规范和最佳实践。
+本文档提供了 HIC 项目的 Git 提交规范和最佳实践。
 
 ## 提交消息格式
 

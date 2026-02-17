@@ -1,8 +1,8 @@
-# HIK (Hierarchical Isolation Kernel) - 项目上下文
+# HIC (Hierarchical Isolation Core) - 项目上下文
 
 ## 项目概述
 
-HIK (Hierarchical Isolation Kernel，分级隔离内核) 是一个形式化验证的微内核，采用三级特权架构，具备数学证明的安全属性和运行时不变式检查。该项目旨在通过统一的架构范式，构建一个能适应从资源受限的嵌入式设备到功能复杂的通用计算系统的操作系统内核。
+HIC (Hierarchical Isolation Core，分级隔离内核) 是一个形式化验证的微内核，采用三级特权架构，具备数学证明的安全属性和运行时不变式检查。该项目旨在通过统一的架构范式，构建一个能适应从资源受限的嵌入式设备到功能复杂的通用计算系统的操作系统内核。
 
 ### 核心特性
 
@@ -14,7 +14,7 @@ HIK (Hierarchical Isolation Kernel，分级隔离内核) 是一个形式化验�
 
 ### 架构设计
 
-HIK采用三级特权架构：
+HIC采用三级特权架构：
 
 | 层级 | 名称 | 特权级 | 角色 |
 |------|------|--------|------|
@@ -36,7 +36,7 @@ HIK采用三级特权架构：
 ## 项目结构
 
 ```
-HIK/
+HIC/
 ├── src/                          # 源代码目录
 │   ├── Core-0/                   # 内核核心层（Core-0）
 │   │   ├── arch/                 # 架构相关代码
@@ -87,12 +87,12 @@ HIK/
 │   ├── build_system.py           # Python构建系统（支持GUI/TUI/CLI）
 │   ├── build_gui.py              # GUI构建界面
 │   ├── build_tui.py              # TUI构建界面
-│   └── create_hik_image.py       # HIK镜像创建脚本
+│   └── create_hic_image.py       # HIC镜像创建脚本
 ├── output/                       # 构建输出目录
 │   ├── bootx64.efi               # UEFI引导程序
 │   ├── bios.bin                  # BIOS引导程序
-│   ├── hik-kernel.bin            # 内核映像
-│   └── hik-installer.iso         # ISO安装镜像
+│   ├── hic-kernel.bin            # 内核映像
+│   └── hic-installer.iso         # ISO安装镜像
 ├── iso_output/                   # ISO构建目录
 ├── Makefile                      # 根目录Makefile（快速构建）
 ├── Makefile.iso                  # ISO镜像创建
@@ -147,8 +147,8 @@ make -f Makefile.iso iso
 
 - `bootx64.efi` - UEFI引导程序（PE32+格式）
 - `bios.bin` - BIOS引导程序
-- `hik-kernel.bin` - 内核映像
-- `hik-installer.iso` - ISO安装镜像
+- `hic-kernel.bin` - 内核映像
+- `hic-installer.iso` - ISO安装镜像
 
 ### 运行测试
 
@@ -157,14 +157,14 @@ make -f Makefile.iso iso
 qemu-system-x86_64 \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio
 
 # 在QEMU中运行（BIOS）
 qemu-system-x86_64 \
   -drive format=raw,file=output/bios.bin \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio
 
@@ -182,12 +182,12 @@ make debug
 qemu-system-x86_64 \
   -bios /usr/share/OVMF/OVMF_CODE.fd \
   -drive format=raw,file=output/bootx64.efi \
-  -drive format=raw,file=output/hik-kernel.bin \
+  -drive format=raw,file=output/hic-kernel.bin \
   -m 512M \
   -serial stdio \
   -s -S
 # 另一个终端
-gdb build/bin/hik-kernel.elf
+gdb build/bin/hic-kernel.elf
 (gdb) target remote :1234
 (gdb) break kernel_start
 (gdb) continue
@@ -316,7 +316,7 @@ Closes #123
 ### 修复引导程序问题
 
 1. 检查 `src/bootloader/src/main.c` 中的内存布局
-2. 验证HIK镜像头部解析逻辑
+2. 验证HIC镜像头部解析逻辑
 3. 确认入口点地址计算正确
 4. 检查页表初始化
 5. 使用QEMU调试输出定位问题
@@ -351,7 +351,7 @@ Closes #123
 ### 引导失败
 
 - 检查引导程序输出（串口）
-- 验证HIK镜像格式正确
+- 验证HIC镜像格式正确
 - 确认内存布局无冲突
 - 检查页表初始化
 - 查看审计日志
@@ -376,7 +376,7 @@ Closes #123
 
 ### 核心文档
 
-- [项目概述](docs/Wiki/01-Overview.md) - 了解HIK的设计哲学
+- [项目概述](docs/Wiki/01-Overview.md) - 了解HIC的设计哲学
 - [架构设计](docs/Wiki/02-Architecture.md) - 深入理解三层模型
 - [快速开始](docs/Wiki/03-QuickStart.md) - 开始构建和运行
 - [构建系统](docs/Wiki/04-BuildSystem.md) - 详细的构建说明
@@ -395,7 +395,7 @@ Closes #123
 
 ### 外部资源
 
-- GitHub仓库：https://github.com/DslsDZC/HIK
+- GitHub仓库：https://github.com/DslsDZC/HIC
 - 许可证：GPL-2.0
 - 联系方式：dsls.dzc@gmail.com
 

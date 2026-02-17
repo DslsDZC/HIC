@@ -1,10 +1,10 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
-# HIK内核入口点（x86_64）
+# HIC内核入口点（x86_64）
 # Bootloader跳转到这个入口点
 
 .section .text.kernel_entry
@@ -30,7 +30,7 @@
     ret
 
 # 内核入口点
-# 参数: %rdi = hik_boot_info_t* boot_info
+# 参数: %rdi = hic_boot_info_t* boot_info
 _start:
 kernel_entry:
     # 调试：输出到串口确认内核被调用

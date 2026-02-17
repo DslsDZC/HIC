@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK页表管理器实现（完整版）
+ * HIC页表管理器实现（完整版）
  * 遵循文档第2.1节：物理资源管理与分配
  * 实现直接物理内存映射和MMU隔离
  */
@@ -22,9 +22,9 @@
 static page_table_t* allocate_page_table(void)
 {
     phys_addr_t phys;
-    hik_status_t status = pmm_alloc_frames(HIK_DOMAIN_CORE, 1, 
+    hic_status_t status = pmm_alloc_frames(HIC_DOMAIN_CORE, 1, 
                                            PAGE_FRAME_PRIVILEGED, &phys);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         return NULL;
     }
     
@@ -102,11 +102,11 @@ void pagetable_destroy(page_table_t* root)
 }
 
 /* 映射物理页（完整实现） */
-hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phys, 
+hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phys, 
                            size_t size, page_perm_t perm, map_type_t type)
 {
     if (!root || size == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 对齐到页边界 */
@@ -134,7 +134,7 @@ hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
         if (!(root->entries[pml4_index] & PAGE_FLAG_PRESENT)) {
             page_table_t* pdpt = allocate_page_table();
             if (!pdpt) {
-                return HIK_ERROR_NO_MEMORY;
+                return HIC_ERROR_NO_MEMORY;
             }
             root->entries[pml4_index] = (u64)pdpt | PAGE_FLAG_PRESENT | 
                                          PAGE_FLAG_WRITE | PAGE_FLAG_USER;
@@ -148,7 +148,7 @@ hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
         if (!(pdpt->entries[pdpt_index] & PAGE_FLAG_PRESENT)) {
             page_table_t* pd = allocate_page_table();
             if (!pd) {
-                return HIK_ERROR_NO_MEMORY;
+                return HIC_ERROR_NO_MEMORY;
             }
             pdpt->entries[pdpt_index] = (u64)pd | PAGE_FLAG_PRESENT | 
                                         PAGE_FLAG_WRITE | PAGE_FLAG_USER;
@@ -162,7 +162,7 @@ hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
         if (!(pd->entries[pd_index] & PAGE_FLAG_PRESENT)) {
             page_table_t* pt = allocate_page_table();
             if (!pt) {
-                return HIK_ERROR_NO_MEMORY;
+                return HIC_ERROR_NO_MEMORY;
             }
             pd->entries[pd_index] = (u64)pt | PAGE_FLAG_PRESENT | 
                                    PAGE_FLAG_WRITE | PAGE_FLAG_USER;
@@ -176,14 +176,14 @@ hik_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
         pt->entries[pt_index] = current_phys | flags;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 取消映射 */
-hik_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size)
+hic_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size)
 {
     if (!root || size == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 对齐到页边界 */
@@ -222,15 +222,15 @@ hik_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size)
     /* 刷新TLB */
     pagetable_flush_tlb_all();
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 更改权限 */
-hik_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt, 
+hic_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt, 
                                 size_t size, page_perm_t perm)
 {
     if (!root || size == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 对齐到页边界 */
@@ -272,7 +272,7 @@ hik_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt,
     /* 刷新TLB */
     pagetable_flush_tlb_all();
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 获取物理地址 */
@@ -336,23 +336,23 @@ void pagetable_flush_tlb_all(void)
 }
 
 /* 设置域页表（完整实现） */
-hik_status_t pagetable_setup_domain(domain_id_t domain, page_table_t* root)
+hic_status_t pagetable_setup_domain(domain_id_t domain, page_table_t* root)
 {
-    if (domain >= HIK_DOMAIN_MAX) {
-        return HIK_ERROR_INVALID_PARAM;
+    if (domain >= HIC_DOMAIN_MAX) {
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 完整实现：保存域的页表指针 */
     /* 使用domain_switch_set_pagetable保存 */
     domain_switch_set_pagetable(domain, root);
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 清理域页表（完整实现） */
 void pagetable_cleanup_domain(domain_id_t domain)
 {
-    if (domain >= HIK_DOMAIN_MAX) {
+    if (domain >= HIC_DOMAIN_MAX) {
         return;
     }
     

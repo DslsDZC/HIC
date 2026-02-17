@@ -1,16 +1,22 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK中断控制器实现
+ * HIC中断控制器实现（无锁设计）
  * 遵循文档第2.1节：中断处理机制
+ * 
+ * 无锁设计原则：
+ * 1. 中断路由表在构建时初始化，运行时只读
+ * 2. 中断处理函数使用静态路由，无需锁
+ * 3. 运行时注册使用临界区保护
  */
 
 #include "irq.h"
 #include "capability.h"
+#include "atomic.h"
 #include "lib/console.h"
 #include "hardware_probe.h"
 #include "boot_info.h"
@@ -23,22 +29,23 @@ static u64 get_ioapic_base(void) {
     return g_boot_state.hw.io_irq.base_address;
 }
 
-/* 中断路由表（静态版本） */
-static protected_entry_t irq_table[256];
+/* 中断路由表（无锁设计 - 构建时初始化，运行时只读） */
+volatile irq_route_entry_t irq_table[256];
 
-/* 初始化中断控制器 */
+/* 初始化中断控制器（无锁实现） */
 void irq_controller_init(void)
 {
-    console_puts("[IRQ] Initializing interrupt controller...\n");
+    console_puts("[IRQ] Initializing interrupt controller (lock-free)...\n");
     
     /* 清空中断表 */
     for (u32 i = 0; i < 256; i++) {
         irq_table[i].domain_id = 0;
         irq_table[i].handler_address = 0;
-        irq_table[i].endpoint_cap = HIK_CAP_INVALID;
+        irq_table[i].endpoint_cap = HIC_CAP_INVALID;
+        irq_table[i].initialized = 0;
     }
     
-    /* 从构建配置加载中断路由 */
+    /* 从构建配置加载中断路由（一次性初始化） */
     for (u32 i = 0; i < g_build_config.num_interrupt_routes; i++) {
         interrupt_route_t *route = &g_build_config.interrupt_routes[i];
         u32 vector = route->irq_vector;
@@ -46,33 +53,44 @@ void irq_controller_init(void)
         if (vector < 256) {
             irq_table[vector].domain_id = route->target_domain;
             irq_table[vector].handler_address = route->handler_address;
+            irq_table[vector].initialized = 1;
             /* endpoint_cap在服务注册时设置 */
         }
     }
     
+    /* 使用内存屏障确保初始化完成 */
+    atomic_full_barrier();
+    
     console_puts("[IRQ] Interrupt routes loaded from build config\n");
 }
 
-/* 注册中断处理函数 */
-hik_status_t irq_register_handler(u32 irq_vector, domain_id_t domain, 
+/* 注册中断处理函数（无锁实现 - 使用临界区） */
+hic_status_t irq_register_handler(u32 irq_vector, domain_id_t domain, 
                                    u64 handler, cap_id_t endpoint_cap)
 {
     if (irq_vector >= 256 || handler == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 验证能力 */
-    hik_status_t status = cap_check_access(domain, endpoint_cap, 0);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_PERMISSION;
+    hic_status_t status = cap_check_access(domain, endpoint_cap, 0);
+    if (status != HIC_SUCCESS) {
+        return HIC_ERROR_PERMISSION;
     }
+    
+    /* 进入临界区（禁用中断保证原子性） */
+    bool irq_state = atomic_enter_critical();
     
     /* 注册到中断表 */
     irq_table[irq_vector].domain_id = domain;
     irq_table[irq_vector].handler_address = handler;
     irq_table[irq_vector].endpoint_cap = endpoint_cap;
+    irq_table[irq_vector].initialized = 1;
     
-    return HIK_SUCCESS;
+    /* 退出临界区 */
+    atomic_exit_critical(irq_state);
+    
+    return HIC_SUCCESS;
 }
 
 /* 启用中断 */
@@ -152,23 +170,26 @@ void irq_disable(u32 irq_vector)
     }
 }
 
-/* 中断分发核心函数 */
+/* 中断分发核心函数（无锁实现 - 只读访问） */
 void irq_dispatch(u32 irq_vector)
 {
-    protected_entry_t *entry = &irq_table[irq_vector];
+    /* 使用内存屏障确保读取顺序 */
+    atomic_acquire_barrier();
+    
+    irq_route_entry_t *entry = &irq_table[irq_vector];
     
     /* 检查是否有注册的处理函数 */
-    if (entry->handler_address == 0) {
+    if (!entry->initialized || entry->handler_address == 0) {
         console_puts("[IRQ] Unhandled IRQ: ");
         console_putu64(irq_vector);
         console_puts("\n");
         return;
     }
     
-    /* 验证能力 */
-    hik_status_t status = cap_check_access(entry->domain_id, 
+    /* 验证能力（只读操作，无锁） */
+    hic_status_t status = cap_check_access(entry->domain_id, 
                                             entry->endpoint_cap, 0);
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         console_puts("[IRQ] Permission denied for IRQ: ");
         console_putu64(irq_vector);
         console_puts("\n");

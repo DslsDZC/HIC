@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核静态硬件探测实现
+ * HIC内核静态硬件探测实现
  * 提供跨架构的静态硬件探测接口
  */
 
-#ifndef HIK_HARDWARE_PROBE_H
-#define HIK_HARDWARE_PROBE_H
+#ifndef HIC_HARDWARE_PROBE_H
+#define HIC_HARDWARE_PROBE_H
 
 #include <stdint.h>
 #include "types.h"
@@ -160,24 +160,24 @@ typedef struct hardware_probe_result {
 /**
  * 探测CPU信息
  */
-hik_status_t probe_cpu(cpu_info_t *result);
+hic_status_t probe_cpu(cpu_info_t *result);
 
 /**
  * 探测内存拓扑
  */
-hik_status_t probe_memory_topology(const void *boot_mem_map,
+hic_status_t probe_memory_topology(const void *boot_mem_map,
                                    u32 mem_map_count,
                                    memory_topology_t *result);
 
 /**
  * 探测PCI设备
  */
-hik_status_t probe_pci_devices(device_list_t *result);
+hic_status_t probe_pci_devices(device_list_t *result);
 
 /**
  * 探测中断控制器
  */
-hik_status_t probe_interrupt_controller(interrupt_controller_t *local,
+hic_status_t probe_interrupt_controller(interrupt_controller_t *local,
                                         interrupt_controller_t *io);
 
 /**
@@ -188,6 +188,6 @@ void hardware_probe_init(void);
 /**
  * 执行完整的硬件探测
  */
-hik_status_t hardware_probe_all(hardware_probe_result_t *result);
+hic_status_t hardware_probe_all(hardware_probe_result_t *result);
 
-#endif /* HIK_HARDWARE_PROBE_H */
+#endif /* HIC_HARDWARE_PROBE_H */

@@ -1,17 +1,17 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK PKCS#1 v2.1 RSASSA-PSS签名验证
+ * HIC PKCS#1 v2.1 RSASSA-PSS签名验证
  * 遵循RFC 8017标准
  * 用于模块签名验证
  */
 
-#ifndef HIK_KERNEL_PKCS1_H
-#define HIK_KERNEL_PKCS1_H
+#ifndef HIC_KERNEL_PKCS1_H
+#define HIC_KERNEL_PKCS1_H
 
 #include "types.h"
 
@@ -117,4 +117,4 @@ bool pkcs1_mgf1(const u8* seed, u32 seed_len,
                  u8* mask, u32 mask_len,
                  u32 mgf_hash_alg);
 
-#endif /* HIK_KERNEL_PKCS1_H */
+#endif /* HIC_KERNEL_PKCS1_H */

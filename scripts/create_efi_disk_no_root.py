@@ -58,7 +58,7 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
         # 复制内核
         print("复制内核...")
         subprocess.run([
-            'mcopy', '-i', disk_path, kernel_path, '::hik-kernel.bin'
+            'mcopy', '-i', disk_path, kernel_path, '::hic-kernel.bin'
         ], check=True)
         
         print(f"✓ 磁盘镜像创建成功: {disk_path}")

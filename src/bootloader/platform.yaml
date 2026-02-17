@@ -1,4 +1,4 @@
-# HIK内核编译配置文件
+# HIC内核编译配置文件
 # 用于x86_64通用架构的内核编译配置
 # 运行时硬件信息将通过CPUID、ACPI、PCI等机制动态探测
 
@@ -72,17 +72,17 @@ core_services:
 dynamic_modules:
   # 模块仓库配置
   repository:
-    local_path: "/var/lib/hik/modules"
-    remote_url: "https://repo.hik-os.org/modules"
+    local_path: "/var/lib/hic/modules"
+    remote_url: "https://repo.hic-os.org/modules"
     verify_signature: true        # 必须验证签名
     cache_enabled: true           # 启用本地缓存
   
   # 预加载模块（启动时自动加载）
   preload:
-    - "console_driver.hikmod"     # 控制台驱动
-    - "keyboard_driver.hikmod"    # 键盘驱动
-    - "ps2_mouse.hikmod"          # PS/2鼠标驱动
-    - "uart_driver.hikmod"        # UART驱动
+    - "console_driver.hicmod"     # 控制台驱动
+    - "keyboard_driver.hicmod"    # 键盘驱动
+    - "ps2_mouse.hicmod"          # PS/2鼠标驱动
+    - "uart_driver.hicmod"        # UART驱动
 
 # 资源配额（默认值，运行时可调整）
 resource_quotas:

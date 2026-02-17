@@ -1,4 +1,4 @@
-# HIK构建系统Python依赖
+# HIC构建系统Python依赖
 # 系统依赖: GTK3 开发库
 #   - Arch Linux: pacman -S gtk3 python-gobject
 #   - Ubuntu/Debian: apt-get install python3-gi gir1.2-gtk-3.0

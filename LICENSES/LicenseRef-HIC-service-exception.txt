@@ -1,0 +1,134 @@
+HIC Core-0 Service Interface Exception
+
+Version 1.0
+
+The HIC Core-0 kernel (the “Core-0”) is licensed under the GNU General Public License
+version 2 only (GPL-2.0-only), as published by the Free Software Foundation.
+
+In accordance with section 7 of GPLv2, the copyright holders of Core-0 grant you the
+following additional permission, which supplements the terms of GPL-2.0-only:
+
+1. Definitions
+
+   For purposes of this exception:
+
+   1.1 “Core-0” means the original and modified versions of the HIC kernel core,
+       which implements the fundamental isolation, capability, and resource management
+       mechanisms, and is intended to run at the highest hardware privilege level.
+
+   1.2 “Privileged-1 Service Module” (or “Service”) means a software component that:
+       (a) runs in a separate isolation domain (sandbox) at the same hardware
+           privilege level as Core-0;
+       (b) communicates with Core-0 exclusively through documented standard interfaces
+           provided by Core-0, including but not limited to capability invocation,
+           inter-process communication (IPC), system calls, or any other interface
+           explicitly documented as a standard service interface in the official
+           HIC documentation;
+       (c) is not a modification of Core-0, and is not intended to be combined with
+           Core-0 in a way that would create a single combined work (as defined by
+           copyright law) other than through normal use of the aforementioned
+           interfaces.
+
+   1.3 “Standard Interfaces” means the interfaces documented in the official HIC
+       documentation as being available for communication between Core-0 and
+       Privileged-1 services. These interfaces are designed to be stable and are the
+       ordinary means for services to interact with Core-0.
+
+   1.4 “Larger Work” means a work that combines Core-0 with one or more Privileged-1
+       Service Modules.
+
+2. License Grant
+
+   The copyright holders of Core-0 hereby grant you an additional permission under
+   the terms of GPL-2.0-only to:
+
+   2.1 Create a Larger Work by combining or linking Core-0 with one or more
+       Privileged-1 Service Modules.
+
+   2.2 Distribute the Larger Work under terms of your choice, provided that you
+       comply with the requirements set forth in Section 3 below.
+
+3. Conditions for Distribution of Larger Works
+
+   If you distribute a Larger Work (whether in source or binary form), you must:
+
+   3.1 Ensure that Core-0 itself remains licensed under GPL-2.0-only, and that any
+       modifications you make to Core-0 are also subject to GPL-2.0-only. If you
+       distribute Core-0 separately (not as part of a Larger Work), it must be under
+       the terms of GPL-2.0-only with this exception preserved.
+
+   3.2 Include a conspicuous notice in the Larger Work stating that Core-0 is
+       licensed under GPL-2.0-only with this exception, and that Privileged-1 Service
+       Modules may be covered by different licenses. A reference to this exception
+       text or to the HIC project's license information is sufficient to satisfy
+       this requirement.
+
+   3.3 Make available, in a manner consistent with GPL-2.0-only, the complete
+       corresponding source code for Core-0 (including any modifications you made to
+       it) to any recipient who requests it, for a period of at least three years
+       from the date of distribution.
+
+4. Scope of Exception
+
+   4.1 This exception applies only to the combination of Core-0 with Privileged-1
+       Service Modules that use the Standard Interfaces as defined in Section 1.3.
+       It does not extend to combinations where Core-0 is modified, adapted, or
+       incorporated into a work in a manner that goes beyond normal use of the
+       Standard Interfaces (for example, if Core-0's internal source code is copied,
+       modified, and linked directly with a Service Module without using the
+       Standard Interfaces).
+
+   4.2 A Privileged-1 Service Module is not considered a derivative work of Core-0
+       solely because it communicates via the Standard Interfaces or because it is
+       distributed together with Core-0 as part of a Larger Work. Consequently, you
+       may license Service Modules under any terms you wish, including proprietary
+       licenses, provided that those terms do not restrict the rights granted by
+       GPL-2.0-only for Core-0 itself.
+
+   4.3 This exception does not impose any additional license terms on Privileged-1
+       Service Modules. The terms under which you license Service Modules are your
+       own choice, as long as they do not conflict with the requirements of this
+       exception.
+
+5. Modifications to Core-0
+
+   5.1 If you modify Core-0, your modified version must still be licensed under
+       GPL-2.0-only, and this exception must be retained in its entirety. You may,
+       however, add your own additional permissions to your modified version, as
+       permitted by GPLv2 section 7, provided that they do not conflict with this
+       exception.
+
+   5.2 Any modifications you make to Core-0 must be clearly documented, and you must
+       include a notice in the modified files stating that you changed the files and
+       the date of any change.
+
+6. No Trademark License
+
+   This exception does not grant any rights to use the names, trademarks, service
+   marks, or logos of the HIC project, except as required for reasonable and
+   customary use in describing the origin of the work and reproducing the content
+   of any copyright notice.
+
+7. Disclaimer of Warranty and Limitation of Liability
+
+   THE CORE-0 IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+   OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+   CORE-0 OR THE USE OR OTHER DEALINGS IN THE CORE-0.
+
+8. Acceptance
+
+   By using, modifying, or distributing Core-0, you indicate your acceptance of this
+   exception and the terms of GPL-2.0-only. If you do not agree to these terms, you
+   may not use, modify, or distribute Core-0.
+
+9. Contact Information
+
+   For questions regarding this exception, please contact the HIC project maintainers
+   at: dsls.dzc@gmail.com
+
+   The official version of this exception is maintained at:
+   [https://github.com/DslsDZC/HIC/LICENSE/LicenseRef-HIC-service-exception.txt]
+

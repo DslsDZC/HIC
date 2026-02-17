@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK构建时配置实现（完整版）
+ * HIC构建时配置实现（完整版）
  * 遵循文档第4节：构建时硬件合成系统
  */
 
@@ -29,7 +29,7 @@ void build_config_init(void)
 }
 
 /* 加载platform.yaml（完整实现） */
-hik_status_t build_config_load_yaml(const char *filename)
+hic_status_t build_config_load_yaml(const char *filename)
 {
     console_puts("[BUILD] Loading platform.yaml: ");
     console_puts(filename);
@@ -43,7 +43,7 @@ hik_status_t build_config_load_yaml(const char *filename)
     
     if (!g_boot_state.boot_info || g_boot_state.boot_info->config_data == 0) {
         console_puts("[BUILD] ERROR: No configuration data from bootloader\n");
-        return HIK_ERROR_NOT_FOUND;
+        return HIC_ERROR_NOT_FOUND;
     }
     
     const char* yaml_data = (const char*)g_boot_state.boot_info->config_data;
@@ -51,52 +51,52 @@ hik_status_t build_config_load_yaml(const char *filename)
     
     if (yaml_size == 0 || yaml_size > 1024 * 1024) { /* 最大1MB */
         console_puts("[BUILD] ERROR: Invalid configuration size\n");
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 使用YAML解析器加载配置 */
-    hik_status_t status = yaml_load_build_config(yaml_data, yaml_size, &g_build_config);
+    hic_status_t status = yaml_load_build_config(yaml_data, yaml_size, &g_build_config);
     
-    if (status != HIK_SUCCESS) {
+    if (status != HIC_SUCCESS) {
         console_puts("[BUILD] ERROR: Failed to parse YAML\n");
         return status;
     }
     
     console_puts("[BUILD] YAML configuration loaded successfully\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 解析和验证配置（完整实现） */
-hik_status_t build_config_parse_and_validate(void)
+hic_status_t build_config_parse_and_validate(void)
 {
     console_puts("[BUILD] Parsing and validating configuration...\n");
     
     /* 验证架构 */
     if (g_build_config.target_architecture != HAL_ARCH_X86_64) {
         console_puts("[BUILD] ERROR: Unsupported architecture\n");
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 验证构建模式 */
     if (g_build_config.build_mode != BUILD_MODE_STATIC) {
         console_puts("[BUILD] ERROR: Invalid build mode\n");
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 检查资源冲突 */
-    hik_status_t status = build_config_resolve_conflicts();
-    if (status != HIK_SUCCESS) {
+    hic_status_t status = build_config_resolve_conflicts();
+    if (status != HIC_SUCCESS) {
         return status;
     }
     
     console_puts("[BUILD] Configuration validated successfully\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 解决资源冲突（完整实现） */
-hik_status_t build_config_resolve_conflicts(void)
+hic_status_t build_config_resolve_conflicts(void)
 {
     console_puts("[BUILD] Resolving resource conflicts...\n");
     
@@ -111,7 +111,7 @@ hik_status_t build_config_resolve_conflicts(void)
                 /* 完整实现：冲突解决策略 */
                 /* 1. 尝试重新分配IRQ */
                 /* 2. 如果失败，返回错误 */
-                return HIK_ERROR_INVALID_PARAM;
+                return HIC_ERROR_INVALID_PARAM;
             }
         }
     }
@@ -126,16 +126,16 @@ hik_status_t build_config_resolve_conflicts(void)
             if ((r1->base < r2->base + r2->size) && 
                 (r2->base < r1->base + r1->size)) {
                 console_puts("[BUILD] ERROR: Memory region conflict\n");
-                return HIK_ERROR_INVALID_PARAM;
+                return HIC_ERROR_INVALID_PARAM;
             }
         }
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 生成静态配置表（完整实现） */
-hik_status_t build_config_generate_tables(void)
+hic_status_t build_config_generate_tables(void)
 {
     console_puts("[BUILD] Generating static configuration tables...\n");
     
@@ -155,5 +155,5 @@ hik_status_t build_config_generate_tables(void)
     console_puts("[BUILD]   - Device initialization sequence\n");
     /* 完整实现：根据依赖关系确定初始化顺序 */
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }

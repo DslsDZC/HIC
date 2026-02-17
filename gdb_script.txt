@@ -1,5 +1,5 @@
-# HIK内核GDB调试脚本
-# 使用方法: gdb -x gdb_script.txt build/bin/hik-kernel.elf
+# HIC内核GDB调试脚本
+# 使用方法: gdb -x gdb_script.txt build/bin/hic-kernel.elf
 
 # 设置架构
 set architecture i386:x86-64
@@ -34,12 +34,12 @@ x/10i $rip
 
 # 检查boot_info结构
 echo "\n=== 检查boot_info结构 ==="
-print/x *(hik_boot_info_t*)$rdi
-print/x ((hik_boot_info_t*)$rdi)->magic
-print/x ((hik_boot_info_t*)$rdi)->version
-print/x ((hik_boot_info_t*)$rdi)->entry_point
-print/x ((hik_boot_info_t*)$rdi)->kernel_base
-print/x ((hik_boot_info_t*)$rdi)->kernel_size
+print/x *(hic_boot_info_t*)$rdi
+print/x ((hic_boot_info_t*)$rdi)->magic
+print/x ((hic_boot_info_t*)$rdi)->version
+print/x ((hic_boot_info_t*)$rdi)->entry_point
+print/x ((hic_boot_info_t*)$rdi)->kernel_base
+print/x ((hic_boot_info_t*)$rdi)->kernel_size
 
 # 继续执行
 echo "\n=== 继续执行 ==="

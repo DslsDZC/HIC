@@ -1,5 +1,5 @@
-#ifndef HIK_BOOTLOADER_STRING_H
-#define HIK_BOOTLOADER_STRING_H
+#ifndef HIC_BOOTLOADER_STRING_H
+#define HIC_BOOTLOADER_STRING_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -36,4 +36,4 @@ int tolower(int c);
 uint64_t strtoull(const char *str, char **endptr, int base);
 int64_t strtoll(const char *str, char **endptr, int base);
 
-#endif // HIK_BOOTLOADER_STRING_H
+#endif // HIC_BOOTLOADER_STRING_H

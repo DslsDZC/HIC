@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK物理内存管理器实现
+ * HIC物理内存管理器实现
  * 遵循三层模型文档第2.1节：物理资源管理与分配
  */
 
@@ -60,7 +60,7 @@ void pmm_init(void)
 }
 
 /* 添加内存区域 */
-hik_status_t pmm_add_region(phys_addr_t base, size_t size)
+hic_status_t pmm_add_region(phys_addr_t base, size_t size)
 {
     /* 对齐到页边界 */
     phys_addr_t aligned_base = (base + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -68,7 +68,7 @@ hik_status_t pmm_add_region(phys_addr_t base, size_t size)
     aligned_size &= ~(PAGE_SIZE - 1);
     
     if (aligned_size < PAGE_SIZE) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 添加到区域链表 */
@@ -82,7 +82,7 @@ hik_status_t pmm_add_region(phys_addr_t base, size_t size)
     aligned_size -= region_offset;
     
     if (aligned_size < PAGE_SIZE) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 初始化区域描述符 */
@@ -113,17 +113,17 @@ hik_status_t pmm_add_region(phys_addr_t base, size_t size)
     console_putu64(num_frames);
     console_puts(" pages\n");
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 分配页帧 */
-hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
+hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
                                page_frame_type_t type, phys_addr_t *out)
 {
     (void)owner;
     (void)type;
     if (count == 0 || out == NULL) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }    
     /* 查找连续的空闲页帧 */
     u64 consecutive = 0;
@@ -142,7 +142,7 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     
     if (consecutive < count) {
         console_puts("[PMM] ERROR: Not enough free pages\n");
-        return HIK_ERROR_NO_MEMORY;
+        return HIC_ERROR_NO_MEMORY;
     }
     
     /* 标记为已使用 */
@@ -160,23 +160,23 @@ hik_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     
     *out = start * PAGE_SIZE;
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 释放页帧 */
-hik_status_t pmm_free_frames(phys_addr_t addr, u32 count)
+hic_status_t pmm_free_frames(phys_addr_t addr, u32 count)
 {
     u64 start_frame = addr / PAGE_SIZE;
     
     if (start_frame >= total_frames || count == 0) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 检查页帧是否已分配 */
     for (u32 i = 0; i < count; i++) {
         if (!test_bit(frame_bitmap, start_frame + i)) {
             /* 页帧未分配 */
-            return HIK_ERROR_INVALID_PARAM;
+            return HIC_ERROR_INVALID_PARAM;
         }
     }
     
@@ -193,16 +193,16 @@ hik_status_t pmm_free_frames(phys_addr_t addr, u32 count)
         console_puts("[PMM] Invariant violation detected after pmm_free_frames!\n");
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 查询页帧信息 */
-hik_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info)
+hic_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info)
 {
     u64 frame = addr / PAGE_SIZE;
     
     if (frame >= total_frames || info == NULL) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
 /* 完整实现：根据帧索引获取帧信息 */
@@ -214,17 +214,17 @@ hik_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info)
         /* 完整实现：确定帧类型和所有者 */
         if (info->ref_count > 0) {
             info->type = PAGE_FRAME_CORE;
-            info->owner = HIK_DOMAIN_CORE;
+            info->owner = HIC_DOMAIN_CORE;
         } else {
             info->type = PAGE_FRAME_FREE;
             info->owner = 0;
         }
     } else {
         memzero(info, sizeof(*info));
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
 
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 
 /* 获取统计信息 */

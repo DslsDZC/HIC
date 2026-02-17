@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK系统调用实现（集成域切换）
+ * HIC系统调用实现（集成域切换）
  * 遵循文档第3.2节：统一API访问模型
  */
 
@@ -15,67 +15,80 @@
 #include "domain_switch.h"
 #include "thread.h"
 #include "formal_verification.h"
+#include "audit.h"
 #include "lib/console.h"
 
 /* IPC调用实现 */
-hik_status_t syscall_ipc_call(ipc_call_params_t *params)
+hic_status_t syscall_ipc_call(ipc_call_params_t *params)
 {
-    if (params == NULL) {
-        return HIK_ERROR_INVALID_PARAM;
-    }
-
-    /* 1. 获取调用者域（完整实现） */
     domain_id_t caller_domain = domain_switch_get_current();
-
-    /* 2. 验证调用者是否持有目标端点能力 */
-    hik_status_t status = cap_check_access(caller_domain,
-                                            params->endpoint_cap, 0);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_PERMISSION;
+    hic_status_t status;
+    
+    /* 验证端点能力 - 直接使用全局能力表 */
+    cap_entry_t *entry = &g_global_cap_table[params->endpoint_cap];
+    if (entry->cap_id != params->endpoint_cap || (entry->flags & CAP_FLAG_REVOKED)) {
+        /* 记录失败的IPC调用审计日志 */
+        u64 audit_data[4] = { (u64)caller_domain, (u64)SYSCALL_IPC_CALL, (u64)HIC_ERROR_CAP_INVALID, 0 };
+        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0, 
+                       audit_data, 4, 0);
+        return HIC_ERROR_CAP_INVALID;
     }
     
-    /* 2. 获取端点信息 */
-    cap_entry_t endpoint_info;
-    status = cap_get_info(params->endpoint_cap, &endpoint_info);
-    if (status != HIK_SUCCESS) {
-        return HIK_ERROR_CAP_INVALID;
-    }
-    
-    /* 3. 安全切换到目标服务域 */
-    status = domain_switch(caller_domain, endpoint_info.endpoint.target_domain,
+    status = domain_switch(caller_domain, entry->endpoint.target,
                            params->endpoint_cap, 0, NULL, 0);
-    if (status != HIK_SUCCESS) {
-        return status;
-    }
-    
-    console_puts("[SYSCALL] IPC call to domain ");
-    console_putu64(endpoint_info.endpoint.target_domain);
-    console_puts("\n");
-    
-/* 记录审计日志 */
-    (void)caller_domain;
-    
-    return HIK_SUCCESS;
+        
+        console_puts("[SYSCALL] IPC call to domain ");
+        console_putu64(entry->endpoint.target);
+        console_puts("\n");
+        
+        /* 记录成功的IPC调用审计日志 */
+        u64 audit_data[4] = { (u64)caller_domain, (u64)SYSCALL_IPC_CALL, (u64)HIC_SUCCESS, 0 };
+        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0, 
+                       audit_data, 4, 1);    
+    return HIC_SUCCESS;
 }
 
 /* 能力传递 */
-hik_status_t syscall_cap_transfer(domain_id_t to, cap_id_t cap)
+hic_status_t syscall_cap_transfer(domain_id_t to, cap_id_t cap)
 {
     domain_id_t from = domain_switch_get_current();
-    return cap_transfer(from, to, cap);
+    cap_handle_t out_handle;
+    hic_status_t status = cap_transfer(from, to, cap, &out_handle);
+    
+    /* 记录审计日志 */
+    u64 audit_data[4] = { (u64)from, (u64)SYSCALL_CAP_TRANSFER, (u64)status, 0 };
+    audit_log_event(AUDIT_EVENT_SYSCALL, from, 0, 0, 
+                   audit_data, 4, status == HIC_SUCCESS ? 1 : 0);
+    
+    return status;
 }
 
 /* 能力派生 */
-hik_status_t syscall_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out)
+hic_status_t syscall_cap_derive(cap_id_t parent, cap_rights_t sub_rights, cap_id_t *out)
 {
     domain_id_t owner = domain_switch_get_current();
-    return cap_derive(owner, parent, sub_rights, out);
+    hic_status_t status = cap_derive(owner, parent, sub_rights, out);
+    
+    /* 记录审计日志 */
+    u64 audit_data[4] = { (u64)owner, (u64)SYSCALL_CAP_DERIVE, (u64)status, 0 };
+    audit_log_event(AUDIT_EVENT_SYSCALL, owner, 0, 0, 
+                   audit_data, 4, status == HIC_SUCCESS ? 1 : 0);
+    
+    return status;
 }
 
 /* 能力撤销 */
-hik_status_t syscall_cap_revoke(cap_id_t cap)
+hic_status_t syscall_cap_revoke(cap_id_t cap)
 {
-    return cap_revoke(cap);
+    domain_id_t from = domain_switch_get_current();
+    hic_status_t status = cap_revoke(cap);
+    
+    /* 记录审计日志 */
+    u64 audit_data[4] = { (u64)from, (u64)SYSCALL_CAP_REVOKE, (u64)status, 0 };
+    audit_log_event(AUDIT_EVENT_SYSCALL, from, 0, 0, 
+                   audit_data, 4, status == HIC_SUCCESS ? 1 : 0);
+    
+    return status;
 }
 
 /* 系统调用入口 */
@@ -84,7 +97,7 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
     (void)arg2;
     (void)arg3;
     (void)arg4;
-    hik_status_t status = HIK_SUCCESS;
+    hic_status_t status = HIC_SUCCESS;
 
     /* 完整实现：根据系统调用号分发处理 */
     switch (syscall_num) {
@@ -109,7 +122,7 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
             break;
         }
         default:
-            status = HIK_ERROR_NOT_SUPPORTED;
+            status = HIC_ERROR_NOT_SUPPORTED;
             console_puts("[SYSCALL] Unknown syscall: ");
             console_putu64(syscall_num);
             console_puts("\n");

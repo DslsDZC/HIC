@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-4.0
 
 # 开发环境
 
-本文档介绍如何搭建HIK的开发环境。
+本文档介绍如何搭建HIC的开发环境。
 
 ## 系统要求
 
@@ -189,11 +189,11 @@ pip3 install --user -r requirements.txt
 # 添加到 ~/.bashrc 或 ~/.zshrc
 cat >> ~/.bashrc << 'EOF'
 
-# HIK开发环境变量
-export HIK_ROOT=/path/to/HIK
-export HIK_BUILD=$HIK_ROOT/build
-export HIK_OUTPUT=$HIK_ROOT/output
-export HIK_SRC=$HIK_ROOT/src
+# HIC开发环境变量
+export HIC_ROOT=/path/to/HIC
+export HIC_BUILD=$HIC_ROOT/build
+export HIC_OUTPUT=$HIC_ROOT/output
+export HIC_SRC=$HIC_ROOT/src
 
 # 交叉编译工具链
 export PREFIX=x86_64-elf
@@ -214,7 +214,7 @@ export DEBUG=1
 export OPTIMIZE=-O2
 
 # 路径
-export PATH=$HIK_ROOT/scripts:$PATH
+export PATH=$HIC_ROOT/scripts:$PATH
 EOF
 
 # 重新加载配置
@@ -303,7 +303,7 @@ code --install-extension eamodio.gitlens
             "args": [
                 "-bios", "/usr/share/OVMF/OVMF_CODE.fd",
                 "-drive", "format=raw,file=${workspaceFolder}/output/bootx64.efi",
-                "-drive", "format=raw,file=${workspaceFolder}/output/hik-kernel.bin",
+                "-drive", "format=raw,file=${workspaceFolder}/output/hic-kernel.bin",
                 "-m", "512M",
                 "-serial", "stdio"
             ],
@@ -414,8 +414,8 @@ python3 -c "import rich; print(rich.__version__)"
 
 ```bash
 # 克隆项目（如果还没有）
-git clone https://github.com/DslsDZC/HIK.git
-cd hik
+git clone https://github.com/DslsDZC/HIC.git
+cd hic
 
 # 测试构建
 make clean
@@ -487,7 +487,7 @@ make -j4
 
 环境配置完成后，你可以：
 
-1. 阅读 [快速开始](./03-QuickStart.md) - 开始构建和运行HIK
+1. 阅读 [快速开始](./03-QuickStart.md) - 开始构建和运行HIC
 2. 阅读 [代码规范](./06-CodingStandards.md) - 了解代码风格
 3. 阅读 [测试指南](./07-Testing.md) - 学习如何测试
 4. 开始开发你的第一个功能或修复

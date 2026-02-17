@@ -1,14 +1,14 @@
 <!--
 SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 
-SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
 -->
 
-# HIK Privileged-1服务开发指南
+# HIC Privileged-1服务开发指南
 
 ## 概述
 
-Privileged-1层是HIK系统的特权服务沙箱，运行在与Core-0相同的特权级（x86 Ring 0），但通过MMU隔离，每个服务拥有独立的物理地址空间。
+Privileged-1层是HIC系统的特权服务沙箱，运行在与Core-0相同的特权级（x86 Ring 0），但通过MMU隔离，每个服务拥有独立的物理地址空间。
 
 ## 核心特性
 
@@ -70,7 +70,7 @@ domain_quota_t quota = {
 
 /* 从模块加载服务 */
 domain_id_t domain_id;
-hik_status_t status = privileged_service_load(
+hic_status_t status = privileged_service_load(
     module_instance_id,
     "my_service",
     SERVICE_TYPE_CUSTOM,
@@ -123,13 +123,13 @@ status = privileged_service_unload(domain_id);
 
 ```c
 /* 端点处理函数签名 */
-static hik_status_t my_handler(
+static hic_status_t my_handler(
     service_message_t *msg,      /* 接收到的消息 */
     service_message_t *response  /* 响应消息（由调用者分配） */
 ) {
     /* 验证参数 */
     if (!msg || !response) {
-        return HIK_ERROR_INVALID_PARAM;
+        return HIC_ERROR_INVALID_PARAM;
     }
     
     /* 处理消息 */
@@ -142,10 +142,10 @@ static hik_status_t my_handler(
             break;
             
         default:
-            return HIK_ERROR_INVALID_PARAM;
+            return HIC_ERROR_INVALID_PARAM;
     }
     
-    return HIK_SUCCESS;
+    return HIC_SUCCESS;
 }
 ```
 
@@ -192,7 +192,7 @@ u32 value = *(volatile u32*)mmio_addr;
 
 ```c
 /* 调用其他服务的端点 */
-hik_status_t ipc_call(
+hic_status_t ipc_call(
     cap_id_t endpoint_cap,  /* 目标端点能力 */
     service_message_t *request,
     service_message_t *response
@@ -213,13 +213,13 @@ hik_status_t ipc_call(
 ```c
 /* 检查内存配额 */
 status = privileged_service_check_memory_quota(domain_id, size);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     /* 超出配额 */
 }
 
 /* 检查CPU配额 */
 status = privileged_service_check_cpu_quota(domain_id);
-if (status != HIK_SUCCESS) {
+if (status != HIC_SUCCESS) {
     /* 超出配额 */
 }
 ```
@@ -250,7 +250,7 @@ bool satisfied = privileged_service_check_dependencies(domain_id);
 
 ## 模块格式
 
-服务模块遵循 `.hikmod` 格式：
+服务模块遵循 `.hicmod` 格式：
 
 ```
 +------------------+
@@ -267,8 +267,8 @@ bool satisfied = privileged_service_check_dependencies(domain_id);
 ## 模块头部定义
 
 ```c
-typedef struct hikmod_header {
-    u32    magic;           /* 魔数：0x48494B4D ('HIKM') */
+typedef struct hicmod_header {
+    u32    magic;           /* 魔数：0x48494B4D ('HICM') */
     u32    version;         /* 版本 */
     u64    code_size;       /* 代码段大小 */
     u64    data_size;       /* 数据段大小 */
@@ -277,7 +277,7 @@ typedef struct hikmod_header {
     char   service_name[64];/* 服务名称 */
     char   service_uuid[37];/* 服务UUID */
     u32    service_type;    /* 服务类型 */
-} hikmod_header_t;
+} hicmod_header_t;
 ```
 
 ## 服务函数表
@@ -286,10 +286,10 @@ typedef struct hikmod_header {
 
 ```c
 typedef struct service_functions {
-    hik_status_t (*init)(void);      /* 初始化 */
-    hik_status_t (*start)(void);     /* 启动 */
-    hik_status_t (*stop)(void);      /* 停止 */
-    hik_status_t (*cleanup)(void);   /* 清理 */
+    hic_status_t (*init)(void);      /* 初始化 */
+    hic_status_t (*start)(void);     /* 启动 */
+    hic_status_t (*stop)(void);      /* 停止 */
+    hic_status_t (*cleanup)(void);   /* 清理 */
     void (*irq_handler)(u32);        /* 中断处理 */
 } service_functions_t;
 ```
@@ -307,7 +307,7 @@ x86_64-elf-gcc -ffreestanding -nostdlib \
 ### 2. 链接模块
 
 ```bash
-x86_64-elf-ld -T my_service.lds -o my_service.hikmod my_service.o
+x86_64-elf-ld -T my_service.lds -o my_service.hicmod my_service.o
 ```
 
 ### 3. 签名模块

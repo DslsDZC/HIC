@@ -1,18 +1,18 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK架构抽象层 - 仅架构相关的定义
+ * HIC架构抽象层 - 仅架构相关的定义
  * 
  * 本文件包含所有架构特定的定义和接口
  * 架构无关的代码不应直接包含此文件
  */
 
-#ifndef HIK_ARCH_H
-#define HIK_ARCH_H
+#ifndef HIC_ARCH_H
+#define HIC_ARCH_H
 
 #include "types.h"
 
@@ -509,4 +509,4 @@ static inline const char* arch_get_name(void) {
     }
 }
 
-#endif /* HIK_ARCH_H */
+#endif /* HIC_ARCH_H */

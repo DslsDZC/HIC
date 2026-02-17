@@ -1,11 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核启动信息处理实现
+ * HIC内核启动信息处理实现
  * 接收并处理Bootloader传递的启动信息
  */
 
@@ -49,6 +49,9 @@ static int simple_sscanf(const char *str, const char *fmt, ...) {
 /* 全局启动状态 */
 boot_state_t g_boot_state = {0};
 
+/* 全局引导信息指针 */
+hic_boot_info_t *g_boot_info = NULL;
+
 /**
  * 内核入口点
  * 
@@ -58,7 +61,7 @@ boot_state_t g_boot_state = {0};
  * - 所有操作都记录审计日志
  * - 遵循形式化验证要求
  */
-void kernel_entry(hik_boot_info_t* boot_info) {
+void kernel_entry(hic_boot_info_t* boot_info) {
     // 【安全检查1】验证boot_info指针
     if (boot_info == NULL) {
         log_error("boot_info pointer is NULL!\n");
@@ -72,21 +75,21 @@ void kernel_entry(hik_boot_info_t* boot_info) {
     // 初始化控制台（如果未初始化）
     console_init(CONSOLE_TYPE_SERIAL);
     
-    log_info("========== HIK内核启动 ==========\n");
-    log_info("版本: %s\n", HIK_VERSION);
+    log_info("========== HIC内核启动 ==========\n");
+    log_info("版本: %s\n", HIC_VERSION);
     log_info("boot_info指针: 0x%p\n", (void*)boot_info);
     
     // 【安全检查2】验证boot_info魔数
-    if (boot_info->magic != HIK_BOOT_INFO_MAGIC) {
+    if (boot_info->magic != HIC_BOOT_INFO_MAGIC) {
         log_error("boot_info魔数错误: 0x%08x (期望: 0x%08x)\n", 
-                 boot_info->magic, HIK_BOOT_INFO_MAGIC);
+                 boot_info->magic, HIC_BOOT_INFO_MAGIC);
         goto panic;
     }
     
     // 【安全检查3】验证boot_info版本
-    if (boot_info->version != HIK_BOOT_INFO_VERSION) {
+    if (boot_info->version != HIC_BOOT_INFO_VERSION) {
         log_error("boot_info版本不匹配: %u (期望: %u)\n", 
-                 boot_info->version, HIK_BOOT_INFO_VERSION);
+                 boot_info->version, HIC_BOOT_INFO_VERSION);
         goto panic;
     }
     
@@ -103,8 +106,8 @@ void kernel_entry(hik_boot_info_t* boot_info) {
         size_t audit_buffer_size = 0;
         
         for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
-            hik_mem_entry_t* entry = &boot_info->mem_map[i];
-            if (entry->type == HIK_MEM_TYPE_USABLE && entry->length > audit_buffer_size) {
+            hic_mem_entry_t* entry = &boot_info->mem_map[i];
+            if (entry->type == HIC_MEM_TYPE_USABLE && entry->length > audit_buffer_size) {
                 audit_buffer_base = entry->base + entry->length - 0x10000;  // 从末尾64KB
                 audit_buffer_size = 0x10000;
                 break;
@@ -203,23 +206,23 @@ panic:
  * - 记录验证失败原因
  * - 遵循形式化验证要求
  */
-bool boot_info_validate(hik_boot_info_t* boot_info) {
+bool boot_info_validate(hic_boot_info_t* boot_info) {
     if (!boot_info) {
         log_error("启动信息指针为空\n");
         return false;
     }
     
     /* 验证魔数 */
-    if (boot_info->magic != HIK_BOOT_INFO_MAGIC) {
+    if (boot_info->magic != HIC_BOOT_INFO_MAGIC) {
         log_error("启动信息魔数错误: 0x%08x (期望: 0x%08x)\n", 
-                 boot_info->magic, HIK_BOOT_INFO_MAGIC);
+                 boot_info->magic, HIC_BOOT_INFO_MAGIC);
         return false;
     }
     
     /* 验证版本 */
-    if (boot_info->version != HIK_BOOT_INFO_VERSION) {
+    if (boot_info->version != HIC_BOOT_INFO_VERSION) {
         log_error("启动信息版本不匹配: %u (期望: %u)\n", 
-                 boot_info->version, HIK_BOOT_INFO_VERSION);
+                 boot_info->version, HIC_BOOT_INFO_VERSION);
         return false;
     }
     
@@ -263,7 +266,7 @@ bool boot_info_validate(hik_boot_info_t* boot_info) {
 /**
  * 处理启动信息
  */
-void boot_info_process(hik_boot_info_t* boot_info) {
+void boot_info_process(hic_boot_info_t* boot_info) {
     log_info("处理启动信息...\n");
     
     // 打印固件信息
@@ -286,15 +289,15 @@ void boot_info_process(hik_boot_info_t* boot_info) {
     
     u64 total_usable = 0;
     for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
-        hik_mem_entry_t* entry = &boot_info->mem_map[i];
-        if (entry->type == HIK_MEM_TYPE_USABLE) {
+        hic_mem_entry_t* entry = &boot_info->mem_map[i];
+        if (entry->type == HIC_MEM_TYPE_USABLE) {
             total_usable += entry->length;
         }
     }
     log_info("可用内存: %lu MB\n", total_usable / (1024 * 1024));
     
     // 打印ACPI信息
-    if (boot_info->flags & HIK_BOOT_FLAG_ACPI_ENABLED) {
+    if (boot_info->flags & HIC_BOOT_FLAG_ACPI_ENABLED) {
         log_info("ACPI RSDP: 0x%016lx\n", (u64)boot_info->rsdp);
         if (boot_info->xsdp) {
             log_info("ACPI XSDP: 0x%016lx\n", (u64)boot_info->xsdp);
@@ -302,7 +305,7 @@ void boot_info_process(hik_boot_info_t* boot_info) {
     }
     
     // 打印视频信息
-    if (boot_info->flags & HIK_BOOT_FLAG_VIDEO_ENABLED) {
+    if (boot_info->flags & HIC_BOOT_FLAG_VIDEO_ENABLED) {
         log_info("视频分辨率: %ux%u\n",
             boot_info->video.width,
             boot_info->video.height);
@@ -312,7 +315,7 @@ void boot_info_process(hik_boot_info_t* boot_info) {
     }
     
     // 打印调试信息
-    if (boot_info->flags & HIK_BOOT_FLAG_DEBUG_ENABLED) {
+    if (boot_info->flags & HIC_BOOT_FLAG_DEBUG_ENABLED) {
         log_info("调试模式启用\n");
         log_info("串口: 0x%04x\n", boot_info->debug.serial_port);
     }
@@ -332,25 +335,25 @@ void boot_info_process(hik_boot_info_t* boot_info) {
 /**
  * 初始化内存管理器
  */
-void boot_info_init_memory(hik_boot_info_t* boot_info) {
+void boot_info_init_memory(hic_boot_info_t* boot_info) {
     // 使用Bootloader传递的内存映射初始化PMM
     for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
-        hik_mem_entry_t* entry = &boot_info->mem_map[i];
+        hic_mem_entry_t* entry = &boot_info->mem_map[i];
         
         switch (entry->type) {
-            case HIK_MEM_TYPE_USABLE:
+            case HIC_MEM_TYPE_USABLE:
                 // 可用内存，添加到PMM
                 pmm_add_region(entry->base, entry->length);
                 break;
                 
-            case HIK_MEM_TYPE_RESERVED:
-            case HIK_MEM_TYPE_ACPI:
-            case HIK_MEM_TYPE_NVS:
-            case HIK_MEM_TYPE_BOOTLOADER:
+            case HIC_MEM_TYPE_RESERVED:
+            case HIC_MEM_TYPE_ACPI:
+            case HIC_MEM_TYPE_NVS:
+            case HIC_MEM_TYPE_BOOTLOADER:
                 // 保留内存，不添加到PMM
                 break;
                 
-            case HIK_MEM_TYPE_KERNEL:
+            case HIC_MEM_TYPE_KERNEL:
                 // 内核内存，标记为已使用
                 pmm_mark_used(entry->base, entry->length);
                 break;
@@ -369,7 +372,7 @@ void boot_info_init_memory(hik_boot_info_t* boot_info) {
 /**
  * 初始化ACPI
  */
-void boot_info_init_acpi(hik_boot_info_t* boot_info) {
+void boot_info_init_acpi(hic_boot_info_t* boot_info) {
     /* 使用Bootloader传递的ACPI RSDP */
     /* 实际实现需要解析ACPI表（MADT, DSDT等） */
     
@@ -608,9 +611,9 @@ void boot_info_print_summary(void) {
     log_info("  内存映射: %lu 条目\n", 
             g_boot_state.boot_info->mem_map_entry_count);
     log_info("  ACPI: %s\n",
-            (g_boot_state.boot_info->flags & HIK_BOOT_FLAG_ACPI_ENABLED) ? "是" : "否");
+            (g_boot_state.boot_info->flags & HIC_BOOT_FLAG_ACPI_ENABLED) ? "是" : "否");
     log_info("  视频支持: %s\n",
-            (g_boot_state.boot_info->flags & HIK_BOOT_FLAG_VIDEO_ENABLED) ? "是" : "否");
+            (g_boot_state.boot_info->flags & HIC_BOOT_FLAG_VIDEO_ENABLED) ? "是" : "否");
     
     // 静态探测的信息
     log_info("\n静态探测:\n");    log_info("  CPU: %s\n", g_boot_state.hw.cpu.brand_string);

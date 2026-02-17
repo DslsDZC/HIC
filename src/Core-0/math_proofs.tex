@@ -1,8 +1,8 @@
 % SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 %
-% SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+% SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
 
-% HIK内核形式化数学证明
+% HIC内核形式化数学证明
 % 遵循TD/三层模型.md文档第12节
 
 \documentclass{article}
@@ -22,7 +22,7 @@
 \theoremstyle{remark}
 \newtheorem{remark}{注}[section]
 
-\title{HIK内核形式化验证数学证明}
+\title{HIC内核形式化验证数学证明}
 \author{DslsDZC}
 \date{2026-02-14}
 
@@ -32,7 +32,7 @@
 
 \section{引言}
 
-本文档提供HIK（Hierarchical Isolation Kernel）核心机制的形式化数学证明。所有证明基于第一阶逻辑和集合论，确保系统的安全性和隔离性。
+本文档提供HIC（Hierarchical Isolation Core）核心机制的形式化数学证明。所有证明基于第一阶逻辑和集合论，确保系统的安全性和隔离性。
 
 \section{预备知识}
 
@@ -253,7 +253,7 @@
     系统死锁当且仅当$G$中存在环。
 
     \textbf{防死锁机制}：
-    HIK采用以下机制防止死锁：
+    HIC采用以下机制防止死锁：
     \begin{enumerate}
         \item \textbf{资源排序}：所有资源类型分配全局唯一排序号
         \item \textbf{有序获取}：线程必须按递增顺序获取资源
@@ -522,7 +522,7 @@
 
 \section{结论}
 
-本文档证明了HIK内核核心机制的数学正确性：
+本文档证明了HIC内核核心机制的数学正确性：
 
 \begin{enumerate}
     \item 能力守恒性：系统能力数量守恒，防止能力泄漏
@@ -534,6 +534,6 @@
     \item 原子性保证：系统调用原子执行
 \end{enumerate}
 
-这些定理共同保证了HIK内核的安全性、隔离性和可靠性，为实现形式化验证和高安全保障奠定了数学基础。
+这些定理共同保证了HIC内核的安全性、隔离性和可靠性，为实现形式化验证和高安全保障奠定了数学基础。
 
 \end{document}

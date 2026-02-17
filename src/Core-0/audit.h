@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK审计日志系统
+ * HIC审计日志系统
  * 遵循文档第3.3节：安全审计与防篡改日志
  */
 
-#ifndef HIK_KERNEL_AUDIT_H
-#define HIK_KERNEL_AUDIT_H
+#ifndef HIC_KERNEL_AUDIT_H
+#define HIC_KERNEL_AUDIT_H
 
 #include "types.h"
 #include "capability.h"
@@ -78,8 +78,24 @@ void audit_system_init_buffer(phys_addr_t base, size_t size);
 
 /* 记录审计事件 */
 void audit_log_event(audit_event_type_t type, domain_id_t domain, 
-                     cap_id_t cap_id, thread_id_t thread_id, 
-                     u64* data, u32 data_count, bool result);
+                     cap_id_t cap, thread_id_t thread_id,
+                     u64 *data, u32 data_count, u8 result);
+
+/* 简化的审计日志宏（用于系统调用） */
+#define AUDIT_LOG_SYSCALL(domain, syscall_num, result) \
+    do { \
+        u64 _audit_data[4] = { (u64)(domain), (u64)(syscall_num), (u64)(result), 0 }; \
+        audit_log_event(AUDIT_EVENT_SYSCALL, domain, 0, 0, 0, \
+                       _audit_data, 4, (result) == HIC_SUCCESS ? 1 : 0); \
+    } while(0)
+
+/* 域切换审计日志 */
+#define AUDIT_LOG_DOMAIN_SWITCH(from, to, cap) \
+    do { \
+        u64 _audit_data[4] = { (u64)(from), (u64)(to), (u64)(cap), 0 }; \
+        audit_log_event(AUDIT_EVENT_IPC_CALL, from, cap, 0, \
+                       _audit_data, 3, 1); \
+    } while(0)
 
 /* 便捷宏 */
 #define AUDIT_LOG_CAP_VERIFY(domain, cap, result) \
@@ -118,9 +134,6 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
     do { u64 data[2] = {from, to}; \
          audit_log_event(AUDIT_EVENT_THREAD_SWITCH, 0, 0, thread, data, 2, true); \
     } while(0)
-
-#define AUDIT_LOG_SYSCALL(domain, syscall_num, result) \
-    audit_log_event(AUDIT_EVENT_SYSCALL, domain, 0, 0, &syscall_num, 1, result)
 
 #define AUDIT_LOG_IRQ(vector, domain, result) \
     audit_log_event(AUDIT_EVENT_IRQ, domain, 0, 0, &vector, 1, result)
@@ -178,4 +191,4 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
 u64 audit_get_entry_count(void);
 u64 audit_get_buffer_usage(void);
 
-#endif /* HIK_KERNEL_AUDIT_H */
+#endif /* HIC_KERNEL_AUDIT_H */

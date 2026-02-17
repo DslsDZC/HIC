@@ -1,16 +1,16 @@
 /*
  * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
- * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
 /**
- * HIK内核类型定义
+ * HIC内核类型定义
  * 遵循三层模型文档：Core-0层基础类型系统
  */
 
-#ifndef HIK_KERNEL_TYPES_H
-#define HIK_KERNEL_TYPES_H
+#ifndef HIC_KERNEL_TYPES_H
+#define HIC_KERNEL_TYPES_H
 
 #include <stdint.h>
 
@@ -40,36 +40,36 @@ typedef uintptr_t phys_addr_t;  /* 物理地址 */
 typedef uintptr_t virt_addr_t;  /* 虚拟地址 */
 
 /* 状态码 */
-typedef u32 hik_status_t;
+typedef u32 hic_status_t;
 
-#define HIK_SUCCESS              0
-#define HIK_ERROR_GENERIC        1
-#define HIK_ERROR_INVALID_PARAM  2
-#define HIK_ERROR_NO_MEMORY      3
-#define HIK_ERROR_PERMISSION     4
-#define HIK_ERROR_PERMISSION_DENIED  4
-#define HIK_ERROR_NOT_FOUND      5
-#define HIK_ERROR_TIMEOUT        6
-#define HIK_ERROR_BUSY           7
-#define HIK_ERROR_NOT_SUPPORTED  8
-#define HIK_ERROR_CAP_INVALID    9
-#define HIK_ERROR_CAP_REVOKED    10
-#define HIK_ERROR_INVALID_DOMAIN 11
-#define HIK_ERROR_QUOTA_EXCEEDED 12
-#define HIK_ERROR_INVALID_STATE  13
-#define HIK_ERROR_NO_RESOURCE    14
-#define HIK_ERROR_ALREADY_EXISTS 15
+#define HIC_SUCCESS              0
+#define HIC_ERROR_GENERIC        1
+#define HIC_ERROR_INVALID_PARAM  2
+#define HIC_ERROR_NO_MEMORY      3
+#define HIC_ERROR_PERMISSION     4
+#define HIC_ERROR_PERMISSION_DENIED  4
+#define HIC_ERROR_NOT_FOUND      5
+#define HIC_ERROR_TIMEOUT        6
+#define HIC_ERROR_BUSY           7
+#define HIC_ERROR_NOT_SUPPORTED  8
+#define HIC_ERROR_CAP_INVALID    9
+#define HIC_ERROR_CAP_REVOKED    10
+#define HIC_ERROR_INVALID_DOMAIN 11
+#define HIC_ERROR_QUOTA_EXCEEDED 12
+#define HIC_ERROR_INVALID_STATE  13
+#define HIC_ERROR_NO_RESOURCE    14
+#define HIC_ERROR_ALREADY_EXISTS 15
 
 /* 能力类型 */
 typedef u32 cap_id_t;
-#define HIK_CAP_INVALID  0
+#define HIC_CAP_INVALID  0
 #define INVALID_CAP_ID   ((cap_id_t)-1)
 
 /* 域标识符 */
 typedef u32 domain_id_t;
-#define HIK_DOMAIN_CORE   0      /* Core-0自身 */
-#define HIK_DOMAIN_MAX    65536  /* 最大域数量 */
-#define HIK_INVALID_DOMAIN ((domain_id_t)-1)  /* 无效域ID */
+#define HIC_DOMAIN_CORE   0      /* Core-0自身 */
+#define HIC_DOMAIN_MAX    65536  /* 最大域数量 */
+#define HIC_INVALID_DOMAIN ((domain_id_t)-1)  /* 无效域ID */
 
 /* 线程标识符 */
 typedef u32 thread_id_t;
@@ -78,13 +78,13 @@ typedef u32 thread_id_t;
 
 /* 优先级 */
 typedef u8 priority_t;
-#define HIK_PRIORITY_IDLE      0
-#define HIK_PRIORITY_LOW       1
-#define HIK_PRIORITY_NORMAL    2
-#define HIK_PRIORITY_HIGH      3
-#define HIK_PRIORITY_REALTIME  4
+#define HIC_PRIORITY_IDLE      0
+#define HIC_PRIORITY_LOW       1
+#define HIC_PRIORITY_NORMAL    2
+#define HIC_PRIORITY_HIGH      3
+#define HIC_PRIORITY_REALTIME  4
 
 /* 中断向量 */
 typedef u8 irq_vector_t;
 
-#endif /* HIK_KERNEL_TYPES_H */
+#endif /* HIC_KERNEL_TYPES_H */

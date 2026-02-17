@@ -1,5 +1,5 @@
 #!/bin/bash
-# HIK系统构建脚本
+# HIC系统构建脚本
 # 支持命令行、文本GUI、图形化GUI三种构建方式
 # 遵循TD/滚动更新.md文档
 
@@ -16,7 +16,7 @@ WHITE='\033[0;37m'
 RESET='\033[0m'
 
 # 项目信息
-PROJECT="HIK System"
+PROJECT="HIC System"
 VERSION="0.1.0"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${ROOT_DIR}/build"
@@ -25,7 +25,7 @@ OUTPUT_DIR="${OUTPUT_DIR}"
 # 显示横幅
 show_banner() {
     echo "${MAGENTA}========================================${RESET}"
-    echo "${MAGENTA}HIK系统构建系统 v${VERSION}${RESET}"
+    echo "${MAGENTA}HIC系统构建系统 v${VERSION}${RESET}"
     echo "${MAGENTA}========================================${RESET}"
     echo ""
 }
@@ -138,7 +138,7 @@ install_dependencies() {
 
 # 显示帮助
 show_help() {
-    echo "${GREEN}HIK系统构建系统帮助${RESET}"
+    echo "${GREEN}HIC系统构建系统帮助${RESET}"
     echo ""
     echo "${CYAN}用法: ./build.sh [选项]${RESET}"
     echo ""
