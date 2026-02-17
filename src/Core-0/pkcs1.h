@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK PKCS#1 v2.1 RSASSA-PSS签名验证
  * 遵循RFC 8017标准

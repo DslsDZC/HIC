@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # 能力系统
 
 能力系统是HIK的核心安全机制，提供细粒度的权限控制和资源访问。

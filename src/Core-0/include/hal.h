@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK硬件抽象层 (HAL) - 架构无关接口
  * 

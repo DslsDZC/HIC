@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # 常见问题 (FAQ)
 
 本文档回答了关于HIK项目的常见问题。

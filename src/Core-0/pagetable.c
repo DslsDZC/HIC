@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK页表管理器实现（完整版）
  * 遵循文档第2.1节：物理资源管理与分配

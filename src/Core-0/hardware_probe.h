@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK内核静态硬件探测实现
  * 提供跨架构的静态硬件探测接口

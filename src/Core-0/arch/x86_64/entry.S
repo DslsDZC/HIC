@@ -1,16 +1,54 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 # HIK内核入口点（x86_64）
 # Bootloader跳转到这个入口点
 
-.section .text
+.section .text.kernel_entry
 .global _start
 .global kernel_entry
 
 .extern kernel_start
 
+# 串口输出字符函数（内联）
+# 输入: %al = 字符
+.serial_putchar:
+    push %rdx
+    push %rax
+    mov $0x3FD, %dx           # 串口线状态寄存器
+.serial_putchar_wait:
+    in %dx, %al               # 读取状态
+    test $0x20, %al           # 检查发送缓冲区是否为空
+    jz .serial_putchar_wait
+    mov $0x3F8, %dx           # 串口数据寄存器
+    pop %rax                  # 恢复字符
+    out %al, %dx              # 输出字符
+    pop %rdx
+    ret
+
 # 内核入口点
 # 参数: %rdi = hik_boot_info_t* boot_info
 _start:
 kernel_entry:
+    # 调试：输出到串口确认内核被调用
+    mov $'K', %al
+    call .serial_putchar
+    mov $'E', %al
+    call .serial_putchar
+    mov $'R', %al
+    call .serial_putchar
+    mov $'N', %al
+    call .serial_putchar
+    mov $'E', %al
+    call .serial_putchar
+    mov $'L', %al
+    call .serial_putchar
+    mov $'\n', %al
+    call .serial_putchar
+    
     # 保存调用者上下文
     push %rbx
     push %rbp
@@ -22,21 +60,9 @@ kernel_entry:
     # 保存boot_info指针
     mov %rdi, %r15
 
-    # 设置新的GDT（如果需要）
-    # lgdt gdt_ptr
-
-    # 设置新的段选择器
-    # mov $0x10, %ax      # 数据段选择器
-    # mov %ax, %ds
-    # mov %ax, %es
-    # mov %ax, %fs
-    # mov %ax, %gs
-    # mov %ax, %ss
-
-    # 清除BSS段
-    # call clear_bss
-
     # 调用C语言内核入口点
+    mov $'C', %al
+    call .serial_putchar
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
     

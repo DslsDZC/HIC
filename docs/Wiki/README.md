@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # HIK Wiki - 完整文档中心
 
 欢迎来到HIK项目的完整文档中心！

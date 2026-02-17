@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK审计日志系统实现
  * 遵循文档第3.3节：安全审计与防篡改日志

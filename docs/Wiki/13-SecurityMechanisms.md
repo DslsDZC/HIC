@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # 安全机制
 
 HIK通过多层安全机制提供强安全隔离和防护。

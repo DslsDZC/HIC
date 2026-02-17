@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # HIK内核代码与文档符合性检查报告
 
 ## 概述

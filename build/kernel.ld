@@ -1,6 +1,7 @@
 /* HIK 内核链接脚本 */
 /* 遵循形式化验证的内存约束和三层模型架构 */
 
+/* 强制入口点为kernel_entry符号 */
 ENTRY(kernel_entry)
 
 /* 形式化验证约束：
@@ -18,6 +19,7 @@ SECTIONS
     /* 代码段 - 只读可执行 */
     .text ALIGN(4K) : {
         _text_start = .;
+        *(.text.kernel_entry)
         *(.text)
         *(.text.*)
         _text_end = .;

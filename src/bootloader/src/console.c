@@ -42,6 +42,9 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args);
  */
 void console_init(void)
 {
+    // 初始化串口（内核启动后会继续使用）
+    serial_init(0x3F8);  // COM1, 115200 baud
+    
     // 直接使用UEFI ConOut，不依赖其他初始化
     if (gST && gST->con_out) {
         gST->con_out->ClearScreen(gST->con_out);
@@ -49,12 +52,12 @@ void console_init(void)
 }
 
 /**
- * 输出字符到控制台
- * 使用UEFI ConOut协议
+ * 输出字符到控制台（仅UEFI，不输出到串口）
+ * 注意：串口输出由serial_putchar单独处理
  */
-void console_putchar(char c)
+static void console_putchar_uefi(char c)
 {
-    // 使用UEFI ConOut协议
+    // 仅使用UEFI ConOut协议输出到屏幕
     if (gST && gST->con_out) {
         CHAR16 str[2];
         str[0] = (CHAR16)c;
@@ -64,21 +67,31 @@ void console_putchar(char c)
 }
 
 /**
+ * 输出字符到控制台（串口和屏幕）
+ */
+void console_putchar(char c)
+{
+    // 输出到串口
+    serial_putchar(g_serial_port, c);
+    
+    // 输出到UEFI屏幕
+    console_putchar_uefi(c);
+}
+
+/**
  * 输出字符串
- * 使用UEFI ConOut协议
+ * 同时输出到串口和UEFI屏幕
  */
 void console_puts(const char *str)
 {
-    // 使用UEFI ConOut协议
+    // 输出到串口
+    serial_puts(g_serial_port, str);
+    
+    // 输出到UEFI屏幕（逐字符输出，避免重复串口输出）
     if (gST && gST->con_out) {
-        // 转换为CHAR16字符串
-        CHAR16 utf16[256];
-        int i = 0;
-        while (*str && i < 255) {
-            utf16[i++] = (CHAR16)*str++;
+        while (*str) {
+            console_putchar_uefi(*str++);
         }
-        utf16[i] = 0;
-        gST->con_out->OutputString(gST->con_out, utf16);
     }
 }
 

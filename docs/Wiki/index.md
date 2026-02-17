@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # HIK 项目 Wiki
 
 欢迎使用 HIK (Hierarchical Isolation Kernel) 项目文档中心。

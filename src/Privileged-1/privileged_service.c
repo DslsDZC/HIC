@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: MPL-2.0
+ */
+
 /**
  * HIK Privileged-1服务管理实现
  * 遵循三层模型文档第2.2节：Privileged-1层特权服务沙箱

@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+#
+# SPDX-License-Identifier: CC-BY-4.0
+
 # 批量生成剩余的 HIK Wiki 文档
 
 # 获取脚本所在目录

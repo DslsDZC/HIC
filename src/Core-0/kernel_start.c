@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIK-service-exception
+ */
+
 /**
  * HIK内核主入口
  * Bootloader跳转到的第一个C函数
@@ -14,19 +20,7 @@
  * 接收boot_info作为参数（在RDI寄存器中）
  */
 void kernel_start(hik_boot_info_t* boot_info) {
-    console_puts("HIK: Bootloader passed control\n");
-    console_puts("Boot info at: 0x");
-    console_puthex64((u64)boot_info);
-    console_puts("\n");
-    
-    // 记录引导日志（如果有）
-    if (boot_info && boot_info->version >= 1) {
-        // boot_info可能包含引导日志指针
-        console_puts("Boot log entries: ");
-        console_putu64(boot_info->boot_log.log_entry_count);
-        console_puts("\n");
-    }
-    
-    // 转发到实际的内核入口点
+    // 直接转发到实际的内核入口点
+    // console_init会在kernel_entry中调用
     kernel_entry(boot_info);
 }

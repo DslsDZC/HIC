@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # x86_64引导加载程序设计
 
 基于HIK架构需求，以下是x86_64平台引导加载程序的详细设计方案：

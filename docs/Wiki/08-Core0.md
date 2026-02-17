@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # Core-0层：内核核心与仲裁者
 
 Core-0是HIK系统的核心层，负责系统的可信计算基（TCB）功能。

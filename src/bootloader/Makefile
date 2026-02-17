@@ -47,7 +47,7 @@ UEFI_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
              -fno-omit-frame-pointer -fno-pic -fno-pie \
              -fno-asynchronous-unwind-tables -O0 \
              -mno-red-zone -mcmodel=small -m64 \
-             -fshort-wchar -mno-ms-bitfields \
+             -fshort-wchar -mno-ms-bitfields -mabi=ms \
              -I$(INCLUDE_DIR) -I$(SRC_DIR)
 
 UEFI_LDFLAGS = -nostdlib -shared -e UefiMain \

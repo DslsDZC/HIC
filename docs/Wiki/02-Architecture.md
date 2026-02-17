@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: CC-BY-4.0
+-->
+
 # 架构设计
 
 HIK采用创新的三层模型架构，通过物理内存直接映射和能力系统，实现了高性能、强隔离和动态可扩展的统一。
