@@ -14,6 +14,11 @@
 
 #include <stdint.h>
 
+/* C23标准：bool已经是关键字，不需要定义 */
+#if !defined(__cplusplus) && !defined(__bool_true_false_are_defined)
+/* bool、true、false在C23中是关键字，无需定义 */
+#endif
+
 /* 基础类型 */
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -86,5 +91,70 @@ typedef u8 priority_t;
 
 /* 中断向量 */
 typedef u8 irq_vector_t;
+
+/* ==================== Sparse地址空间标记 ==================== */
+/**
+ * Sparse语义检查标记
+ * 用于检测跨域指针误用、权限错误等HIK特定问题
+ * 
+ * 地址空间映射（遵循HIC三层模型）：
+ * - __kernel    : Core-0内核空间（默认，address_space(0)）
+ * - __capability: 能力系统对象空间（address_space(1)）
+ * - __p1        : Privileged-1服务内存空间（address_space(2)）
+ * - __p3        : Application-3用户空间（address_space(3)）
+ * - __io        : I/O端口/MMIO空间（address_space(4)）
+ * 
+ * 使用方式：
+ * #ifdef __CHECKER__
+ *     __capability cap_entry_t *cap;
+ *     __p1 void *p1_mem;
+ * #else
+ *     cap_entry_t *cap;
+ *     void *p1_mem;
+ * #endif
+ * 
+ * 集成方式：
+ * make C=1          # 启用Sparse检查
+ * make C=2          # Sparse检查所有文件（即使没有修改）
+ */
+
+#ifdef __CHECKER__
+/* Sparse检查模式：启用地址空间标记 */
+# define __kernel    __attribute__((address_space(0)))
+# define __capability __attribute__((address_space(1)))
+# define __p1        __attribute__((address_space(2)))
+# define __p3        __attribute__((address_space(3)))
+# define __io        __attribute__((address_space(4)))
+#else
+/* 正常编译模式：标记消失，无运行时开销 */
+# define __kernel
+# define __capability
+# define __p1
+# define __p3
+# define __io
+#endif
+
+/* Sparse注解（提供额外语义信息） */
+#ifdef __CHECKER__
+# define __must_hold(x)    __attribute__((context(x, 1, 1)))
+# define __acquires(x)     __attribute__((context(x, 0, 1)))
+# define __releases(x)     __attribute__((context(x, 1, 0)))
+# define __acquire(x)      __context__(x, 1)
+# define __release(x)      __context__(x, -1)
+# define __cond_lock(x, c) ((c) ? ({ __acquire(x); 1; }) : 0)
+# define __force           __attribute__((force))
+# define __bitwise         __attribute__((bitwise))
+# define __user            __attribute__((noderef, address_space(3)))
+#else
+# define __must_hold(x)
+# define __acquires(x)
+# define __releases(x)
+# define __acquire(x)
+# define __release(x)
+# define __cond_lock(x, c) ((c) ? ({ __acquire(x); 1; }) : 0)
+# define __force
+# define __bitwise
+# define __user
+#endif
 
 #endif /* HIC_KERNEL_TYPES_H */

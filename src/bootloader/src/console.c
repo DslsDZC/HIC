@@ -180,7 +180,7 @@ void console_printf(const char *fmt, ...)
                 }
                 
                 case 'c': {
-                    char c = va_arg(args, int);
+                    char c = (char)va_arg(args, int);
                     console_putchar(c);
                     break;
                 }
@@ -209,7 +209,7 @@ void console_printf(const char *fmt, ...)
  */
 void console_set_color(console_color_t fg, console_color_t bg)
 {
-    g_current_attr = (bg << 4) | (fg & 0x0F);
+    g_current_attr = (uint8_t)((bg << 4) | (fg & 0x0F));
 }
 
 /**
@@ -232,7 +232,7 @@ void console_set_cursor(int x, int y)
 {
     if (gST && gST->con_out) {
         // 使用UEFI ConOut协议设置光标位置
-        gST->con_out->SetCursorPosition(gST->con_out, x, y);
+        gST->con_out->SetCursorPosition(gST->con_out, (UINTN)x, (UINTN)y);
     }
     
     // 保存局部变量用于其他功能
@@ -391,7 +391,7 @@ void serial_putchar(uint16_t port, char c)
         ;
     }
     
-    outb(port, c);
+    outb(port, (uint8_t)c);
 }
 
 /**
@@ -470,8 +470,8 @@ static void uint_to_str(uint64_t value, char *buffer, int base)
     }
     
     while (value > 0) {
-        temp[i++] = digits[value % base];
-        value /= base;
+        temp[i++] = digits[value % (uint64_t)base];
+        value /= (uint64_t)base;
     }
     
     while (i > 0) {
@@ -576,7 +576,7 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
                 }
                 
                 case 'c': {
-                    char c = va_arg(args, int);
+                    char c = (char)va_arg(args, int);
                     if (written < size - 1) {
                         buffer[written++] = c;
                     }
@@ -608,5 +608,5 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args)
     }
     
     buffer[written] = '\0';
-    return written;
+    return (int)written;
 }

@@ -339,9 +339,9 @@ u64 yaml_get_u64(yaml_node_t* node, u64 default_value)
     /* 解析数字字符串 */
     u64 result = 0;
     const char* p = node->value;
-    
+
     while (*p >= '0' && *p <= '9') {
-        result = result * 10 + (*p - '0');
+        result = result * 10 + (u64)(*p - '0');
         p++;
     }
     

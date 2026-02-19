@@ -73,7 +73,7 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     /* 分配能力空间 */
     domain->cap_capacity = quota->max_caps;
     phys_addr_t cap_space_phys;
-    u32 cap_pages = (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE;
+    u32 cap_pages = (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
     if (pmm_alloc_frames(HIC_DOMAIN_CORE, cap_pages, PAGE_FRAME_CORE, &cap_space_phys) != HIC_SUCCESS) {
         return HIC_ERROR_NO_RESOURCE;
     }
@@ -89,10 +89,10 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     /* 分配物理内存 */
     phys_addr_t mem_base;
     size_t mem_size = quota->max_memory;
-    if (pmm_alloc_frames(domain_id, (mem_size + PAGE_SIZE - 1) / PAGE_SIZE,
+    if (pmm_alloc_frames(domain_id, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE),
                          PAGE_FRAME_PRIVILEGED, &mem_base) != HIC_SUCCESS) {
-        pmm_free_frames((phys_addr_t)domain->cap_space, 
-                        (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
+        pmm_free_frames((phys_addr_t)domain->cap_space,
+                        (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
         return HIC_ERROR_NO_RESOURCE;
     }
     
@@ -158,7 +158,7 @@ hic_status_t domain_destroy(domain_id_t domain_id)
     
     /* 回收所有能力 */
     for (u32 i = 0; i < domain->cap_count; i++) {
-        cap_id_t cap_id = domain->cap_space[i];
+        cap_id_t cap_id = (cap_id_t)domain->cap_space[i];
         if (cap_id != HIC_CAP_INVALID) {
             cap_revoke(cap_id);
         }
@@ -167,12 +167,12 @@ hic_status_t domain_destroy(domain_id_t domain_id)
     /* 释放能力空间 */
     if (domain->cap_space) {
         pmm_free_frames((phys_addr_t)domain->cap_space,
-                        (domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
+                        (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
     }
-    
+
     /* 释放物理内存 */
     if (domain->phys_base != 0) {
-        pmm_free_frames(domain->phys_base, (domain->phys_size + PAGE_SIZE - 1) / PAGE_SIZE);
+        pmm_free_frames(domain->phys_base, (u32)((domain->phys_size + PAGE_SIZE - 1) / PAGE_SIZE));
     }
     
     domain->state = DOMAIN_STATE_TERMINATED;
@@ -336,7 +336,7 @@ u64 get_domain_granted_caps(domain_id_t domain)
     u64 granted_count = 0;
     
     for (u32 i = 0; i < d->cap_count; i++) {
-        cap_id_t cap_id = d->cap_space[i];
+        cap_id_t cap_id = (cap_id_t)d->cap_space[i];
         if (cap_id != HIC_CAP_INVALID && cap_id < CAP_TABLE_SIZE) {
             /* 检查能力是否存在 */
             if (g_global_cap_table[cap_id].cap_id == cap_id) {

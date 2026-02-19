@@ -65,7 +65,7 @@ hic_status_t privileged_service_load(u64 module_instance_id,
     hicmod_instance_t *module = module_get_instance(module_instance_id);
     if (!module) {
         console_puts("[PRIV-SVC] Module instance not found: ");
-        console_putu32(module_instance_id);
+        console_putu32((u32)module_instance_id);
         console_puts("\n");
         return HIC_ERROR_NOT_FOUND;
     }
@@ -108,8 +108,8 @@ hic_status_t privileged_service_load(u64 module_instance_id,
     service->name[sizeof(service->name) - 1] = '\0';
 
     /* 生成UUID（简化版：使用模块实例ID） */
-    for (int i = 0; i < 16; i++) {
-        service->uuid[i] = (u8)(module_instance_id >> (i * 8));
+    for (int i = 0; i < 8; i++) {  /* 8字节 = 64位，安全范围内 */
+        service->uuid[i] = (char)(u8)(module_instance_id >> (i * 8));
     }
 
     /* 模块信息 */
@@ -138,7 +138,7 @@ hic_status_t privileged_service_load(u64 module_instance_id,
     
     /* 分配栈空间 */
     size_t stack_size = 64 * 1024; /* 64KB栈 */
-    u32 stack_pages = (stack_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    u32 stack_pages = (u32)((stack_size + PAGE_SIZE - 1) / PAGE_SIZE);
     phys_addr_t stack_phys;
     status = pmm_alloc_frames(domain_id, stack_pages, PAGE_FRAME_PRIVILEGED, &stack_phys);
     if (status != HIC_SUCCESS) {
@@ -300,7 +300,7 @@ hic_status_t privileged_service_unload(domain_id_t domain_id)
     
     /* 释放栈空间 */
     if (service->stack_base != 0) {
-        u32 stack_pages = (service->stack_size + PAGE_SIZE - 1) / PAGE_SIZE;
+        u32 stack_pages = (u32)((service->stack_size + PAGE_SIZE - 1) / PAGE_SIZE);
         pmm_free_frames(service->stack_base, stack_pages);
     }
 
@@ -520,7 +520,7 @@ hic_status_t privileged_service_map_mmio(domain_id_t domain_id,
     console_puts("[PRIV-SVC] MMIO mapped: 0x");
     console_puthex64(mmio_phys);
     console_puts(" (size: ");
-    console_putu32(size);
+    console_putu32((u32)size);
     console_puts(")\n");
     
     return HIC_SUCCESS;
@@ -576,13 +576,13 @@ hic_status_t privileged_service_check_memory_quota(domain_id_t domain_id,
         return HIC_ERROR_NOT_FOUND;
     }
 
-    domain_t *domain = NULL;
-    hic_status_t status = domain_get_info(domain_id, domain);
+    domain_t domain_info;
+    hic_status_t status = domain_get_info(domain_id, &domain_info);
     if (status != HIC_SUCCESS) {
         return status;
     }
     
-    if (domain->usage.memory_used + size > domain->quota.max_memory) {
+    if (domain_info.usage.memory_used + size > domain_info.quota.max_memory) {
         return HIC_ERROR_NO_MEMORY;
     }
     

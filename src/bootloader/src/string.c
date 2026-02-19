@@ -228,7 +228,7 @@ int utf16_to_utf8(const uint16_t *src, char *dest, size_t dest_size)
     }
     
     dest[j] = '\0';
-    return j;
+    return (int)j;
 }
 
 /**
@@ -350,9 +350,9 @@ uint64_t strtoull(const char *str, char **endptr, int base)
         uint64_t digit;
         
         if (isdigit(*p)) {
-            digit = *p - '0';
+            digit = (uint64_t)(*p - '0');
         } else if (base == 16 && isxdigit(*p)) {
-            digit = toupper(*p) - 'A' + 10;
+            digit = (uint64_t)(toupper(*p) - 'A' + 10);
         } else {
             break;
         }
@@ -361,7 +361,7 @@ uint64_t strtoull(const char *str, char **endptr, int base)
             break;
         }
         
-        result = result * base + digit;
+        result = result * (uint64_t)base + (uint64_t)digit;
         p++;
     }
     
@@ -430,7 +430,7 @@ int snprintf(char *str, size_t size, const char *fmt, ...)
                     val = -val;
                 }
                 do {
-                    temp[i++] = '0' + (val % 10);
+                    temp[i++] = (char)('0' + (val % 10));
                     val /= 10;
                 } while (val > 0);
                 while (i > 0 && remaining > 1) {
@@ -476,7 +476,7 @@ int snprintf(char *str, size_t size, const char *fmt, ...)
     *buf = '\0';
 
     va_end(args);
-    return size - remaining;
+    return (int)(size - remaining);
 }
 
 /**
@@ -520,7 +520,7 @@ int sscanf(const char *str, const char *fmt, ...)
 
                 while (*s == ' ') s++;
                 while (*s >= '0' && *s <= '9') {
-                    result = result * 10 + (*s - '0');
+                    result = result * 10 + (unsigned int)(*s - '0');
                     s++;
                 }
 
@@ -533,11 +533,11 @@ int sscanf(const char *str, const char *fmt, ...)
                 while (*s == ' ') s++;
                 while (*s) {
                     if (*s >= '0' && *s <= '9') {
-                        result = result * 16 + (*s - '0');
+                        result = result * 16 + (unsigned int)(*s - '0');
                     } else if (*s >= 'a' && *s <= 'f') {
-                        result = result * 16 + (*s - 'a' + 10);
+                        result = result * 16 + (unsigned int)(*s - 'a' + 10);
                     } else if (*s >= 'A' && *s <= 'F') {
-                        result = result * 16 + (*s - 'A' + 10);
+                        result = result * 16 + (unsigned int)(*s - 'A' + 10);
                     } else {
                         break;
                     }

@@ -27,7 +27,7 @@ BIN_DIR    = bin
 BUILD_TARGET ?= uefi
 
 # 源文件
-UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c
+UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c $(SRC_DIR)/embedded_kernel_loader.c $(SRC_DIR)/fat32.c
 # UEFI_CRYPTO_SRCS = $(wildcard $(SRC_DIR)/crypto/*.c)  # 暂时禁用
 UEFI_LIB_SRCS  = $(wildcard $(LIB_DIR)/*.c)
 UEFI_SRCS      = $(UEFI_CORE_SRCS) $(UEFI_LIB_SRCS)
@@ -42,7 +42,7 @@ BIOS_OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/bios_%.o,$(BIOS_C_SRCS))
 BIOS_OBJS += $(patsubst $(SRC_DIR)/%.S,$(OBJ_DIR)/bios_%.o,$(BIOS_ASM_SRCS))
 
 # UEFI编译选项
-UEFI_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
+UEFI_CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wconversion -Werror -ffreestanding \
              -fno-stack-protector -fno-stack-clash-protection \
              -fno-omit-frame-pointer -fno-pic -fno-pie \
              -fno-asynchronous-unwind-tables -O0 \
@@ -55,7 +55,7 @@ UEFI_LDFLAGS = -nostdlib -shared -e UefiMain \
                -Map $(BIN_DIR)/$(UEFI_PROJECT).map
 
 # BIOS编译选项
-BIOS_CFLAGS = -Wall -Wextra -Werror -ffreestanding \
+BIOS_CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wconversion -Werror -ffreestanding \
              -fno-stack-protector -fno-pic -fno-pie \
              -mno-red-zone -mcmodel=large -m64 \
              -I$(INCLUDE_DIR) -I$(SRC_DIR)

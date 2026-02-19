@@ -38,7 +38,7 @@ static inline void set_bit(u8 *bitmap, u64 index)
 
 static inline void clear_bit(u8 *bitmap, u64 index)
 {
-    bitmap[index / 8] &= ~(1 << (index % 8));
+    bitmap[index / 8] &= ~(u8)(1 << (index % 8));
 }
 
 static inline int test_bit(u8 *bitmap, u64 index)
@@ -63,9 +63,9 @@ void pmm_init(void)
 hic_status_t pmm_add_region(phys_addr_t base, size_t size)
 {
     /* 对齐到页边界 */
-    phys_addr_t aligned_base = (base + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    phys_addr_t aligned_base = (base + PAGE_SIZE - 1) & ~(phys_addr_t)(PAGE_SIZE - 1);
     size_t aligned_size = size - (aligned_base - base);
-    aligned_size &= ~(PAGE_SIZE - 1);
+    aligned_size &= ~(size_t)(PAGE_SIZE - 1);
     
     if (aligned_size < PAGE_SIZE) {
         return HIC_ERROR_INVALID_PARAM;

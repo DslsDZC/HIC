@@ -79,7 +79,7 @@ void bootlog_error(const char* msg)
     console_puts(msg);
     console_puts("\n");
     
-    bootlog_event(BOOTLOG_ERROR, msg, strlen(msg));
+    bootlog_event(BOOTLOG_ERROR, msg, (uint32_t)strlen(msg));
 }
 
 /* 记录信息 */
@@ -89,7 +89,7 @@ void bootlog_info(const char* msg)
     console_puts(msg);
     console_puts("\n");
     
-    bootlog_event(BOOTLOG_KERNEL_LOAD, msg, strlen(msg));
+    bootlog_event(BOOTLOG_KERNEL_LOAD, msg, (uint32_t)strlen(msg));
 }
 
 /* 获取日志缓冲区 */

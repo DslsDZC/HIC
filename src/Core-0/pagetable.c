@@ -18,6 +18,11 @@
 #include "lib/mem.h"
 #include "lib/console.h"
 
+/* 页对齐辅助宏，避免符号转换警告 */
+#define PAGE_ALIGN_MASK(addr, mask) ((addr) & ~(typeof(addr))(mask))
+#define PAGE_ALIGN_DOWN(addr, size) ((addr) & ~(typeof(addr))((size) - 1))
+#define PAGE_ALIGN_UP(addr, size) (((addr) + (size) - 1) & ~(typeof(addr))((size) - 1))
+
 /* 页表分配器（从PMM分配） */
 static page_table_t* allocate_page_table(void)
 {
@@ -57,7 +62,7 @@ static void free_page_table_tree(page_table_t* root, int level)
         for (u32 i = 0; i < 512; i++) {
             u64 entry = root->entries[i];
             if (entry & PAGE_FLAG_PRESENT) {
-                u64 phys = entry & ~0xFFF;
+                u64 phys = PAGE_ALIGN_MASK(entry, 0xFFF);
                 page_table_t* child = (page_table_t*)phys;
                 free_page_table_tree(child, level - 1);
             }
@@ -110,9 +115,9 @@ hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
     }
     
     /* 对齐到页边界 */
-    virt_addr_t virt_aligned = (virt + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
-    phys_addr_t phys_aligned = (phys + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
-    size_t size_aligned = (size + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
+    virt_addr_t virt_aligned = PAGE_ALIGN_UP(virt, PAGE_SIZE_4K);
+    phys_addr_t phys_aligned = PAGE_ALIGN_UP(phys, PAGE_SIZE_4K);
+    size_t size_aligned = PAGE_ALIGN_UP(size, PAGE_SIZE_4K);
     
     /* 设置权限标志 */
     u64 flags = perm;
@@ -139,7 +144,7 @@ hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
             root->entries[pml4_index] = (u64)pdpt | PAGE_FLAG_PRESENT | 
                                          PAGE_FLAG_WRITE | PAGE_FLAG_USER;
         }
-        page_table_t* pdpt = (page_table_t*)(root->entries[pml4_index] & ~0xFFF);
+        page_table_t* pdpt = (page_table_t*)PAGE_ALIGN_MASK(root->entries[pml4_index], 0xFFF);
         
         /* 获取PDPT索引 */
         u64 pdpt_index = (current_virt >> 30) & 0x1FF;
@@ -153,7 +158,7 @@ hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
             pdpt->entries[pdpt_index] = (u64)pd | PAGE_FLAG_PRESENT | 
                                         PAGE_FLAG_WRITE | PAGE_FLAG_USER;
         }
-        page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_index] & ~0xFFF);
+        page_table_t* pd = (page_table_t*)PAGE_ALIGN_MASK(pdpt->entries[pdpt_index], 0xFFF);
         
         /* 获取PD索引 */
         u64 pd_index = (current_virt >> 21) & 0x1FF;
@@ -167,7 +172,7 @@ hic_status_t pagetable_map(page_table_t* root, virt_addr_t virt, phys_addr_t phy
             pd->entries[pd_index] = (u64)pt | PAGE_FLAG_PRESENT | 
                                    PAGE_FLAG_WRITE | PAGE_FLAG_USER;
         }
-        page_table_t* pt = (page_table_t*)(pd->entries[pd_index] & ~0xFFF);
+        page_table_t* pt = (page_table_t*)PAGE_ALIGN_MASK(pd->entries[pd_index], 0xFFF);
         
         /* 获取PT索引 */
         u64 pt_index = (current_virt >> 12) & 0x1FF;
@@ -187,8 +192,8 @@ hic_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size)
     }
     
     /* 对齐到页边界 */
-    virt_addr_t virt_aligned = (virt + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
-    size_t size_aligned = (size + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
+    virt_addr_t virt_aligned = PAGE_ALIGN_UP(virt, PAGE_SIZE_4K);
+    size_t size_aligned = PAGE_ALIGN_UP(size, PAGE_SIZE_4K);
     
     /* 逐页取消映射 */
     for (size_t offset = 0; offset < size_aligned; offset += PAGE_SIZE_4K) {
@@ -199,20 +204,20 @@ hic_status_t pagetable_unmap(page_table_t* root, virt_addr_t virt, size_t size)
         if (!(root->entries[pml4_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pdpt = (page_table_t*)(root->entries[pml4_index] & ~0xFFF);
+
+        page_table_t* pdpt = (page_table_t*)PAGE_ALIGN_MASK(root->entries[pml4_index], 0xFFF);
         u64 pdpt_index = (current_virt >> 30) & 0x1FF;
         if (!(pdpt->entries[pdpt_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_index] & ~0xFFF);
+
+        page_table_t* pd = (page_table_t*)PAGE_ALIGN_MASK(pdpt->entries[pdpt_index], 0xFFF);
         u64 pd_index = (current_virt >> 21) & 0x1FF;
         if (!(pd->entries[pd_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pt = (page_table_t*)(pd->entries[pd_index] & ~0xFFF);
+
+        page_table_t* pt = (page_table_t*)PAGE_ALIGN_MASK(pd->entries[pd_index], 0xFFF);
         u64 pt_index = (current_virt >> 12) & 0x1FF;
         
         /* 清除页表项 */
@@ -234,8 +239,8 @@ hic_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt,
     }
     
     /* 对齐到页边界 */
-    virt_addr_t virt_aligned = (virt + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
-    size_t size_aligned = (size + PAGE_SIZE_4K - 1) & ~(PAGE_SIZE_4K - 1);
+    virt_addr_t virt_aligned = PAGE_ALIGN_UP(virt, PAGE_SIZE_4K);
+    size_t size_aligned = PAGE_ALIGN_UP(size, PAGE_SIZE_4K);
     
     /* 逐页更改权限 */
     for (size_t offset = 0; offset < size_aligned; offset += PAGE_SIZE_4K) {
@@ -246,20 +251,20 @@ hic_status_t pagetable_set_perm(page_table_t* root, virt_addr_t virt,
         if (!(root->entries[pml4_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pdpt = (page_table_t*)(root->entries[pml4_index] & ~0xFFF);
+
+        page_table_t* pdpt = (page_table_t*)PAGE_ALIGN_MASK(root->entries[pml4_index], 0xFFF);
         u64 pdpt_index = (current_virt >> 30) & 0x1FF;
         if (!(pdpt->entries[pdpt_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_index] & ~0xFFF);
+
+        page_table_t* pd = (page_table_t*)PAGE_ALIGN_MASK(pdpt->entries[pdpt_index], 0xFFF);
         u64 pd_index = (current_virt >> 21) & 0x1FF;
         if (!(pd->entries[pd_index] & PAGE_FLAG_PRESENT)) {
             continue;
         }
-        
-        page_table_t* pt = (page_table_t*)(pd->entries[pd_index] & ~0xFFF);
+
+        page_table_t* pt = (page_table_t*)PAGE_ALIGN_MASK(pd->entries[pd_index], 0xFFF);
         u64 pt_index = (current_virt >> 12) & 0x1FF;
         
         /* 更新权限（保留PRESENT标志） */
@@ -287,27 +292,26 @@ phys_addr_t pagetable_get_phys(page_table_t* root, virt_addr_t virt)
     if (!(root->entries[pml4_index] & PAGE_FLAG_PRESENT)) {
         return 0;
     }
+
+    page_table_t* pdpt = (page_table_t*)PAGE_ALIGN_MASK(root->entries[pml4_index], 0xFFF);
+            u64 pdpt_index = (virt >> 30) & 0x1FF;
+            if (!(pdpt->entries[pdpt_index] & PAGE_FLAG_PRESENT)) {
+                return 0;
+            }
     
-    page_table_t* pdpt = (page_table_t*)(root->entries[pml4_index] & ~0xFFF);
-    u64 pdpt_index = (virt >> 30) & 0x1FF;
-    if (!(pdpt->entries[pdpt_index] & PAGE_FLAG_PRESENT)) {
+            page_table_t* pd = (page_table_t*)PAGE_ALIGN_MASK(pdpt->entries[pdpt_index], 0xFFF);
+            u64 pd_index = (virt >> 21) & 0x1FF;    if (!(pd->entries[pd_index] & PAGE_FLAG_PRESENT)) {
         return 0;
     }
-    
-    page_table_t* pd = (page_table_t*)(pdpt->entries[pdpt_index] & ~0xFFF);
-    u64 pd_index = (virt >> 21) & 0x1FF;
-    if (!(pd->entries[pd_index] & PAGE_FLAG_PRESENT)) {
-        return 0;
-    }
-    
-    page_table_t* pt = (page_table_t*)(pd->entries[pd_index] & ~0xFFF);
+
+    page_table_t* pt = (page_table_t*)PAGE_ALIGN_MASK(pd->entries[pd_index], 0xFFF);
     u64 pt_index = (virt >> 12) & 0x1FF;
     if (!(pt->entries[pt_index] & PAGE_FLAG_PRESENT)) {
         return 0;
     }
     
     /* 返回物理地址 */
-    return (pt->entries[pt_index] & ~0xFFF) + (virt & 0xFFF);
+    return PAGE_ALIGN_MASK(pt->entries[pt_index], 0xFFF) + (virt & 0xFFF);
 }
 
 /* 切换页表 */

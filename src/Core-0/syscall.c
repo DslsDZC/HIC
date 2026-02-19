@@ -22,30 +22,30 @@
 hic_status_t syscall_ipc_call(ipc_call_params_t *params)
 {
     domain_id_t caller_domain = domain_switch_get_current();
-    hic_status_t status;
-    
+
     /* 验证端点能力 - 直接使用全局能力表 */
     cap_entry_t *entry = &g_global_cap_table[params->endpoint_cap];
     if (entry->cap_id != params->endpoint_cap || (entry->flags & CAP_FLAG_REVOKED)) {
         /* 记录失败的IPC调用审计日志 */
         u64 audit_data[4] = { (u64)caller_domain, (u64)SYSCALL_IPC_CALL, (u64)HIC_ERROR_CAP_INVALID, 0 };
-        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0, 
+        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0,
                        audit_data, 4, 0);
         return HIC_ERROR_CAP_INVALID;
     }
-    
-    status = domain_switch(caller_domain, entry->endpoint.target,
+
+    hic_status_t status = domain_switch(caller_domain, entry->endpoint.target,
                            params->endpoint_cap, 0, NULL, 0);
-        
+    if (status != HIC_SUCCESS) {
         console_puts("[SYSCALL] IPC call to domain ");
         console_putu64(entry->endpoint.target);
         console_puts("\n");
-        
+
         /* 记录成功的IPC调用审计日志 */
         u64 audit_data[4] = { (u64)caller_domain, (u64)SYSCALL_IPC_CALL, (u64)HIC_SUCCESS, 0 };
-        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0, 
-                       audit_data, 4, 1);    
-    return HIC_SUCCESS;
+        audit_log_event(AUDIT_EVENT_SYSCALL, caller_domain, 0, 0,
+                       audit_data, 4, 1);
+    }
+    return status;
 }
 
 /* 能力传递 */

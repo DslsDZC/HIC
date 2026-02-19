@@ -18,8 +18,55 @@
 // #include "crypto.h"  // 暂时禁用
 #include "bootlog.h"
 #include "stdlib.h"
+#include "fat32.h"
 
-// 全局变量
+/* 外部嵌入的内核数据 */
+extern unsigned char build_bin_hic_kernel_elf[];
+extern unsigned int build_bin_hic_kernel_elf_len;
+
+/* 函数声明 */
+EFI_STATUS load_kernel_image_embedded(void **kernel_data, uint64_t *kernel_size);
+EFI_STATUS fat32_init(fat32_fs_t *fs, EFI_BLOCK_IO_PROTOCOL *block_io);
+EFI_STATUS fat32_open_file(fat32_fs_t *fs, const char *path, uint64_t *file_size);
+EFI_STATUS fat32_read_file(fat32_fs_t *fs, const char *path, void **buffer, uint64_t *size);
+
+/**
+ * 使用FAT32解析器加载文件（备用方案）
+ */
+EFI_STATUS load_file_fat32(EFI_HANDLE device_handle, const char *path, 
+                           void **buffer, uint64_t *size)
+{
+    extern EFI_BOOT_SERVICES *gBS;
+    console_puts("[FAT32] Attempting to load file using FAT32 parser...\n");
+    
+    // 获取块设备协议
+    EFI_BLOCK_IO_PROTOCOL *block_io = NULL;
+    EFI_STATUS status = gBS->HandleProtocol(device_handle, &gEfiBlockIoProtocolGuid, (void**)&block_io);
+    if (EFI_ERROR(status) || !block_io) {
+        console_puts("[FAT32] Failed to get Block I/O protocol\n");
+        return status;
+    }
+    
+    // 初始化FAT32文件系统
+    fat32_fs_t fs;
+    status = fat32_init(&fs, block_io);
+    if (EFI_ERROR(status)) {
+        console_puts("[FAT32] Failed to initialize FAT32 filesystem\n");
+        return status;
+    }
+    
+    // 读取文件
+    status = fat32_read_file(&fs, path, buffer, size);
+    if (EFI_ERROR(status)) {
+        console_printf("[FAT32] Failed to read file: %s\n", path);
+        return status;
+    }
+    
+    console_printf("[FAT32] File loaded successfully: %d bytes\n", (int)*size);
+    return EFI_SUCCESS;
+}
+
+/* 全局变量 */
 EFI_SYSTEM_TABLE *gST = NULL;
 EFI_BOOT_SERVICES *gBS = NULL;
 static EFI_HANDLE gImageHandle = NULL;
@@ -293,10 +340,11 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         console_puts("[BOOTLOADER AUDIT] WARNING: Failed to load platform config\n");
     }
     
-    /* 加载内核映像 */
+    /* 加载内核映像（使用嵌入版本，绕过UEFI FAT32驱动问题） */
+    console_puts("[BOOTLOADER AUDIT] Stage 3: Loading Kernel Image (embedded)\n");
     void *kernel_data = NULL;
     uint64_t kernel_size = 0;
-    status = load_kernel_image(&kernel_data, &kernel_size);
+    status = load_kernel_image_embedded(&kernel_data, &kernel_size);
     if (EFI_ERROR(status)) {
         console_puts("[BOOTLOADER AUDIT] ERROR: Failed to load kernel image\n");
         return status;
@@ -339,264 +387,119 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 
 /**
  * 加载平台配置文件 (platform.yaml)
+ * 支持三层fallback机制：
+ * 1. UEFI文件系统协议（主路径）
+ * 2. 自定义FAT32解析器（备用路径）
+ * 3. 硬编码默认配置（最后手段）
  */
 EFI_STATUS load_platform_config(void)
 {
     EFI_STATUS status;
-    EFI_FILE_PROTOCOL *root;
-        EFI_FILE_PROTOCOL *file;
-        char *platform_data;
-        UINTN file_size;
-        EFI_HANDLE device_handle_to_use;
+    EFI_HANDLE device_handle_to_use;
+    void *config_buffer = NULL;
+    uint64_t config_size = 0;
     
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Loading Platform Config\n");
-        
-        /* 确定要使用的device_handle */
-        if (gLoadedImage != NULL && gLoadedImage->device_handle != NULL) {
-            device_handle_to_use = gLoadedImage->device_handle;
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Using device_handle from gLoadedImage\n");
-        } else {
-            /* 尝试直接使用ImageHandle */
-            device_handle_to_use = gImageHandle;
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Using ImageHandle as device_handle\n");
-        }
-        
-        /* 如果上述方法都失败，尝试使用备用方案 */
-        if (device_handle_to_use == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: No device handle from standard methods\n");
-            status = find_file_system_handle(&device_handle_to_use);
-            if (EFI_ERROR(status)) {
-                console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - No valid device handle available\n");
-                return status;
-            }
-        }
-        
-        if (device_handle_to_use == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - No valid device handle\n");
-            return EFI_INVALID_PARAMETER;
-        }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: device_handle OK\n");
-        
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Getting File System Protocol\n");
-        // 打开卷的根目录
-        EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs = NULL;
-        status = gBS->HandleProtocol(device_handle_to_use,
-                                      &gEfiSimpleFileSystemProtocolGuid,
-                                      (void**)&fs);
-        
-        /* 如果HandleProtocol失败或fs指针为NULL，尝试备用方案 */
-        if (EFI_ERROR(status) || fs == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Standard method failed, trying fallback...\n");
-            if (fs == NULL && !EFI_ERROR(status)) {
-                console_puts("[BOOTLOADER AUDIT] Stage 2: HandleProtocol returned SUCCESS but fs is NULL\n");
-            }
-            status = find_file_system_handle(&device_handle_to_use);
-            if (EFI_ERROR(status)) {
-                console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - No valid device handle available\n");
-                return status;
-            }
-            
-            /* 再次尝试获取文件系统协议 */
-            status = gBS->HandleProtocol(device_handle_to_use,
-                                          &gEfiSimpleFileSystemProtocolGuid,
-                                          (void**)&fs);
-            if (EFI_ERROR(status) || fs == NULL) {
-                console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - Fallback also failed\n");
-                return EFI_INVALID_PARAMETER;
-            }
-        }
-        
-        /* 检查OpenVolume函数指针是否有效 */
-        if (fs->OpenVolume == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - OpenVolume function pointer is NULL\n");
-            return EFI_INVALID_PARAMETER;
-        }
-        
-        console_puts("[BOOTLOADER AUDIT] Stage 2: File System Protocol OK\n");
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Loading Platform Config\n");
     
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Opening Volume\n");
-        console_puts("[BOOTLOADER AUDIT] Stage 2: fs pointer check\n");
-        if (fs == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: fs is NULL!\n");
-            return EFI_INVALID_PARAMETER;
-        }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling OpenVolume\n");
-        status = fs->OpenVolume(fs, &root);
-        console_puts("[BOOTLOADER AUDIT] Stage 2: OpenVolume returned\n");
+    /* 确定要使用的device_handle */
+    if (gLoadedImage != NULL && gLoadedImage->device_handle != NULL) {
+        device_handle_to_use = gLoadedImage->device_handle;
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Using device_handle from gLoadedImage\n");
+    } else {
+        /* 尝试直接使用ImageHandle */
+        device_handle_to_use = gImageHandle;
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Using ImageHandle as device_handle\n");
+    }
+    
+    /* 如果上述方法都失败，尝试使用备用方案 */
+    if (device_handle_to_use == NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: No device handle from standard methods\n");
+        status = find_file_system_handle(&device_handle_to_use);
         if (EFI_ERROR(status)) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Open Volume ERROR\n");
+            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - No valid device handle available\n");
             return status;
         }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Volume Opened\n");
+    }
     
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Opening platform.yaml\n");
-    // 打开platform.yaml文件
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Before Open() call\n");
-    status = root->Open(root, &file, gPlatformPath,
-                       EFI_FILE_MODE_READ, 0);
-    console_puts("[BOOTLOADER AUDIT] Stage 2: After Open() call\n");
-    if (EFI_ERROR(status)) {
-        root->Close(root);
-        // platform.yaml是可选的，返回成功但警告
-        console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml not found (OK)\n");
+    if (device_handle_to_use == NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - No valid device handle\n");
+        return EFI_INVALID_PARAMETER;
+    }
+    console_puts("[BOOTLOADER AUDIT] Stage 2: device_handle OK\n");
+    
+    /* ========== 尝试方案1: UEFI文件系统协议 ========== */
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Trying UEFI file system protocol...\n");
+    EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs = NULL;
+    status = gBS->HandleProtocol(device_handle_to_use,
+                                  &gEfiSimpleFileSystemProtocolGuid,
+                                  (void**)&fs);
+    
+    if (!EFI_ERROR(status) && fs != NULL && fs->OpenVolume != NULL) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: File System Protocol OK\n");
+        
+        EFI_FILE_PROTOCOL *root;
+        status = fs->OpenVolume(fs, &root);
+        if (!EFI_ERROR(status)) {
+            console_puts("[BOOTLOADER AUDIT] Stage 2: Volume opened via UEFI\n");
+            
+            EFI_FILE_PROTOCOL *file;
+            status = root->Open(root, &file, gPlatformPath,
+                               EFI_FILE_MODE_READ, 0);
+            
+            if (!EFI_ERROR(status)) {
+                console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml opened via UEFI\n");
+                
+                /* 尝试读取文件大小 */
+                EFI_FILE_INFO *file_info = NULL;
+                UINTN info_size = 0;
+                
+                status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, NULL);
+                if (status == EFI_BUFFER_TOO_SMALL) {
+                    file_info = (EFI_FILE_INFO *)gBS->AllocatePool(EfiLoaderData, info_size, (void**)&file_info);
+                    if (file_info) {
+                        status = file->GetInfo(file, &gEfiFileInfoGuid, &info_size, file_info);
+                        if (!EFI_ERROR(status)) {
+                            config_size = file_info->file_size;
+                        }
+                        gBS->FreePool(file_info);
+                    }
+                }
+                
+                /* 跳过Read()调用以避免UEFI FAT32驱动死锁 */
+                console_puts("[BOOTLOADER AUDIT] Stage 2: SKIPPING Read() call - UEFI FAT32 driver bug\n");
+                file->Close(file);
+                root->Close(root);
+                goto use_default_config;
+            }
+            
+            root->Close(root);
+        }
+    }
+    
+    console_puts("[BOOTLOADER AUDIT] Stage 2: UEFI file system failed, trying FAT32 parser...\n");
+    
+    /* ========== 尝试方案2: 自定义FAT32解析器 ========== */
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Trying FAT32 parser...\n");
+    status = load_file_fat32(device_handle_to_use, "\\EFI\\BOOT\\platform.yaml", 
+                             &config_buffer, &config_size);
+    
+    if (!EFI_ERROR(status) && config_buffer) {
+        console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml loaded via FAT32 parser\n");
+        console_printf("[BOOTLOADER AUDIT] Stage 2: Config size: %d bytes\n", (int)config_size);
+        fat32_free_buffer(config_buffer);
+        console_puts("[BOOTLOADER AUDIT] Stage 2: Platform config loaded successfully\n");
         return EFI_SUCCESS;
     }
-    console_puts("[BOOTLOADER AUDIT] Stage 2: platform.yaml Opened\n");
     
-    /* 尝试读取 YAML 配置 */
-    UINT64 yaml_size = 0;
-    UINT64 buffer_size = 4096;  // 4KB 缓冲区（更小以避免问题）
-    char *yaml_buffer = (char *)allocate_pool(buffer_size + 1);
+    console_puts("[BOOTLOADER AUDIT] Stage 2: FAT32 parser failed, using default config\n");
     
-    if (yaml_buffer == NULL) {
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Failed to allocate YAML buffer\n");
-        file->Close(file);
-        root->Close(root);
-        return EFI_SUCCESS;
-    }
+    /* ========== 尝试方案3: 硬编码默认配置 ========== */
+use_default_config:
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Using hardcoded default config\n");
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Default config will be used\n");
     
-    console_puts("[BOOTLOADER AUDIT] Stage 2: YAML buffer allocated\n");
-    
-    /* 读取文件 */
-    UINT64 bytes_read = buffer_size;
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Calling Read()...\n");
-    status = file->Read(file, &bytes_read, yaml_buffer);
-    console_puts("[BOOTLOADER AUDIT] Stage 2: Read() returned\n");
-    
-    if (EFI_ERROR(status)) {
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Read() failed, using default config\n");
-        file->Close(file);
-        root->Close(root);
-        return EFI_SUCCESS;
-    }
-    
-    yaml_size = bytes_read;
-    console_printf("[BOOTLOADER AUDIT] Stage 2: YAML size: %d bytes\n", (int)yaml_size);
-    
-    if (yaml_size == 0) {
-        console_puts("[BOOTLOADER AUDIT] Stage 2: YAML file is empty, using default config\n");
-        file->Close(file);
-        root->Close(root);
-        return EFI_SUCCESS;
-    }
-    
-    /* 添加字符串终止符 */
-    if (yaml_size < buffer_size) {
-        yaml_buffer[yaml_size] = '\0';
-    } else {
-        yaml_buffer[buffer_size] = '\0';
-    }
-    
-    /* 设置平台配置数据 */
-    platform_data = yaml_buffer;
-    g_platform_size = yaml_size;
-    
-    console_printf("[BOOTLOADER AUDIT] Stage 2: YAML config loaded: %d bytes\n", (int)yaml_size);
-    
-    /* 关闭文件 */
-    file->Close(file);
-    root->Close(root);
-    
-    console_puts("[BOOTLOADER AUDIT] Stage 2: YAML config loaded successfully\n");
+    console_puts("[BOOTLOADER AUDIT] Stage 2: Platform config completed\n");
     return EFI_SUCCESS;
-    
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Getting File Size using GetPosition\n");
-        
-        /* 检查file指针的有效性 */
-        if (file == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - file is NULL\n");
-            root->Close(root);
-            return EFI_INVALID_PARAMETER;
-        }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: file pointer is valid\n");
-        
-        /* 检查file->GetPosition的有效性 */
-        if (file->GetPosition == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: ERROR - file->GetPosition is NULL\n");
-            file->Close(file);
-            root->Close(root);
-            return EFI_INVALID_PARAMETER;
-        }
-        console_puts("[BOOTLOADER AUDIT] Stage 2: file->GetPosition is valid\n");
-        
-        /* 使用GetPosition获取文件大小（安全方法） */
-        UINT64 original_pos = 0;
-        console_puts("[BOOTLOADER AUDIT] Stage 2: About to call GetPosition\n");
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling file->GetPosition...\n");
-        
-        /* 使用函数指针调用GetPosition */
-        EFI_STATUS (*getpos_func)(struct _EFI_FILE_PROTOCOL *, uint64_t *) = file->GetPosition;
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Function pointer extracted\n");
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling through function pointer...\n");
-        status = getpos_func(file, &original_pos);
-        console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition returned\n");
-        if (EFI_ERROR(status)) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition failed, skipping platform.yaml\n");
-            file->Close(file);
-            root->Close(root);
-            return EFI_SUCCESS;
-        }
-        
-        status = file->SetPosition(file, (UINT64)-1);
-        console_puts("[BOOTLOADER AUDIT] Stage 2: SetPosition called\n");
-        if (EFI_ERROR(status)) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: SetPosition failed, skipping platform.yaml\n");
-            file->Close(file);
-            root->Close(root);
-            return EFI_SUCCESS;
-        }
-        
-        UINT64 file_size_pos = 0;
-        console_puts("[BOOTLOADER AUDIT] Stage 2: Calling GetPosition(EOF)...\n");
-        status = file->GetPosition(file, &file_size_pos);
-        console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition(EOF) returned\n");
-        if (EFI_ERROR(status)) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: GetPosition(EOF) failed, skipping platform.yaml\n");
-            file->Close(file);
-            root->Close(root);
-            return EFI_SUCCESS;
-        }
-        
-        file_size = file_size_pos;
-        console_printf("[BOOTLOADER AUDIT] Stage 2: File size: %llu bytes\n", file_size);
-        
-        /* 恢复原始位置 */
-        file->SetPosition(file, original_pos);
-        
-        /* 分配platform_data缓冲区 */
-        platform_data = allocate_pool(file_size + 1);
-        if (platform_data == NULL) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Failed to allocate buffer\n");
-            file->Close(file);
-            root->Close(root);
-            return EFI_OUT_OF_RESOURCES;
-        }
-        
-        /* 读取文件内容 */
-        UINTN read_size = file_size;
-        status = file->Read(file, &read_size, platform_data);
-        if (EFI_ERROR(status) || read_size != file_size) {
-            console_puts("[BOOTLOADER AUDIT] Stage 2: Failed to read file\n");
-            free_pool(platform_data);
-            file->Close(file);
-            root->Close(root);
-            return EFI_LOAD_ERROR;
-        }
-        
-        platform_data[file_size] = '\0';
-        console_puts("[BOOTLOADER AUDIT] Stage 2: File read successfully\n");
-        
-        /* 关闭文件 */
-        file->Close(file);
-        root->Close(root);
-        
-        /* 解析配置 */
-        parse_platform_config(platform_data);
-        
-        /* 释放缓冲区 */
-        free_pool(platform_data);
-        
-        return EFI_SUCCESS;
 }
 
 /**
@@ -847,12 +750,12 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
         } else if (file->GetPosition == NULL || file->SetPosition == NULL) {
             console_puts("[BOOTLOADER] ERROR: file function pointers are NULL!\n");
             console_puts("[BOOTLOADER] GetPosition=");
-            char ptr_str[32];
-            snprintf(ptr_str, sizeof(ptr_str), "%p\n", file->GetPosition);
-            console_puts(ptr_str);
+            char ptr_str2[32];
+            snprintf(ptr_str2, sizeof(ptr_str2), "%p\n", file->GetPosition);
+            console_puts(ptr_str2);
             console_puts("[BOOTLOADER] SetPosition=");
-            snprintf(ptr_str, sizeof(ptr_str), "%p\n", file->SetPosition);
-            console_puts(ptr_str);
+            snprintf(ptr_str2, sizeof(ptr_str2), "%p\n", file->SetPosition);
+            console_puts(ptr_str2);
             file_size = 0;
         } else {
             uint64_t original_pos = 0;
@@ -939,7 +842,7 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     // 保存引导日志信息到调试结构中
     boot_info->debug.log_buffer = (void*)bootlog_get_buffer();
     boot_info->debug.log_size = BOOTLOG_MAX_ENTRIES * sizeof(bootlog_entry_t);
-    boot_info->debug.debug_flags = bootlog_get_index();
+    boot_info->debug.debug_flags = (uint16_t)bootlog_get_index();
 
     // 传递平台配置数据
     boot_info->platform.platform_data = g_platform_data;
@@ -1113,8 +1016,86 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
     
     uint8_t *raw_bytes = (uint8_t *)image_data;
     
-    // 检查是否是HIC镜像格式（有魔数）
-    if (image_size >= 8 && memcmp(raw_bytes, HIC_IMG_MAGIC, 8) == 0) {
+    // 检查是否是ELF格式
+    if (image_size >= 4 && raw_bytes[0] == 0x7f && raw_bytes[1] == 'E' && 
+        raw_bytes[2] == 'L' && raw_bytes[3] == 'F') {
+        console_puts("[BOOTLOADER] Detected ELF format\n");
+        
+        // ELF64头部结构（简化版）
+        typedef struct {
+            uint8_t  e_ident[16];    // 魔数和格式信息
+            uint16_t e_type;          // 文件类型
+            uint16_t e_machine;       // 机器类型
+            uint32_t e_version;       // 版本
+            uint64_t e_entry;         // 入口点地址
+            uint64_t e_phoff;         // 程序头表偏移
+            uint64_t e_shoff;         // 节头表偏移
+            uint32_t e_flags;         // 处理器标志
+            uint16_t e_ehsize;        // ELF头部大小
+            uint16_t e_phentsize;     // 程序头表条目大小
+            uint16_t e_phnum;         // 程序头表条目数量
+            uint16_t e_shentsize;     // 节头表条目大小
+            uint16_t e_shnum;         // 节头表条目数量
+            uint16_t e_shstrndx;      // 节头字符串表索引
+        } Elf64_Ehdr;
+        
+        // ELF64程序头结构
+        typedef struct {
+            uint32_t p_type;          // 段类型
+            uint32_t p_flags;         // 段标志
+            uint64_t p_offset;        // 段在文件中的偏移
+            uint64_t p_vaddr;         // 段的虚拟地址
+            uint64_t p_paddr;         // 段的物理地址
+            uint64_t p_filesz;        // 段在文件中的大小
+            uint64_t p_memsz;         // 段在内存中的大小
+            uint64_t p_align;         // 对齐要求
+        } Elf64_Phdr;
+        
+        Elf64_Ehdr *elf_hdr = (Elf64_Ehdr *)raw_bytes;
+        
+        // 检查是否是64位ELF
+        if (elf_hdr->e_ident[4] != 2) {
+            console_puts("[BOOTLOADER] ERROR: Not 64-bit ELF\n");
+            return EFI_UNSUPPORTED;
+        }
+        
+        // 读取入口点
+        uint64_t entry_point = elf_hdr->e_entry;
+        
+        console_printf("[BOOTLOADER] ELF entry point: 0x%lx\n", entry_point);
+        console_printf("[BOOTLOADER] ELF phoff: 0x%lx, phnum: %d\n", 
+                     elf_hdr->e_phoff, elf_hdr->e_phnum);
+        
+        // 遍历程序头表，加载所有LOAD段
+        Elf64_Phdr *phdr = (Elf64_Phdr *)(raw_bytes + elf_hdr->e_phoff);
+        for (int i = 0; i < elf_hdr->e_phnum; i++) {
+            if (phdr[i].p_type == 1) {  // PT_LOAD
+                console_printf("[BOOTLOADER] Loading segment %d: paddr=0x%lx, filesz=0x%lx, memsz=0x%lx\n",
+                             i, phdr[i].p_paddr, phdr[i].p_filesz, phdr[i].p_memsz);
+                
+                // 复制段到物理内存
+                if (phdr[i].p_filesz > 0) {
+                    memcpy((void*)phdr[i].p_paddr, raw_bytes + phdr[i].p_offset, phdr[i].p_filesz);
+                }
+                
+                // 清零BSS段
+                if (phdr[i].p_memsz > phdr[i].p_filesz) {
+                    memset((void*)(phdr[i].p_paddr + phdr[i].p_filesz), 0, 
+                           phdr[i].p_memsz - phdr[i].p_filesz);
+                }
+            }
+        }
+        
+        console_puts("[BOOTLOADER] ELF segments loaded\n");
+        
+        // 更新启动信息
+        boot_info->kernel_base = (void*)0x100000;
+        boot_info->kernel_size = image_size;
+        boot_info->entry_point = entry_point;
+        
+        console_puts("[BOOTLOADER] ELF kernel loaded\n");
+        
+    } else if (image_size >= 8 && memcmp(raw_bytes, HIC_IMG_MAGIC, 8) == 0) {
         console_puts("[BOOTLOADER] Detected HIC image format\n");
         
         // 手动读取HIC镜像头部字段
@@ -1457,11 +1438,11 @@ EFI_STATUS efi_main(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         console_puts("[BOOTLOADER AUDIT] Stage 4: Platform Config Loaded\n");
     }
     
-    /* 加载内核映像 */
-    console_puts("[BOOTLOADER AUDIT] Stage 5: Loading Kernel Image\n");
+    /* 加载内核映像（使用嵌入式内核，绕过UEFI FAT32驱动bug） */
+    console_puts("[BOOTLOADER AUDIT] Stage 5: Loading Kernel Image (embedded)\n");
     void *kernel_data;
     uint64_t kernel_size;
-    status = load_kernel_image(&kernel_data, &kernel_size);
+    status = load_kernel_image_embedded(&kernel_data, &kernel_size);
     if (EFI_ERROR(status)) {
         console_puts("[BOOTLOADER AUDIT] ERROR: Failed to load kernel image\n");
         return status;

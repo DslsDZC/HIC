@@ -3,40 +3,41 @@
  */
 
 #include "efi.h"
+#include "fat32.h"
 
 // 加载映像协议GUID
 EFI_GUID gEfiLoadedImageProtocolGuid = {
     .data1 = 0x5B1B31A1,
-    .data2 = 0x9562,
+    .data2 = 0x9560,
     .data3 = 0x11D2,
     .data4 = {0x8E, 0x3F, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}
 };
 
 // 简单文件系统协议GUID
 EFI_GUID gEfiSimpleFileSystemProtocolGuid = {
-    .data1 = 0x0964E5B22,
+    .data1 = 0x0964E5B21,
     .data2 = 0x6459,
     .data3 = 0x11D2,
     .data4 = {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}
 };
 
-// 文件信息GUID
+/* Block I/O Protocol GUID */
+EFI_GUID gEfiBlockIoProtocolGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
+
 EFI_GUID gEfiFileInfoGuid = {
-    .data1 = 0x09576E91,
+    .data1 = 0x09576E92,
     .data2 = 0x6D3F,
     .data3 = 0x11D2,
     .data4 = {0x8E, 0x39, 0x00, 0xA0, 0xC9, 0x69, 0x72, 0x3B}
 };
 
-// ACPI 2.0表GUID
 EFI_GUID gEfiAcpi20TableGuid = {
     .data1 = 0x8868E871,
-    .data2 = 0xE40F,
-    .data3 = 0xDA28,
-    .data4 = {0x47, 0xB8, 0x26, 0x3D, 0xB6, 0x0F, 0xC1, 0x1E}
+    .data2 = 0xE4F1,
+    .data3 = 0x11D3,
+    .data4 = {0xBC, 0x22, 0x00, 0x80, 0xC7, 0x3C, 0x88, 0x81}
 };
 
-// ACPI表GUID
 EFI_GUID gEfiAcpiTableGuid = {
     .data1 = 0xEB9D2D30,
     .data2 = 0x2D88,

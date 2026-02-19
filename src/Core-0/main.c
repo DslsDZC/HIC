@@ -80,7 +80,7 @@ void kernel_main(kernel_info_t *info)
     /* 初始化审计日志缓冲区 */
     phys_addr_t audit_buffer_base = 0;
     size_t audit_buffer_size = 0x100000;  /* 1MB审计日志缓冲区 */
-    pmm_alloc_frames(HIC_DOMAIN_CORE, audit_buffer_size / PAGE_SIZE, 
+    pmm_alloc_frames(HIC_DOMAIN_CORE, (u32)(audit_buffer_size / PAGE_SIZE), 
                      PAGE_FRAME_CORE, &audit_buffer_base);
     audit_system_init_buffer(audit_buffer_base, audit_buffer_size);
     

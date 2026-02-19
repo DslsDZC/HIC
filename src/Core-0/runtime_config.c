@@ -225,13 +225,13 @@ void runtime_config_load_from_cmdline(const char* cmdline)
                         g_runtime_config.security_level = SECURITY_LEVEL_STRICT;
                     }
                 } else if (strcmp(key, "time_slice_ms") == 0) {
-                    g_runtime_config.time_slice_ms = atoi(value);
+                    g_runtime_config.time_slice_ms = (u32)atoi(value);
                 } else if (strcmp(key, "max_threads") == 0) {
-                    g_runtime_config.max_threads = atoi(value);
+                    g_runtime_config.max_threads = (u32)atoi(value);
                 } else if (strcmp(key, "heap_size_mb") == 0) {
-                    g_runtime_config.heap_size_mb = atoi(value);
+                    g_runtime_config.heap_size_mb = (u32)atoi(value);
                 } else if (strcmp(key, "stack_size_kb") == 0) {
-                    g_runtime_config.stack_size_kb = atoi(value);
+                    g_runtime_config.stack_size_kb = (u64)atoi(value);
                 } else if (strcmp(key, "enable_debug") == 0) {
                     g_runtime_config.enable_debug = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
                 } else if (strcmp(key, "enable_trace") == 0) {
@@ -251,13 +251,13 @@ void runtime_config_load_from_cmdline(const char* cmdline)
                 } else if (strcmp(key, "enable_acpi") == 0) {
                     g_runtime_config.enable_acpi = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
                 } else if (strcmp(key, "serial_baud") == 0) {
-                    g_runtime_config.serial_baud = atoi(value);
+                    g_runtime_config.serial_baud = (u32)atoi(value);
                 } else if (strcmp(key, "max_capabilities") == 0) {
-                    g_runtime_config.max_capabilities = atoi(value);
+                    g_runtime_config.max_capabilities = (u32)atoi(value);
                 } else if (strcmp(key, "max_domains") == 0) {
-                    g_runtime_config.max_domains = atoi(value);
+                    g_runtime_config.max_domains = (u32)atoi(value);
                 } else if (strcmp(key, "max_irqs") == 0) {
-                    g_runtime_config.max_irqs = atoi(value);
+                    g_runtime_config.max_irqs = (u32)atoi(value);
                 }
             }
         }

@@ -26,7 +26,7 @@
 #include "lib/console.h"
 
 /* ==================== 全局能力表 ==================== */
-cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
+__capability cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
 
 /* ==================== 域密钥表（每个域一个） ==================== */
 domain_key_t g_domain_keys[HIC_DOMAIN_MAX];

@@ -13,7 +13,6 @@
 #define FORMAL_VERIFICATION_H
 
 #include <stdint.h>
-#include <stdbool.h>
 #include "types.h"
 
 /* 形式化验证错误码 */
@@ -354,7 +353,8 @@ obj_type_t get_capability_object_type(cap_id_t cap);
 cap_id_t* get_shared_capabilities(domain_id_t d1, domain_id_t d2);
 
 /* 线程管理接口 */
-bool thread_is_active(thread_id_t thread);
+/* thread.h 中已定义，此处移除重复声明 */
+/* bool thread_is_active(thread_id_t thread); */
 u64 get_thread_wait_time(thread_id_t thread);
 
 /* 系统服务接口 */

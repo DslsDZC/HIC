@@ -123,7 +123,7 @@ hic_status_t thread_terminate(thread_id_t thread_id)
     
     /* 回收线程栈空间 */
     if (t->stack_base != 0) {
-        u32 stack_pages = (t->stack_size + HAL_PAGE_SIZE - 1) / HAL_PAGE_SIZE;
+        u32 stack_pages = (u32)((t->stack_size + HAL_PAGE_SIZE - 1) / HAL_PAGE_SIZE);
         pmm_free_frames(t->stack_base, stack_pages);
         t->stack_base = 0;
         t->stack_size = 0;
