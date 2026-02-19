@@ -20,7 +20,19 @@
 #ifndef HIC_HAL_H
 #define HIC_HAL_H
 
+#include "../types.h"
+
 #include "types.h"
+
+/* Clang Static Analyzer兼容性：确保bool类型可用 */
+/* 注意：GCC使用c23标准，bool已经是关键字，不需要定义 */
+#ifndef __cplusplus
+#if !defined(__bool_true_false_are_defined) && !defined(bool) && !defined(__GNUC__)
+typedef unsigned char bool;
+#define true 1
+#define false 0
+#endif
+#endif
 
 /* 架构类型枚举 */
 typedef enum {
@@ -124,7 +136,7 @@ u32 hal_get_privilege_level(void);
  * 页对齐
  */
 static inline u64 hal_page_align(u64 addr) {
-    return (addr + HAL_PAGE_SIZE - 1) & ~(HAL_PAGE_SIZE - 1);
+    return (addr + HAL_PAGE_SIZE - 1) & ~(u64)(HAL_PAGE_SIZE - 1);
 }
 
 /**

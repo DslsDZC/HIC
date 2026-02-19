@@ -97,7 +97,7 @@ int module_load_from_memory(const void* base, u64 size, u64* instance_id) {
     
     /* 验证签名 */
     const void* sig_data = (const u8*)base + header->signature_offset;
-    u32 sig_size = size - header->signature_offset;
+    u32 sig_size = (u32)(size - header->signature_offset);
     
     if (!module_verify_signature(header, sig_data, sig_size)) {
         log_error("模块签名验证失败\n");
@@ -229,7 +229,7 @@ int module_auto_load_drivers(device_list_t* devices) {
         (void)dev;
     }
     
-    return loaded_count;
+    return (int)loaded_count;
 }
 
 /**

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+
+SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
+-->
+
+<!--
+HIC能力系统自定义Cppcheck规则
+用于检测能力系统的常见误用模式
+-->
+
+<rules>
+<rule>
+    <name>capability-verification-required</name>
+    <summary>能力验证缺失：访问资源前必须验证能力</summary>
+    <severity>error</severity>
+    <id>hic-cap-verify</id>
+    <message>能力验证缺失：在访问资源前必须调用cap_check_access()或cap_fast_check()验证能力权限。当前代码直接访问了能力对象，可能导致安全漏洞。正确用法：if (cap_check_access(domain, handle, CAP_MEM_READ) == HIC_SUCCESS) { /* 安全访问资源 */ }</message>
+</rule>
+
+<rule>
+    <name>capability-revocation-check</name>
+    <summary>能力撤销检查：使用能力前检查是否已被撤销</summary>
+    <severity>error</severity>
+    <id>hic-cap-revoke</id>
+    <message>能力可能已被撤销：使用能力前必须检查CAP_FLAG_REVOKED标志。正确用法：if (!(entry->flags & CAP_FLAG_REVOKED)) { /* 安全使用能力 */ }</message>
+</rule>
+
+<rule>
+    <name>capability-ownership-check</name>
+    <summary>能力所有权检查：验证能力是否属于当前域</summary>
+    <severity>error</severity>
+    <id>hic-cap-ownership</id>
+    <message>能力所有权未验证：使用能力前必须验证entry->owner == current_domain。跨域访问能力可能导致安全漏洞。</message>
+</rule>
+
+<rule>
+    <name>privileged-memory-access</name>
+    <summary>特权内存访问：特权域访问前必须调用cap_privileged_access_check()</summary>
+    <severity>error</severity>
+    <id>hic-priv-access</id>
+    <message>特权内存访问未验证：Privileged-1服务访问物理内存前必须调用cap_privileged_access_check()。正确用法：if (cap_privileged_access_check(domain, addr, CAP_MEM_READ)) { /* 安全访问物理内存 */ }</message>
+</rule>
+
+<rule>
+    <name>cross-domain-pointer</name>
+    <summary>跨域指针：检测可能的跨域指针传递</summary>
+    <severity>warning</severity>
+    <id>hic-cross-domain</id>
+    <message>可能的跨域指针传递：检测到指针可能跨越域边界传递。在HIC三层模型中，跨域指针传递必须通过能力系统授权。建议使用共享内存或IPC机制进行跨域通信。</message>
+</rule>
+
+<rule>
+    <name>memory-leak-capability</name>
+    <summary>能力内存泄漏：检测未释放的能力资源</summary>
+    <severity>error</severity>
+    <id>hic-cap-leak</id>
+    <message>能力资源可能泄漏：创建的能力未在使用后正确释放。正确用法：cap_id_t cap; if (cap_create_memory(domain, base, size, rights, &cap) == HIC_SUCCESS) { /* 使用能力 */ cap_revoke(cap); }</message>
+</rule>
+
+<rule>
+    <name>capability-parameter-validation</name>
+    <summary>能力参数验证：验证能力系统函数的参数</summary>
+    <severity>error</severity>
+    <id>hic-cap-param</id>
+    <message>能力系统函数参数未验证：调用能力系统函数前未验证参数有效性。常见验证项：domain_id < HIC_DOMAIN_MAX, cap_id < CAP_TABLE_SIZE, handle != CAP_HANDLE_INVALID, out指针不为NULL。</message>
+</rule>
+
+<rule>
+    <name>atomic-critical-section</name>
+    <summary>原子操作临界区：检测可能需要原子保护的操作</summary>
+    <severity>warning</severity>
+    <id>hic-atomic-cs</id>
+    <message>可能需要原子保护：检测到修改全局数据结构的操作，建议使用atomic_enter_critical()/atomic_exit_critical()保护。HIC采用无锁设计，所有全局数据修改必须在临界区内进行。</message>
+</rule>
+
+<rule>
+    <name>memory-barrier-missing</name>
+    <summary>内存屏障缺失：检测可能需要内存屏障的操作</summary>
+    <severity>warning</severity>
+    <id>hic-mem-barrier</id>
+    <message>可能需要内存屏障：检测到跨线程共享数据的访问，建议添加内存屏障。常用内存屏障：atomic_acquire_barrier() (读操作后), atomic_release_barrier() (写操作前), atomic_full_barrier() (完整屏障)。</message>
+</rule>
+
+<rule>
+    <name>capability-double-free</name>
+    <summary>能力双重释放：检测可能的双重释放</summary>
+    <severity>error</severity>
+    <id>hic-cap-double-free</id>
+    <message>可能的能力双重释放：检测到对同一能力多次调用cap_revoke()。双重释放可能导致数据结构损坏。</message>
+</rule>
+
+<rule>
+    <name>null-pointer-dereference</name>
+    <summary>空指针解引用：检测可能的空指针解引用</summary>
+    <severity>error</severity>
+    <id>hic-null-deref</id>
+    <message>可能的空指针解引用：检测到对可能为NULL的指针进行解引用操作。建议在使用指针前添加NULL检查。</message>
+</rule>
+
+<rule>
+    <name>buffer-overflow-capability</name>
+    <summary>缓冲区溢出：检测能力系统中的缓冲区溢出风险</summary>
+    <severity>error</severity>
+    <id>hic-buffer-overflow</id>
+    <message>可能的缓冲区溢出：检测到对能力相关的内存访问可能越界。常见场景：能力ID超过CAP_TABLE_SIZE, 内存访问超出能力分配的范围。</message>
+</rule>
+
+<rule>
+    <name>integer-overflow-capability</name>
+    <summary>整数溢出：检测能力系统中的整数溢出风险</summary>
+    <severity>warning</severity>
+    <id>hic-int-overflow</id>
+    <message>可能的整数溢出：检测到可能导致整数溢出的算术操作。建议对敏感算术操作进行边界检查。</message>
+</rule>
+
+<rule>
+    <name>uninitialized-capability</name>
+    <summary>未初始化的能力：检测可能未初始化的能力使用</summary>
+    <severity>error</severity>
+    <id>hic-uninit-cap</id>
+    <message>可能未初始化的能力：检测到使用可能未初始化的能力变量。确保所有能力变量在使用前都已正确初始化。</message>
+</rule>
+
+<rule>
+    <name>resource-leak-capability</name>
+    <summary>资源泄漏：检测能力相关的资源泄漏</summary>
+    <severity>error</severity>
+    <id>hic-resource-leak</id>
+    <message>可能的资源泄漏：检测到分配的资源未在所有退出路径释放。确保在函数的所有退出路径都正确释放资源。</message>
+</rule>
+</rules>

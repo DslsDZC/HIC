@@ -26,15 +26,15 @@ static u16 g_serial_port = 0x3F8;
 static void serial_init(u16 port, u32 baud)
 {
     /* 计算波特率除数 */
-    u16 divisor = 115200 / baud;
+    u16 divisor = (u16)(115200 / baud);
     
     /* 禁用中断 */
     hal_outb(port + 1, 0x00);
     
     /* 设置波特率 */
     hal_outb(port + 3, 0x80);  // DLAB=1
-    hal_outb(port, divisor & 0xFF);      // 低字节
-    hal_outb(port + 1, divisor >> 8);  // 高字节
+    hal_outb(port, (u8)(divisor & 0xFF));      // 低字节
+    hal_outb(port + 1, (u8)(divisor >> 8));  // 高字节
     
     /* 设置8N1格式：8数据位，无校验，1停止位 */
     hal_outb(port + 3, 0x03);  // 8N1, DLAB=0
@@ -60,6 +60,8 @@ static void serial_putchar(char c)
 /* 初始化控制台 */
 void console_init(console_type_t type)
 {
+    (void)type;  /* 暂时忽略类型参数 */
+    
     /* 尝试从 boot_info 初始化极简UART */
     minimal_uart_init_from_bootinfo();
     
@@ -152,7 +154,7 @@ void console_putu64(uint64_t value)
     buffer[pos] = '\0';
     
     while (value > 0 && pos > 0) {
-        buffer[--pos] = '0' + (value % 10);
+        buffer[--pos] = (char)('0' + (value % 10));
         value /= 10;
     }
     
@@ -237,7 +239,7 @@ void console_vprintf(const char *fmt, va_list args)
                     console_puthex64(va_arg(args, u64));
                     break;
                 case 'c':
-                    console_putchar(va_arg(args, int));
+                    console_putchar((char)va_arg(args, int));
                     break;
                 case 's':
                     console_puts(va_arg(args, const char*));

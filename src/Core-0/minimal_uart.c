@@ -63,7 +63,7 @@ static u16 calculate_baud_divisor(u32 baud_rate)
 {
     /* UART时钟频率为1.8432MHz */
     const u32 uart_clock = 1843200;
-    return uart_clock / (16 * baud_rate);
+    return (u16)(uart_clock / (16 * baud_rate));
 }
 
 /* 配置UART */
@@ -119,8 +119,8 @@ void minimal_uart_configure(const uart_config_t *config)
 
     /* 启用DLAB，设置波特率 */
     uart_write(config->base_addr, UART_LCR, UART_LCR_DLAB);
-    uart_write(config->base_addr, UART_DLL, divisor & 0xFF);
-    uart_write(config->base_addr, UART_DLM, (divisor >> 8) & 0xFF);
+    uart_write(config->base_addr, UART_DLL, (u8)(divisor & 0xFF));
+    uart_write(config->base_addr, UART_DLM, (u8)((divisor >> 8) & 0xFF));
 
     /* 设置线路控制（8N1或其他配置） */
     uart_write(config->base_addr, UART_LCR, lcr);

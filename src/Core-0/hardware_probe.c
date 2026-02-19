@@ -22,12 +22,12 @@ static inline void pci_write_config(u8 bus, u8 device, u8 function, u8 offset, u
 
 /* PCI配置空间访问函数 */
 static inline u32 pci_read_config(u8 bus, u8 device, u8 function, u8 offset) {
-    u32 address = (1 << 31) | (bus << 16) | (device << 11) |
+    u32 address = (1U << 31) | (bus << 16) | (device << 11) |
                   (function << 8) | (offset & 0xFC);
-    hal_outb(0xCF8, address >> 8);
-    hal_outb(0xCF9, address);
-    return hal_inb(0xCFC) | (hal_inb(0xCFC + 1) << 8) |
-           (hal_inb(0xCFC + 2) << 16) | (hal_inb(0xCFC + 3) << 24);
+    hal_outb(0xCF8, (u8)(address >> 8));
+    hal_outb(0xCF9, (u8)address);
+    return hal_inb(0xCFC) | (hal_inb((u16)(0xCFC + 1)) << 8) |
+           (hal_inb((u16)(0xCFC + 2)) << 16) | (hal_inb((u16)(0xCFC + 3)) << 24);
 }
 
 static inline u8 pci_read_config_byte(u8 bus, u8 device, u8 function, u8 offset) {
@@ -36,14 +36,14 @@ static inline u8 pci_read_config_byte(u8 bus, u8 device, u8 function, u8 offset)
 }
 
 static inline void pci_write_config(u8 bus, u8 device, u8 function, u8 offset, u32 value) {
-    u32 address = (1 << 31) | (bus << 16) | (device << 11) |
+    u32 address = (1U << 31) | (bus << 16) | (device << 11) |
                   (function << 8) | (offset & 0xFC);
-    hal_outb(0xCF8, address >> 8);
-    hal_outb(0xCF9, address);
-    hal_outb(0xCFC, value & 0xFF);
-    hal_outb(0xCFC + 1, (value >> 8) & 0xFF);
-    hal_outb(0xCFC + 2, (value >> 16) & 0xFF);
-    hal_outb(0xCFC + 3, (value >> 24) & 0xFF);
+    hal_outb(0xCF8, (u8)(address >> 8));
+    hal_outb(0xCF9, (u8)address);
+    hal_outb(0xCFC, (u8)(value & 0xFF));
+    hal_outb((u16)(0xCFC + 1), (u8)((value >> 8) & 0xFF));
+    hal_outb((u16)(0xCFC + 2), (u8)((value >> 16) & 0xFF));
+    hal_outb((u16)(0xCFC + 3), (u8)((value >> 24) & 0xFF));
 }
 
 /* 外部变量 */
@@ -292,9 +292,9 @@ void detect_pci_devices(device_list_t* devices) {
         for (u8 device = 0; device < 32; device++) {
             for (u8 function = 0; function < 8; function++) {
                 // 读取厂商ID和设备ID
-                u16 vendor_device = pci_read_config(bus, device, function, 0);
-                u16 vendor_id = vendor_device & 0xFFFF;
-                u16 device_id = (vendor_device >> 16) & 0xFFFF;
+                u32 vendor_device = pci_read_config(bus, device, function, 0);
+                u16 vendor_id = (u16)(vendor_device & 0xFFFF);
+                u16 device_id = (u16)((vendor_device >> 16) & 0xFFFF);
                 
                 // 检查设备是否存在
                 if (vendor_id == 0xFFFF || vendor_id == 0x0000) {
@@ -311,21 +311,21 @@ void detect_pci_devices(device_list_t* devices) {
                 
                 // 读取类代码
                 u32 class_rev = pci_read_config(bus, device, function, 8);
-                dev->class_code = (class_rev >> 8) & 0xFFFFFF;
+                dev->class_code = (u16)((class_rev >> 8) & 0xFFFFFF);
                 dev->revision = class_rev & 0xFF;
                 
                 // 读取BAR
                 for (int i = 0; i < 6; i++) {
-                    u32 bar = pci_read_config(bus, device, function, 0x10 + i * 4);
+                    u32 bar = pci_read_config(bus, device, function, (u8)(0x10 + i * 4));
                     dev->pci.bar[i] = bar;
                     
                     // 确定BAR大小（完整实现）
                     if (bar & 0x1) { 
                         // IO空间
                         u32 size = 0;
-                        pci_write_config(bus, device, function, 0x10 + i * 4, 0xFFFF);
-                        size = pci_read_config(bus, device, function, 0x10 + i * 4);
-                        pci_write_config(bus, device, function, 0x10 + i * 4, bar);
+                        pci_write_config(bus, device, function, (u8)(0x10 + i * 4), 0xFFFF);
+                        size = pci_read_config(bus, device, function, (u8)(0x10 + i * 4));
+                        pci_write_config(bus, device, function, (u8)(0x10 + i * 4), bar);
                         
                         // 计算大小
                         size = (~(size & 0xFFFC)) + 1;
@@ -333,9 +333,9 @@ void detect_pci_devices(device_list_t* devices) {
                     } else if (bar) { 
                         // 内存空间
                         u32 size = 0;
-                        pci_write_config(bus, device, function, 0x10 + i * 4, 0xFFFFFFFF);
-                        size = pci_read_config(bus, device, function, 0x10 + i * 4);
-                        pci_write_config(bus, device, function, 0x10 + i * 4, bar);
+                        pci_write_config(bus, device, function, (u8)(0x10 + i * 4), 0xFFFFFFFF);
+                        size = pci_read_config(bus, device, function, (u8)(0x10 + i * 4));
+                        pci_write_config(bus, device, function, (u8)(0x10 + i * 4), bar);
                         
                         // 计算大小
                         size = (~(size & 0xFFFFFFF0)) + 1;

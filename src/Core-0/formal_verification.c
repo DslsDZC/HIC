@@ -62,7 +62,7 @@ static void u64_to_str(u64 value, char* buf, u64 buf_size) {
     char temp[32];
     u64 i = 0;
     while (value > 0 && i < sizeof(temp) - 1) {
-        temp[i++] = '0' + (value % 10);
+        temp[i++] = (char)('0' + (value % 10));
         value /= 10;
     }
     
@@ -178,6 +178,20 @@ static const invariant_spec_t g_invariant_specs[] = {
         .formal_expr = "∀o ∈ Objects, ∀a ∈ Access(o), Type(a) ∈ AllowedTypes(o)",
         .description = "对对象的访问必须符合对象的类型约束",
         .check = invariant_type_safety
+    },
+    {
+        .invariant_id = 7,
+        .name = "APM配置完整性",
+        .formal_expr = "∀uart ∈ UART, Valid(uart.base_addr) ∧ Valid(uart.baud)",
+        .description = "APM配置有效且一致",
+        .check = invariant_apm_config_integrity
+    },
+    {
+        .invariant_id = 8,
+        .name = "APM分配一致性",
+        .formal_expr = "∀uart₁, uart₂ ∈ UART, uart₁.base_addr ≠ uart₂.base_addr",
+        .description = "APM资源分配无冲突",
+        .check = invariant_apm_allocation_consistency
     }
 };
 static const u64 g_invariant_specs_count = sizeof(g_invariant_specs) / sizeof(g_invariant_specs[0]);
@@ -506,7 +520,7 @@ int fv_check_all_invariants(void) {
                         if (g_checkpoints[cp].invariant_id == dep_id) {
                             if (!fv_verify_checkpoint(g_checkpoints[cp].checkpoint_id)) {
                                 log_error("[FV] Dependency invariant %lu not verified\n", dep_id);
-                                return FV_CAP_INVALID + dep_id - 1;
+                                return (int)(FV_CAP_INVALID + dep_id - 1);
                             }
                         }
                     }
@@ -521,11 +535,11 @@ int fv_check_all_invariants(void) {
             
             // 记录违反
             fv_log_violation(&invariants[i]);
-            
+
             // 触发失败事件
             fv_trigger_event(FV_EVENT_CHECK_FAIL);
-            
-            return FV_CAP_INVALID + i; // 返回特定的错误码
+
+            return (int)(FV_CAP_INVALID + i); // 返回特定的错误码
         }
         
         // 验证对应的检查点

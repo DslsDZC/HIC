@@ -75,7 +75,7 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
     memzero(&entry, sizeof(audit_entry_t));
     
     entry.timestamp = timestamp;
-    entry.sequence = g_audit_buffer.sequence++;
+    entry.sequence = (u32)g_audit_buffer.sequence++;
     entry.type = type;
     entry.domain = domain;
     entry.cap_id = cap;

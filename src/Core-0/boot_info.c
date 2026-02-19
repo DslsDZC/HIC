@@ -29,11 +29,11 @@ static int simple_sscanf(const char *str, const char *fmt, ...) {
     if (strcmp(fmt, "%lu%c") == 0) {
         unsigned long *val = va_arg(args, unsigned long*);
         char *ch = va_arg(args, char*);
-        
+
         const char *p = str;
         *val = 0;
         while (*p >= '0' && *p <= '9') {
-            *val = *val * 10 + (*p - '0');
+            *val = *val * 10 + (u64)(*p - '0');
             p++;
         }
         if (ch) *ch = *p;
@@ -455,7 +455,7 @@ void boot_info_parse_acpi_tables(void *sdt, const char *signature) {
     /* 解析表中的条目 */
     if (strcmp(signature, ACPI_SIG_RSDT) == 0) {
         acpi_rsdt_t *rsdt = (acpi_rsdt_t *)sdt;
-        u32 entry_count = (rsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u32);
+        u32 entry_count = (u32)((rsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u32));
         
         log_info("RSDT包含 %u 个表\n", entry_count);
         
@@ -470,7 +470,7 @@ void boot_info_parse_acpi_tables(void *sdt, const char *signature) {
         }
     } else if (strcmp(signature, ACPI_SIG_XSDT) == 0) {
         acpi_xsdt_t *xsdt = (acpi_xsdt_t *)sdt;
-        u32 entry_count = (xsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u64);
+        u32 entry_count = (u32)((xsdt->header.length - sizeof(acpi_sdt_header_t)) / sizeof(u64));
         
         log_info("XSDT包含 %u 个表\n", entry_count);
         
@@ -512,10 +512,10 @@ void boot_info_parse_cmdline(const char* cmdline) {
         /* 查找参数结束 */
         const char* start = p;
         while (*p && *p != ' ') p++;
-        
+
         /* 提取参数 */
         char param[128];
-        u64 len = p - start;
+        u64 len = (u64)(p - start);
         if (len >= sizeof(param)) len = sizeof(param) - 1;
         memmove(param, start, len);
         param[len] = '\0';
@@ -536,7 +536,7 @@ void boot_info_parse_cmdline(const char* cmdline) {
             log_info("禁用SMP\n");
             g_boot_state.hw.smp_enabled = false;
         } else if (strncmp(param, "maxcpus=", 8) == 0) {
-            u32 max_cpus = atoi(param + 8);
+            u32 max_cpus = (u32)atoi(param + 8);
             log_info("限制CPU核心数: %u\n", max_cpus);
             if (max_cpus < g_boot_state.hw.cpu.logical_cores) {
                 g_boot_state.hw.cpu.logical_cores = max_cpus;
@@ -579,9 +579,9 @@ void boot_info_parse_cmdline(const char* cmdline) {
                 } else if (strcmp(device, "ttyS3") == 0) {
                     port = 0x2E8;
                 }
-                
-                g_boot_state.serial_port = port;
-                g_boot_state.serial_baud = baud;
+
+                g_boot_state.serial_port = (u16)port;
+                g_boot_state.serial_baud = (u32)baud;
                 log_info("串口控制台: COM%d, %d baud\n", port == 0x3F8 ? 0 : 1, baud);
             } else if (strcmp(param + 8, "tty0") == 0) {
                 /* VGA文本控制台 */

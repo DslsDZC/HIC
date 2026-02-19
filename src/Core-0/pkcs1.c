@@ -250,10 +250,10 @@ bool pkcs1_mgf1(const u8* seed, u32 seed_len,
         memcopy(hash_input, seed, seed_len);
         
         /* 大端序计数器 */
-        hash_input[seed_len] = (counter >> 24) & 0xFF;
-        hash_input[seed_len + 1] = (counter >> 16) & 0xFF;
-        hash_input[seed_len + 2] = (counter >> 8) & 0xFF;
-        hash_input[seed_len + 3] = counter & 0xFF;
+        hash_input[seed_len] = (u8)((counter >> 24) & 0xFF);
+        hash_input[seed_len + 1] = (u8)((counter >> 16) & 0xFF);
+        hash_input[seed_len + 2] = (u8)((counter >> 8) & 0xFF);
+        hash_input[seed_len + 3] = (u8)(counter & 0xFF);
         
         u8 hash[48];
         sha384(hash_input, seed_len + 4, hash);
@@ -292,10 +292,10 @@ bool pkcs1_mod_exp(const pkcs1_bignum_t* c, const pkcs1_bignum_t* e,
     base.size = c->size;
     
     /* 遍历指数的每一位 */
-    for (s32 bit = e->size * 64 - 1; bit >= 0; bit--) {
+    for (s32 bit = (s32)(e->size * 64 - 1); bit >= 0; bit--) {
         /* 获取当前位 */
-        u32 word = bit / 64;
-        u32 bit_in_word = bit % 64;
+        u32 word = (u32)bit / 64;
+        u32 bit_in_word = (u32)bit % 64;
         u64 bit_val = (e->data[word] >> bit_in_word) & 0x1;
         
         /* 平方：result = result * result mod n */
@@ -476,15 +476,15 @@ bool pkcs1_bignum_add(const pkcs1_bignum_t* a, const pkcs1_bignum_t* b,
         u16 sum = carry;
         if (i < a->size) sum += a->data[i];
         if (i < b->size) sum += b->data[i];
-        
-        result->data[i] = sum & 0xFF;
+
+        result->data[i] = (u8)(sum & 0xFF);
         carry = sum >> 8;
     }
     
     result->size = max_size;
     if (carry) {
         if (result->size < PKCS1_MAX_MODULUS_SIZE) {
-            result->data[result->size++] = carry;
+            result->data[result->size++] = (u8)carry;
         }
     }
     
@@ -501,8 +501,8 @@ bool pkcs1_bignum_sub(const pkcs1_bignum_t* a, const pkcs1_bignum_t* b,
     for (u32 i = 0; i < a->size; i++) {
         u16 diff = (u16)a->data[i] - borrow;
         if (i < b->size) diff -= b->data[i];
-        
-        result->data[i] = diff & 0xFF;
+
+        result->data[i] = (u8)(diff & 0xFF);
         borrow = (diff >> 8) & 1;
     }
     

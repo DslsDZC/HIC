@@ -24,6 +24,16 @@
 
 #include "types.h"
 
+/* Clang Static Analyzer兼容性：确保bool类型可用 */
+/* 注意：GCC使用c23标准，bool已经是关键字，不需要定义 */
+#ifndef __cplusplus
+#if !defined(__bool_true_false_are_defined) && !defined(bool) && !defined(__GNUC__)
+typedef unsigned char bool;
+#define true 1
+#define false 0
+#endif
+#endif
+
 /* 能力表大小 */
 #define CAP_TABLE_SIZE     65536
 
@@ -54,6 +64,9 @@ typedef struct __attribute__((aligned(64))) cap_entry {
         } endpoint;
     };
 } cap_entry_t;
+
+/* 全局能力表（Sparse标记：能力空间） */
+extern __capability cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
 
 #define CAP_FLAG_REVOKED  (1U << 0)
 

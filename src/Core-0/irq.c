@@ -175,8 +175,8 @@ void irq_dispatch(u32 irq_vector)
 {
     /* 使用内存屏障确保读取顺序 */
     atomic_acquire_barrier();
-    
-    irq_route_entry_t *entry = &irq_table[irq_vector];
+
+    volatile irq_route_entry_t *entry = &irq_table[irq_vector];
     
     /* 检查是否有注册的处理函数 */
     if (!entry->initialized || entry->handler_address == 0) {
@@ -242,11 +242,11 @@ void irq_handler(u64 *interrupt_frame)
 
     /* 记录中断信息 */
     console_puts("[IRQ] Interrupt at RIP=0x");
-    console_puti64(rip);
+    console_puti64((s64)rip);
     console_puts(", CS=0x");
-    console_puti64(cs);
+    console_puti64((s64)cs);
     console_puts(", RFLAGS=0x");
-    console_puti64(rflags);
+    console_puti64((s64)rflags);
     console_puts("\n");
 
     /* 根据错误码判断中断类型 */
@@ -256,7 +256,7 @@ void irq_handler(u64 *interrupt_frame)
     } else {
         /* 异常 */
         console_puts("[IRQ] Exception, error code=0x");
-        console_puti64(error_code);
+        console_puti64((s64)error_code);
         console_puts("\n");
     }
 
@@ -333,7 +333,7 @@ void lapic_handle_pending(void)
     /* 遍历所有256个中断向量 */
     for (u32 i = 0; i < 256; i++) {
         u32 irr_word = (i < 32) ? irr_low : irr_high;
-        u32 irr_bit = 1 << (i % 32);
+        u32 irr_bit = 1U << (i % 32);
 
         if (irr_word & irr_bit) {
             /* 中断i待处理，调用快速处理程序 */
