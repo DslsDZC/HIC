@@ -72,7 +72,7 @@ typedef struct memory_topology {
     u64 total_usable;          /* 总可用内存 */
     u64 total_physical;        /* 总物理内存 */
     u32 region_count;          /* 区域数量 */
-    mem_region_t regions[128]; /* 内存区域表 */
+    mem_region_t regions[32];  /* 内存区域表（从128减小到32） */
 } memory_topology_t;
 
 /* 设备类型（架构无关） */
@@ -133,7 +133,7 @@ typedef struct device {
 typedef struct device_list {
     u32 device_count;          /* 设备数量 */
     u32 pci_count;             /* PCI设备数量 */
-    device_t devices[256];
+    device_t devices[64];      /* 设备数组（从256减小到64） */
 } device_list_t;
 
 /* 中断控制器信息（架构无关） */

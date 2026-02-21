@@ -104,16 +104,36 @@ typedef struct runtime_config {
     memory_policy_t memory_policy;        /* 内存分配策略 */
     security_level_t security_level;      /* 安全级别 */
     
-    /* 调度器配置 */
-    u32 time_slice_ms;            /* 时间片长度(毫秒) */
+    /* 系统限制配置 */
+    u32 max_domains;              /* 最大域数量 */
+    u32 max_capabilities;         /* 最大能力数量 */
+    u32 capabilities_per_domain;  /* 每个域的最大能力数 */
     u32 max_threads;              /* 最大线程数 */
-    u32 idle_timeout_ms;          /* 空闲超时(毫秒) */
+    u32 threads_per_domain;       /* 每个域的最大线程数 */
+    u32 max_services;             /* 最大服务数 */
+    u32 max_pci_devices;          /* 最大PCI设备数 */
+    u32 max_memory_regions;       /* 最大内存区域数 */
+    u32 max_interrupt_routes;     /* 最大中断路由数 */
+    u64 kernel_size_limit;        /* 内核大小限制 */
+    u64 bss_size_limit;           /* BSS段大小限制 */
     
     /* 内存配置 */
     u64 heap_size_mb;             /* 堆大小(MB) */
     u64 stack_size_kb;            /* 栈大小(KB) */
     u32 page_cache_percent;       /* 页面缓存百分比 */
     bool enable_swap;             /* 启用交换 */
+    u64 domain_pool_base;         /* 域内存池基地址 */
+    u64 domain_pool_size;         /* 域内存池大小 */
+    u64 app_pool_base;            /* 应用内存池基地址 */
+    u64 app_pool_size;            /* 应用内存池大小 */
+    u32 max_page_tables;          /* 最大页表数 */
+    
+    /* 调度器配置 */
+    u32 time_slice_ms;            /* 时间片长度(毫秒) */
+    u32 idle_timeout_ms;          /* 空闲超时(毫秒) */
+    bool preemptive;              /* 抢占式调度 */
+    u32 load_balancing_threshold; /* 负载均衡阈值 */
+    u32 migration_interval_ms;    /* 迁移间隔 */
     
     /* 安全配置 */
     bool enable_secure_boot;      /* 启用安全启动 */
@@ -121,6 +141,11 @@ typedef struct runtime_config {
     bool enable_smap;             /* 启用SMEP */
     bool enable_smep;             /* 启用SMAP */
     bool enable_audit;            /* 启用审计 */
+    bool guard_pages;             /* 启用保护页 */
+    u32 guard_page_size;          /* 保护页大小 */
+    bool zero_on_free;            /* 释放时清零内存 */
+    bool verify_on_access;        /* 能力访问时验证 */
+    bool log_privileged_ops;      /* 记录特权操作 */
     
     /* 性能配置 */
     bool enable_perf_counters;    /* 启用性能计数器 */
@@ -140,12 +165,12 @@ typedef struct runtime_config {
     u32 serial_baud;              /* 串口波特率 */
     
     /* 能力系统配置 */
-    u32 max_capabilities;         /* 最大能力数量 */
     bool enable_capability_derivation;  /* 启用能力派生 */
+    u32 capability_revoke_delay_ms; /* 能力撤销延迟(毫秒) */
     
     /* 域配置 */
-    u32 max_domains;              /* 最大域数量 */
     u32 domain_stack_size_kb;     /* 域栈大小(KB) */
+    u32 max_domains_per_user;     /* 每个用户域的最大数量 */
     
     /* 中断配置 */
     u32 max_irqs;                 /* 最大中断数 */

@@ -25,12 +25,6 @@ static u32 g_syscall_queue_tail = 0;
 /* 性能统计中的定时器计数 */
 u64 g_timer_ticks = 0;
 
-/* 检查系统调用队列是否为空 */
-bool syscall_queue_empty(void)
-{
-    return g_syscall_queue_head == g_syscall_queue_tail;
-}
-
 /* 处理所有系统调用 */
 void g_syscall_process_all(void)
 {

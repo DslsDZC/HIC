@@ -16,6 +16,10 @@ UEFI_PROJECT = bootx64
 BIOS_PROJECT = bios
 VERSION = 1.0.0
 
+# Platform配置文件
+PLATFORM_YAML = platform.yaml
+PLATFORM_C = src/platform_yaml.c
+
 # 目录
 SRC_DIR    = src
 INCLUDE_DIR = include
@@ -27,7 +31,7 @@ BIN_DIR    = bin
 BUILD_TARGET ?= uefi
 
 # 源文件
-UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c $(SRC_DIR)/embedded_kernel_loader.c $(SRC_DIR)/fat32.c
+UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c $(SRC_DIR)/embedded_kernel_loader.c $(SRC_DIR)/fat32.c $(SRC_DIR)/platform_embedded.c $(PLATFORM_C)
 # UEFI_CRYPTO_SRCS = $(wildcard $(SRC_DIR)/crypto/*.c)  # 暂时禁用
 UEFI_LIB_SRCS  = $(wildcard $(LIB_DIR)/*.c)
 UEFI_SRCS      = $(UEFI_CORE_SRCS) $(UEFI_LIB_SRCS)
@@ -82,6 +86,24 @@ bios: $(BIN_DIR)/$(BIOS_PROJECT).bin
 # 双目标（同时构建）
 both: uefi bios
 	@echo "Both UEFI and BIOS bootloaders built"
+
+# 生成platform_yaml.c（从platform.yaml转换为C数组）
+$(PLATFORM_C): $(PLATFORM_YAML)
+	@echo "Converting platform.yaml to C code..."
+	@echo "/* Auto-generated from platform.yaml */" > $@
+	@echo "#include <stdint.h>" >> $@
+	@echo "" >> $@
+	@echo "static const unsigned char platform_yaml_data[] = {" >> $@
+	@xxd -i $< | tail -n +2 | head -n -2 >> $@
+	@echo "};" >> $@
+	@echo "" >> $@
+	@echo "const char* get_embedded_platform_config(void) {" >> $@
+	@echo "  return (const char*)platform_yaml_data;" >> $@
+	@echo "}" >> $@
+	@echo "" >> $@
+	@echo "uint32_t get_embedded_platform_config_size(void) {" >> $@
+	@echo "  return sizeof(platform_yaml_data);" >> $@
+	@echo "}" >> $@
 
 # 创建目录
 $(OBJ_DIR) $(BIN_DIR):

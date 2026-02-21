@@ -50,12 +50,12 @@ apm_mode_t minimal_uart_get_apm_mode(void)
 /* UART寄存器读写 */
 static inline u8 uart_read(phys_addr_t base, u16 offset)
 {
-    return *(volatile u8 *)(base + offset);
+    return hal_inb((u16)(base + offset));
 }
 
 static inline void uart_write(phys_addr_t base, u16 offset, u8 value)
 {
-    *(volatile u8 *)(base + offset) = value;
+    hal_outb((u16)(base + offset), value);
 }
 
 /* 计算波特率除数 */
@@ -115,21 +115,21 @@ void minimal_uart_configure(const uart_config_t *config)
     }
 
     /* 禁用中断 */
-    uart_write(config->base_addr, UART_IER, 0x00);
+    hal_outb((u16)(config->base_addr + UART_IER), 0x00);
 
     /* 启用DLAB，设置波特率 */
-    uart_write(config->base_addr, UART_LCR, UART_LCR_DLAB);
-    uart_write(config->base_addr, UART_DLL, (u8)(divisor & 0xFF));
-    uart_write(config->base_addr, UART_DLM, (u8)((divisor >> 8) & 0xFF));
+    hal_outb((u16)(config->base_addr + UART_LCR), UART_LCR_DLAB);
+    hal_outb((u16)(config->base_addr + UART_DLL), (u8)(divisor & 0xFF));
+    hal_outb((u16)(config->base_addr + UART_DLM), (u8)((divisor >> 8) & 0xFF));
 
     /* 设置线路控制（8N1或其他配置） */
-    uart_write(config->base_addr, UART_LCR, lcr);
+    hal_outb((u16)(config->base_addr + UART_LCR), lcr);
 
     /* 禁用FIFO */
-    uart_write(config->base_addr, UART_FCR, 0x00);
+    hal_outb((u16)(config->base_addr + UART_FCR), 0x00);
 
-    /* 启用RTS和DTR */
-    uart_write(config->base_addr, UART_MCR, 0x03);
+    /* 禁用RTS和DTR */
+    hal_outb((u16)(config->base_addr + UART_MCR), 0x00);
 
     /* 保存配置 */
     memcopy(&g_uart_config, config, sizeof(uart_config_t));
@@ -140,13 +140,8 @@ void minimal_uart_init_with_config(const uart_config_t *config)
 {
     minimal_uart_configure(config);
 
-    console_puts("[UART] Initialized (");
-    console_putu32(config->baud_rate);
-    console_puts(" ");
-    console_putu32(config->data_bits);
-    console_puts("N");
-    console_putu32(config->stop_bits);
-    console_puts(")\n");
+    /* 保存配置 */
+    memcopy(&g_uart_config, config, sizeof(uart_config_t));
 }
 
 /* 使用默认配置初始化UART */
@@ -158,50 +153,41 @@ void minimal_uart_init(void)
 /* 自动分配模式：引导层自动分配，写入文件，再从文件读取 */
 void minimal_uart_init_apm_auto(const char *config_file_path)
 {
-    console_puts("[UART] APM Auto Mode: Loading config from file\n");
-    console_puts("[UART] Config file: ");
-    console_puts(config_file_path);
-    console_puts("\n");
+    (void)config_file_path;  /* 暂时忽略 */
 
     /* TODO: 从配置文件读取串口配置 */
     /* 这里需要实现文件读取功能 */
     /* 由于内核早期阶段可能没有文件系统，这部分由引导层处理 */
     /* 引导层自动分配串口配置，写入文件，内核启动时读取 */
 
-    console_puts("[UART] Using default config (auto allocation mode)\n");
     minimal_uart_init();
 }
 
 /* 配置文件模式：直接在配置文件中写入，然后读取 */
 void minimal_uart_init_apm_config(const char *yaml_data, size_t yaml_size)
 {
-    console_puts("[UART] APM Config Mode: Loading config from YAML\n");
+    (void)yaml_data;  /* 暂时忽略 */
+    (void)yaml_size;  /* 暂时忽略 */
+
     minimal_uart_init_from_yaml(yaml_data, yaml_size);
 }
 
 /* 从引导信息获取YAML数据并初始化（配置文件模式） */
 void minimal_uart_init_from_bootinfo(void)
 {
-    console_puts("[UART] Initializing from boot info\n");
-
     if (!g_boot_info) {
-        console_puts("[UART] No boot info, using default config\n");
         minimal_uart_init();
         return;
     }
 
+    /* 优先使用config_data（外部YAML配置） */
     const char *yaml_data = (const char *)g_boot_info->config_data;
     size_t yaml_size = g_boot_info->config_size;
 
     if (!yaml_data || yaml_size == 0) {
-        console_puts("[UART] No YAML data in boot info, using default config\n");
         minimal_uart_init();
         return;
     }
-
-    console_puts("[UART] YAML data size: ");
-    console_putu64(yaml_size);
-    console_puts(" bytes\n");
 
     minimal_uart_init_from_yaml(yaml_data, yaml_size);
 }
@@ -211,13 +197,11 @@ void minimal_uart_init_from_yaml(const char *yaml_data, size_t yaml_size)
 {
     yaml_parser_t *parser = yaml_parser_create(yaml_data, yaml_size);
     if (!parser) {
-        console_puts("[UART] Failed to create YAML parser, using default config\n");
         minimal_uart_init();
         return;
     }
 
     if (yaml_parse(parser) != 0) {
-        console_puts("[UART] Failed to parse YAML, using default config\n");
         minimal_uart_init();
         yaml_parser_destroy(parser);
         return;
@@ -225,16 +209,24 @@ void minimal_uart_init_from_yaml(const char *yaml_data, size_t yaml_size)
 
     yaml_node_t *root = yaml_get_root(parser);
     if (!root) {
-        console_puts("[UART] No YAML root, using default config\n");
         minimal_uart_init();
         yaml_parser_destroy(parser);
         return;
     }
 
-    /* 查找串口配置节点 */
+    /* 查找串口配置节点 - 支持两种路径：debug.serial 和 uart */
     yaml_node_t *uart_node = yaml_find_node(root, "uart");
+    
+    /* 如果找不到uart节点，尝试从debug.serial获取 */
     if (!uart_node) {
-        console_puts("[UART] No UART config in YAML, using default config\n");
+        yaml_node_t *debug_node = yaml_find_node(root, "debug");
+        if (debug_node && debug_node->type == YAML_TYPE_MAPPING) {
+            uart_node = yaml_find_node(debug_node, "serial");
+        }
+    }
+    
+    /* 如果还是找不到，使用默认配置 */
+    if (!uart_node) {
         minimal_uart_init();
         yaml_parser_destroy(parser);
         return;
@@ -243,14 +235,14 @@ void minimal_uart_init_from_yaml(const char *yaml_data, size_t yaml_size)
     uart_config_t config;
     memcopy(&config, &g_uart_config, sizeof(uart_config_t));
 
-    /* 读取基地址 */
-    yaml_node_t *node = yaml_find_node(uart_node, "base");
+    /* 读取端口地址 */
+    yaml_node_t *node = yaml_find_node(uart_node, "port");
     if (node && node->value) {
         config.base_addr = (phys_addr_t)yaml_get_u64(node, UART_DEFAULT_BASE);
     }
 
     /* 读取波特率 */
-    node = yaml_find_node(uart_node, "baud");
+    node = yaml_find_node(uart_node, "baud_rate");
     if (node && node->value) {
         config.baud_rate = (u32)yaml_get_u64(node, UART_DEFAULT_BAUD);
     }
@@ -300,12 +292,12 @@ void minimal_uart_init_from_yaml(const char *yaml_data, size_t yaml_size)
 void minimal_uart_putc(char c)
 {
     /* 等待发送保持寄存器就绪 */
-    while (!(uart_read(g_uart_config.base_addr, UART_LSR) & UART_LSR_THRE)) {
+    while (!(hal_inb((u16)(g_uart_config.base_addr + UART_LSR)) & UART_LSR_THRE)) {
         /* 等待 */
     }
 
     /* 发送字符 */
-    uart_write(g_uart_config.base_addr, UART_THR, (u8)c);
+    hal_outb((u16)(g_uart_config.base_addr + UART_THR), (u8)c);
 }
 
 /* 发送字符串 */

@@ -18,17 +18,28 @@ import struct
 import json
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Any
 from typing import Dict, List, Optional, Tuple
 
 # 配置
+# __file__ 是 scripts/build_system.py，所以 parent 是 scripts/，parent.parent 是项目根目录
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 CONFIG = {
     "project": "HIC System",
     "version": "0.1.0",
-    "root_dir": Path(__file__).parent,
-    "build_dir": Path(__file__).parent / "build",
-    "output_dir": Path(__file__).parent / "output",
+    "root_dir": PROJECT_ROOT,
+    "build_dir": PROJECT_ROOT / "build",
+    "output_dir": PROJECT_ROOT / "output",
     "sign_key_file": "signing_key.pem",
     "sign_cert_file": "signing_cert.pem",
+}
+
+# 存储找到的Python环境路径
+PYTHON_ENVS = {
+    "qt": None,
+    "gtk": None,
 }
 
 
@@ -511,22 +522,240 @@ class BuildSystem:
         self.log("=" * 60)
 
 
-def main():
-    """主函数"""
+def check_interface_available(interface: str) -> bool:
+    """检查指定的界面是否可用"""
+    import subprocess
+    import sys
+    import os
+    
+    def try_import_in_env(module_name: str, env_python: str = None) -> bool:
+        """尝试在指定Python环境中导入模块"""
+        try:
+            if env_python:
+                # 使用指定Python环境
+                result = subprocess.run(
+                    [env_python, "-c", f"import {module_name}"],
+                    capture_output=True,
+                    timeout=5
+                )
+                return result.returncode == 0
+            else:
+                # 使用当前Python环境
+                __import__(module_name)
+                return True
+        except:
+            return False
+    
+    def has_display_environment() -> bool:
+        """检查是否有显示环境"""
+        # 检查X11或Wayland显示环境
+        if os.environ.get('DISPLAY'):
+            return True
+        if os.environ.get('WAYLAND_DISPLAY'):
+            return True
+        if os.environ.get('XDG_SESSION_TYPE') in ['x11', 'wayland']:
+            return True
+        return False
+    
+    if interface == "qt":
+        # Qt需要显示环境
+        if not has_display_environment():
+            return False
+            
+        # 尝试在多个Python环境中检测PyQt6
+        pythons_to_try = [
+            sys.executable,  # 当前Python
+            "/usr/bin/python3",  # 系统Python3
+            "/usr/bin/python",  # 系统python
+            "/bin/python3",  # /bin/python3
+        ]
+        
+        for py in pythons_to_try:
+            if try_import_in_env("PyQt6", py):
+                PYTHON_ENVS["qt"] = py  # 保存找到的Python环境
+                return True
+        return False
+        
+    elif interface == "gtk":
+        # GTK需要显示环境
+        if not has_display_environment():
+            return False
+            
+        # 尝试在多个Python环境中检测GTK
+        pythons_to_try = [
+            sys.executable,
+            "/usr/bin/python3",
+            "/usr/bin/python",
+            "/bin/python3",
+        ]
+        
+        for py in pythons_to_try:
+            if try_import_in_env("gi", py):
+                result = subprocess.run(
+                    [py, "-c", "import gi; gi.require_version('Gtk', '3.0')"],
+                    capture_output=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    PYTHON_ENVS["gtk"] = py  # 保存找到的Python环境
+                    return True
+        return False
+        
+    elif interface == "tui":
+        import curses
+        import os
+        # 只检查curses模块是否可用，不初始化
+        # 实际初始化时如果失败会自动降级
+        return True
+    elif interface == "interactive":
+        # 交互式CLI总是可用
+        return True
+    elif interface == "cli":
+        return True  # CLI总是可用
+    return False
+
+
+def load_build_system_config() -> Dict[str, Any]:
+    """从platform.yaml加载构建系统配置"""
+    config_file = CONFIG["root_dir"] / "src" / "bootloader" / "platform.yaml"
+    default_config = {
+        "interface": {
+            "primary": "auto",
+            "fallback_chain": ["qt", "gtk", "tui", "interactive", "cli"],
+            "auto_detect": True
+        },
+        "localization": {
+            "language": "zh_CN",
+            "auto_detect": True,
+            "fallback_language": "en_US"
+        },
+        "presets": {
+            "default": "balanced"
+        }
+    }
+    
+    if not config_file.exists():
+        return default_config
+    
+    try:
+        import yaml
+        with open(config_file, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+        
+        if "build_system" in data:
+            return {**default_config, **data["build_system"]}
+        
+        return default_config
+    except Exception as e:
+        print(f"警告: 加载构建配置失败: {e}，使用默认配置")
+        return default_config
+
+
+def detect_system_language() -> str:
+    """检测系统语言"""
+    import locale
+    
+    try:
+        # 使用新的API（Python 3.11+）
+        if hasattr(locale, 'getencoding'):
+            import os
+            sys_lang = os.environ.get('LANG', '').split('.')[0]
+        else:
+            # 旧API（向后兼容）
+            sys_lang = locale.getdefaultlocale()[0]
+        
+        if sys_lang:
+            # 映射系统语言到支持的语言
+            lang_map = {
+                'zh_CN': 'zh_CN',
+                'zh_SG': 'zh_CN',
+                'zh_TW': 'zh_CN',  # 可以扩展为zh_TW
+                'zh_HK': 'zh_CN',
+                'en_US': 'en_US',
+                'en_GB': 'en_US',
+                'en_AU': 'en_US',
+                'en_CA': 'en_US',
+                'en_NZ': 'en_US',
+                'en_IE': 'en_US',
+                'en_ZA': 'en_US',
+                'en_IN': 'en_US',
+                'ja_JP': 'ja_JP',
+                'de_DE': 'de_DE',
+                'de_AT': 'de_DE',
+                'de_CH': 'de_DE',
+                'de_BE': 'de_DE',
+                'de_LU': 'de_DE',
+                'de_LI': 'de_DE'
+            }
+            return lang_map.get(sys_lang, 'en_US')
+    except:
+        pass
+    
+    return 'en_US'
+
+
+def launch_interface(interface: str, language: str, args) -> int:
+    """启动指定的界面"""
+    try:
+        if interface == "qt":
+            # 使用检测到的Python环境启动Qt GUI
+            python_env = PYTHON_ENVS.get("qt", sys.executable)
+            result = subprocess.run(
+                [python_env, str(CONFIG["root_dir"] / "scripts" / "build_qt.py")] + args,
+                cwd=CONFIG["root_dir"]
+            )
+            return result.returncode
+        elif interface == "gtk":
+            # 使用检测到的Python环境启动GTK GUI
+            python_env = PYTHON_ENVS.get("gtk", sys.executable)
+            result = subprocess.run(
+                [python_env, str(CONFIG["root_dir"] / "scripts" / "build_gui.py")] + args,
+                cwd=CONFIG["root_dir"]
+            )
+            return result.returncode
+        elif interface == "tui":
+            import curses
+            from build_tui import main as tui_main
+            sys.argv = [sys.argv[0]] + args
+            try:
+                return curses.wrapper(tui_main)
+            except Exception as e:
+                print(f"启动TUI界面失败: {e}")
+                print("自动降级到交互式命令行界面...")
+                return launch_interface("interactive", None, args)
+        elif interface == "interactive":
+            from build_interactive import main as interactive_main
+            sys.argv = [sys.argv[0]] + args
+            return interactive_main()
+        elif interface == "cli":
+            return cli_main(args)
+    except Exception as e:
+        print(f"启动{interface}界面失败: {e}")
+        # 如果不是CLI或interactive界面，尝试降级到interactive
+        if interface != "cli" and interface != "interactive":
+            print("自动降级到交互式命令行界面...")
+            return launch_interface("interactive", None, args)
+        return 1
+    
+    return 0
+
+
+def cli_main(args: List[str]) -> int:
+    """命令行界面主函数"""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="HIC系统构建系统",
+        description="HIC系统构建系统 - 命令行模式",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s                    # 构建所有组件
-  %(prog)s --target uefi      # 仅构建UEFI引导程序
+  %(prog)s                    # 启动交互式界面
   %(prog)s --target kernel    # 仅构建内核
   %(prog)s --target uefi bios # 构建UEFI和BIOS引导程序
   %(prog)s --clean            # 清理构建文件
   %(prog)s --config           # 显示当前编译配置
   %(prog)s --config-runtime   # 显示运行时配置说明
+  %(prog)s --preset debug     # 使用debug预设配置
   %(prog)s --help             # 显示帮助
         """
     )
@@ -534,8 +763,8 @@ def main():
     parser.add_argument(
         "--target",
         nargs="+",
-        choices=["uefi", "bios", "kernel"],
-        help="构建目标 (uefi, bios, kernel)"
+        choices=["uefi", "bios", "kernel", "all"],
+        help="构建目标 (uefi, bios, kernel, all)"
     )
 
     parser.add_argument(
@@ -556,21 +785,34 @@ def main():
         help="显示运行时配置说明"
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--preset",
+        choices=["balanced", "release", "debug", "minimal", "performance"],
+        help="使用预设配置"
+    )
+
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="构建后自动安装"
+    )
+
+    parsed_args = parser.parse_args(args)
+
+    # 如果没有参数，启动交互式界面
+    if len(args) == 0 or (len(args) == 1 and args[0] == ['--help']):
+        # 启动交互式界面
+        try:
+            return launch_interface("interactive", "zh_CN", [])
+        except:
+            # 如果交互式界面失败，显示帮助
+            parser.print_help()
+            return 1
 
     build_system = BuildSystem()
 
-    # 显示配置模式
-    if args.config:
-        build_system.show_config()
-        return 0
-    
-    if args.config_runtime:
-        build_system.show_runtime_config()
-        return 0
-
     # 清理模式
-    if args.clean:
+    if parsed_args.clean:
         build_system.log("清理构建文件...")
         import shutil
         if build_system.config["build_dir"].exists():
@@ -578,21 +820,161 @@ def main():
         if build_system.config["output_dir"].exists():
             shutil.rmtree(build_system.config["output_dir"])
 
-        # 清理子目录
-        bootloader_dir = build_system.config["root_dir"] / "bootloader"
-        kernel_dir = build_system.config["root_dir"] / "kernel"
-
-        subprocess.run(["make", "clean"], cwd=bootloader_dir, capture_output=True)
-        subprocess.run(["make", "clean"], cwd=kernel_dir, capture_output=True)
+        subprocess.run(["make", "clean"], cwd=ROOT_DIR, capture_output=True)
 
         build_system.log("清理完成")
         return 0
 
-    # 构建模式
-    if build_system.build(args.target):
+    # 显示配置模式
+    if parsed_args.config:
+        build_system.show_config()
         return 0
+    
+    if parsed_args.config_runtime:
+        build_system.show_runtime_config()
+        return 0
+
+    # 使用预设配置
+    if parsed_args.preset:
+        print(f"应用预设配置: {parsed_args.preset}")
+        success = run_command(["make", f"build-{parsed_args.preset}"])
+        if parsed_args.install and success:
+            run_command(["make", "install"])
+        return 0 if success else 1
+
+    # 构建模式
+    targets = parsed_args.target if parsed_args.target else []
+    
+    if not targets:
+        # 默认构建全部
+        success = run_command(["make", "all"])
     else:
-        return 1
+        # 根据目标构建
+        if "all" in targets:
+            success = run_command(["make", "all"])
+        else:
+            success = True
+            for target in targets:
+                if target == "uefi":
+                    if not run_command(["make", "bootloader"]):
+                        success = False
+                elif target == "bios":
+                    if not run_command(["make", "bootloader"]):
+                        success = False
+                elif target == "kernel":
+                    if not run_command(["make", "kernel"]):
+                        success = False
+    
+    # 自动安装
+    if parsed_args.install and success:
+        run_command(["make", "install"])
+    
+    return 0 if success else 1
+
+
+def run_command(command: List[str], description: str = "") -> bool:
+    """运行命令"""
+    import subprocess
+    
+    if description:
+        print(f"{description}...")
+    
+    print(f"执行: {' '.join(command)}")
+    
+    result = subprocess.run(
+        command,
+        cwd=ROOT_DIR,
+        text=True
+    )
+    
+    return result.returncode == 0
+
+
+def main():
+    """主函数 - 支持界面自动选择和降级"""
+    import argparse
+    
+    # 解析基础参数（界面选择相关）
+    base_parser = argparse.ArgumentParser(
+        description="HIC系统构建系统",
+        add_help=False
+    )
+    
+    base_parser.add_argument(
+        "--interface",
+        choices=["auto", "qt", "gtk", "tui", "interactive", "cli"],
+        default="auto",
+        help="指定界面类型 (默认: auto)"
+    )
+    
+    base_parser.add_argument(
+        "--language",
+        choices=["zh_CN", "en_US", "ja_JP", "de_DE"],
+        default=None,
+        help="指定语言 (默认: 自动检测)"
+    )
+    
+    base_args, remaining_args = base_parser.parse_known_args()
+    
+    # 加载构建系统配置
+    build_config = load_build_system_config()
+    
+    # 确定语言
+    if base_args.language:
+        language = base_args.language
+    elif build_config["localization"]["auto_detect"]:
+        language = detect_system_language()
+    else:
+        language = build_config["localization"]["language"]
+    
+    # 确定界面
+    if base_args.interface == "auto":
+        interface = build_config["interface"]["primary"]
+        if interface == "auto" or not build_config["interface"]["auto_detect"]:
+            interface = "auto"  # 启用自动检测
+    else:
+        interface = base_args.interface
+    
+    # 自动检测或使用指定界面
+    if interface == "auto":
+        fallback_chain = build_config["interface"]["fallback_chain"]
+        # 优先尝试GUI界面，因为它们更友好
+        for iface in fallback_chain:
+            if check_interface_available(iface):
+                print(f"使用 {iface.upper()} 界面")
+                try:
+                    return launch_interface(iface, language, remaining_args)
+                except Exception as e:
+                    print(f"启动 {iface.upper()} 界面失败: {e}")
+                    print("尝试下一个可用界面...")
+                    continue
+        # 所有界面都不可用，使用交互式CLI（不是纯CLI）
+        print("未检测到可用的图形界面，使用交互式命令行界面")
+        return launch_interface("interactive", language, remaining_args)
+    else:
+        # 使用指定的界面
+        if check_interface_available(interface):
+            print(f"使用 {interface.upper()} 界面")
+            try:
+                return launch_interface(interface, language, remaining_args)
+            except Exception as e:
+                print(f"启动 {interface.upper()} 界面失败: {e}")
+                # 如果是指定界面失败，不自动降级，返回错误
+                return 1
+        else:
+            print(f"警告: {interface.upper()} 界面不可用，尝试降级...")
+            fallback_chain = build_config["interface"]["fallback_chain"]
+            for iface in fallback_chain:
+                if iface != interface and check_interface_available(iface):
+                    print(f"降级到 {iface.upper()} 界面")
+                    try:
+                        return launch_interface(iface, language, remaining_args)
+                    except Exception as e:
+                        print(f"启动 {iface.upper()} 界面失败: {e}")
+                        continue
+            # 所有界面都不可用，使用交互式CLI
+            print("所有图形界面都不可用，使用交互式命令行界面")
+            return launch_interface("interactive", language, remaining_args)
 
 
 if __name__ == "__main__":

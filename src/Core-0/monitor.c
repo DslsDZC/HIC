@@ -15,7 +15,7 @@
 #include "lib/console.h"
 
 /* 最大服务数量 */
-#define MAX_SERVICES  128
+#define MAX_SERVICES  64     /* 从128减小到64，减少BSS段大小 */
 
 /* 服务信息表 */
 static service_info_t g_services[MAX_SERVICES];

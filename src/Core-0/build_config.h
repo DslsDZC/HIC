@@ -124,21 +124,21 @@ typedef struct build_config {
     u32                 num_devices;
     
     /* 内存区域 */
-    mem_region_t        memory_regions[128];
+    mem_region_t        memory_regions[32];   /* 从128减小到32 */
     u32                 num_memory_regions;
     
     /* 服务配置 */
-    service_config_t    services[16];
+    service_config_t    services[8];         /* 从16减小到8 */
     u32                 num_services;
     
     /* 生成的静态配置 */
-    memory_layout_entry_t  memory_layout[64];
+    memory_layout_entry_t  memory_layout[16]; /* 从64减小到16 */
     u32                    num_memory_layouts;
     
-    interrupt_route_t     interrupt_routes[256];
+    interrupt_route_t     interrupt_routes[64]; /* 从256减小到64 */
     u32                   num_interrupt_routes;
     
-    capability_allocation_t capability_allocs[256];
+    capability_allocation_t capability_allocs[64]; /* 从256减小到64 */
     u32                    num_capability_allocs;
     
     device_init_sequence_t device_init_seq[32];

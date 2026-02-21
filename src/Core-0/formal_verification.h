@@ -24,9 +24,9 @@
 #define FV_DEADLOCK_DETECTED 5
 
 /* 常量定义 */
-#define MAX_DOMAINS          256
+#define MAX_DOMAINS          128    /* 从256减小到128，减少BSS段大小 */
 #define MAX_CAPABILITIES     65536
-#define MAX_THREADS          1024
+#define MAX_THREADS          256    /* 从1024减小到256，减少BSS段大小 */
 #define DEADLOCK_THRESHOLD   5000  // 5秒
 
 /* 内存区域 */

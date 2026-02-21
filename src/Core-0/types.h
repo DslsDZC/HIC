@@ -73,13 +73,13 @@ typedef u32 cap_id_t;
 /* 域标识符 */
 typedef u32 domain_id_t;
 #define HIC_DOMAIN_CORE   0      /* Core-0自身 */
-#define HIC_DOMAIN_MAX    65536  /* 最大域数量 */
+#define HIC_DOMAIN_MAX    256    /* 从65536减小到256，满足形式化验证要求 */
 #define HIC_INVALID_DOMAIN ((domain_id_t)-1)  /* 无效域ID */
 
 /* 线程标识符 */
 typedef u32 thread_id_t;
 #define INVALID_THREAD  ((thread_id_t)-1)
-#define MAX_THREADS     1024
+#define MAX_THREADS     256    /* 从1024减小到256，减少BSS段大小 */
 
 /* 优先级 */
 typedef u8 priority_t;

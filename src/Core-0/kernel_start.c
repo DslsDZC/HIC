@@ -13,6 +13,9 @@
 #include "types.h"
 #include "lib/console.h"
 
+/* 声明kernel_boot_info_init函数（在boot_info.c中定义） */
+extern void kernel_boot_info_init(hic_boot_info_t* boot_info);
+
 /**
  * 内核入口点（汇编调用）
  * 
@@ -21,6 +24,6 @@
  */
 void kernel_start(hic_boot_info_t* boot_info) {
     // 直接转发到实际的内核入口点
-    // console_init会在kernel_entry中调用
-    kernel_entry(boot_info);
+    // console_init会在kernel_boot_info_init中调用
+    kernel_boot_info_init(boot_info);
 }

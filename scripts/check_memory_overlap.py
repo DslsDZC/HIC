@@ -18,7 +18,7 @@ class MemoryRegion:
     name: str
     base: int  # 物理基地址
     size: int   # 区域大小
-    end: int   # 结束地址（base + size）
+    end: int = 0  # 结束地址（base + size），由__post_init__自动计算
     
     def __post_init__(self):
         self.end = self.base + self.size
@@ -138,7 +138,11 @@ class MemoryOverlapChecker:
             return True
             
         except Exception as e:
-            self.errors.append(f"无法解析内核内存布局 {elf_path}: {e}")
+            import traceback
+            error_msg = f"无法解析内核内存布局 {elf_path}: {e}"
+            self.errors.append(error_msg)
+            print(f"[ERROR] {error_msg}")
+            print(traceback.format_exc())
             return False
     
     def extract_service_memory_regions(self) -> bool:
@@ -210,11 +214,18 @@ class MemoryOverlapChecker:
         print("\n[CHECK] 开始检查内存区域重叠...")
         has_overlap = False
         
+        # 定义父子区域关系（父区域不应与子区域比较）
+        parent_regions = {"kernel.total"}  # kernel.total 包含所有内核段
+        
         # 两两比较检查重叠
         for i in range(len(self.regions)):
             for j in range(i + 1, len(self.regions)):
                 r1 = self.regions[i]
                 r2 = self.regions[j]
+                
+                # 如果一个区域是另一个区域的子区域，跳过检查
+                if self._is_parent_child_relationship(r1, r2):
+                    continue
                 
                 if r1.overlaps_with(r2):
                     error_msg = f"内存区域重叠: {r1.name} <-> {r2.name}"
@@ -226,6 +237,16 @@ class MemoryOverlapChecker:
             print("[CHECK] ✓ 所有内存区域无重叠")
         
         return not has_overlap
+    
+    def _is_parent_child_relationship(self, r1: MemoryRegion, r2: MemoryRegion) -> bool:
+        """检查两个区域是否是父子关系"""
+        # 检查r1是否完全包含r2
+        if r1.base <= r2.base and r1.end >= r2.end:
+            return True
+        # 检查r2是否完全包含r1
+        if r2.base <= r1.base and r2.end >= r1.end:
+            return True
+        return False
     
     def check_memory_bounds(self) -> bool:
         """检查内存区域是否超出物理内存范围"""

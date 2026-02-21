@@ -276,6 +276,12 @@ void runtime_config_load_from_yaml(const char* yaml_data, size_t yaml_size)
     
     console_puts("[CONFIG] Loading configuration from YAML...\n");
     
+    /* 首先加载系统限制配置（影响常量定义） */
+    hic_status_t status = yaml_load_system_limits(yaml_data, yaml_size);
+    if (status != HIC_SUCCESS) {
+        console_puts("[CONFIG] WARNING: Failed to load system limits\n");
+    }
+    
     /* 解析YAML中的配置项 */
     /* 使用YAML解析器加载配置 */
     yaml_parser_t* parser = yaml_parser_create(yaml_data, yaml_size);

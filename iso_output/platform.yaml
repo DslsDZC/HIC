@@ -84,6 +84,79 @@ dynamic_modules:
     - "ps2_mouse.hicmod"          # PS/2鼠标驱动
     - "uart_driver.hicmod"        # UART驱动
 
+# 系统限制配置（影响内核大小和性能）
+system_limits:
+  # 域配置
+  max_domains: 256               # 最大域数量（影响BSS段大小）
+  max_domains_per_user: 64       # 每个用户域的最大数量
+  
+  # 能力系统配置
+  max_capabilities: 2048         # 全局能力表大小（影响BSS段大小）
+  capabilities_per_domain: 128   # 每个域的最大能力数
+  
+  # 线程配置
+  max_threads: 256               # 最大线程数（影响BSS段大小）
+  threads_per_domain: 16         # 每个域的最大线程数
+  default_stack_size: 16384      # 默认栈大小（16KB）
+  
+  # 服务配置
+  max_services: 64               # 最大服务数
+  services_per_user: 16          # 每个用户的服务数
+  
+  # 硬件探测配置
+  max_pci_devices: 64            # 最大PCI设备数
+  max_memory_regions: 32         # 最大内存区域数
+  max_interrupt_routes: 64       # 最大中断路由数
+  
+  # 内核大小限制（形式化验证要求）
+  kernel_size_limit: 2097152     # 2MB内核大小限制
+  bss_size_limit: 524288         # 512KB BSS段大小限制
+
+# 内存配置
+memory:
+  # 物理内存布局
+  layout:
+    kernel_base: 0x00100000      # 内核基地址（1MB）
+    kernel_size: 0x00200000      # 内核大小（2MB）
+    
+    # 域内存池
+    domain_pool_base: 0x01000000 # 域内存池基地址（16MB）
+    domain_pool_size: 0x10000000 # 域内存池大小（256MB）
+    
+    # 应用内存池
+    app_pool_base: 0x11000000    # 应用内存池基地址（272MB）
+    app_pool_size: 0x20000000    # 应用内存池大小（512MB）
+  
+  # 页表配置
+  page_tables:
+    max_page_tables: 256         # 最大页表数
+    page_table_entries: 512       # 每个页表的条目数
+  
+  # 缓存配置
+  cache:
+    page_cache_percent: 20        # 页面缓存百分比
+    buffer_cache_size: 1048576    # 缓冲区缓存大小（1MB）
+
+# 调度器配置
+scheduler:
+  policy: "priority_rr"           # 调度策略: priority_rr, round_robin, fifo
+  time_slice_ms: 10              # 时间片长度（毫秒）
+  preemptive: true               # 抢占式调度
+  
+  # 优先级配置
+  priorities:
+    realtime: 0-2                 # 实时优先级
+    high: 3-10                   # 高优先级
+    normal: 11-50                # 普通优先级
+    low: 51-100                  # 低优先级
+    idle: 101-127                # 空闲优先级
+  
+  # 负载均衡
+  load_balancing:
+    enabled: true                # 启用负载均衡
+    threshold_percent: 80        # 负载均衡阈值
+    migration_interval_ms: 100   # 迁移间隔
+
 # 资源配额（默认值，运行时可调整）
 resource_quotas:
   # 域默认配额
@@ -109,30 +182,49 @@ security:
   
   # 能力系统配置
   capability:
-    max_capabilities: 65536       # 全局能力表大小
+    max_capabilities: 2048        # 全局能力表大小（从system_limits读取）
     revoke_delay_ms: 100          # 撤销延迟（毫秒）
+    verify_on_access: true        # 每次访问时验证
   
   # 内存保护
   memory:
     guard_pages: true             # 启用保护页
     guard_page_size: 4096         # 保护页大小
     zero_on_free: true            # 释放时清零内存
+    
+  # 特权访问控制
+  privileged_access:
+    enabled: true                # 启用特权访问通道
+    access_check_enabled: true    # 启用访问检查
+    log_privileged_ops: true      # 记录特权操作
 
 # 调试选项
 debug:
   console_log: true               # 控制台日志
   serial_log: true
-  serial:
-    port: 0x3F8              # COM1串口地址
-    baud_rate: 115200        # 波特率
-    data_bits: 8             # 数据位
-    stop_bits: 1             # 停止位
-    parity: "none"           # 校验位: none, odd, even, mark, space
-    early_init: true         # 早期初始化（内核启动前）
-    buffer_size: 4096       # 串口缓冲区大小               # 串口日志
   panic_on_bug: true              # Bug检查失败时Panic
   stack_canary: true              # 栈金丝雀保护
   bounds_check: false             # 边界检查（性能影响大）
+
+# 串口配置（全局配置，不限于调试模式）
+uart:
+  port: 0x3F8                    # COM1串口地址
+  baud_rate: 115200              # 波特率
+  data_bits: 8                   # 数据位
+  stop_bits: 1                   # 停止位
+  parity: "none"                 # 校验位: none, odd, even, mark, space
+  early_init: true               # 早期初始化（内核启动前）
+  buffer_size: 4096              # 串口缓冲区大小
+
+# 调试模式下的串口配置（继承全局配置）
+debug_serial:
+  port: 0x3F8                    # COM1串口地址
+  baud_rate: 115200              # 波特率
+  data_bits: 8                   # 数据位
+  stop_bits: 1                   # 停止位
+  parity: "none"                 # 校验位: none, odd, even, mark, space
+  early_init: true               # 早期初始化（内核启动前）
+  buffer_size: 4096              # 串口缓冲区大小
 
 # 部署模式
 deployment:

@@ -1,20 +1,25 @@
 #!/usr/bin/python3
+# -*- coding: utf-8 -*-
 """
-HIC系统构建系统 - 图形化GUI模式
+HIC系统构建系统 - GTK GUI模式
 使用GTK3库实现图形用户界面
-遵循TD/滚动更新.md文档
+与Qt界面保持功能一致
+支持多语言、主题切换、配置预设
 """
 
 import sys
-import subprocess
 import os
+import subprocess
 import threading
-from typing import Optional, List
+import json
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from datetime import datetime
 
 try:
     import gi
     gi.require_version('Gtk', '3.0')
-    from gi.repository import Gtk, GLib, Pango
+    from gi.repository import Gtk, GLib, Pango, Gdk
 except ImportError:
     print("错误: 缺少 GTK3 库")
     print("请安装以下依赖:")
@@ -26,9 +31,1079 @@ except ImportError:
 # 项目信息
 PROJECT = "HIC System"
 VERSION = "0.1.0"
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-BUILD_DIR = os.path.join(ROOT_DIR, "build")
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(ROOT_DIR, "output"))
+ROOT_DIR = Path(__file__).parent.parent
+BUILD_DIR = ROOT_DIR / "build"
+OUTPUT_DIR = ROOT_DIR / "output"
+PLATFORM_YAML = ROOT_DIR / "src" / "bootloader" / "platform.yaml"
+
+# 翻译加载函数
+def load_translations():
+    """从translations文件夹加载翻译"""
+    translations_dir = Path(__file__).parent / "translations"
+    
+    try:
+        import yaml
+        
+        # 加载翻译键
+        keys_file = translations_dir / "_keys.yaml"
+        if keys_file.exists():
+            with open(keys_file, 'r', encoding='utf-8') as f:
+                keys_data = yaml.safe_load(f)
+                language_keys = {}
+                for key in keys_data.get('language_keys', []):
+                    language_keys[key] = key
+        else:
+            language_keys = {}
+        
+        # 加载语言显示名称
+        display_names_file = translations_dir / "_display_names.yaml"
+        if display_names_file.exists():
+            with open(display_names_file, 'r', encoding='utf-8') as f:
+                display_names_data = yaml.safe_load(f)
+                language_display_names = display_names_data.get('language_display_names', {})
+        else:
+            language_display_names = {}
+        
+        # 加载所有语言文件
+        I18N = {}
+        for lang_file in translations_dir.glob("*.yaml"):
+            # 跳过配置文件
+            if lang_file.name.startswith('_'):
+                continue
+            
+            lang_code = lang_file.stem  # 文件名就是语言代码
+            with open(lang_file, 'r', encoding='utf-8') as f:
+                translations = yaml.safe_load(f)
+                I18N[lang_code] = translations
+        
+        if I18N:
+            return I18N, language_keys, language_display_names
+            
+    except Exception as e:
+        print(f"警告: 加载翻译文件失败 ({e}), 使用默认英语翻译")
+    
+    # 如果加载失败，返回基本的英语翻译
+    return {"en_US": {}}, {}, {}
+
+# 加载翻译
+I18N, LANGUAGE_KEYS, LANGUAGE_DISPLAY_NAMES = load_translations()
+
+class HICBuildGUI(Gtk.ApplicationWindow):
+    """HIC构建系统GTK GUI主窗口"""
+    
+    def __init__(self, app):
+        super().__init__(application=app)
+        self.current_language = "zh_CN"
+        self.current_theme = "dark"
+        self.current_preset = "balanced"
+        self.is_building = False
+        self.build_thread = None
+        
+        # 保存UI元素引用
+        self.ui_elements = {}
+        
+        # 加载配置
+        self.load_config()
+        
+        # 初始化UI
+        self.init_ui()
+        self.apply_theme()
+        self.retranslate_ui()
+    
+    def _(self, key: str) -> str:
+        """翻译函数"""
+        if self.current_language in I18N:
+            return I18N[self.current_language].get(key, key)
+        return key
+
+    def update_language_label(self):
+        """更新语言标签，显示当前选择的语言名称"""
+        languages = I18N["zh_CN"]["languages"]
+        if self.current_language in languages:
+            current_language_name = languages[self.current_language]
+            self.language_label.set_text(current_language_name + ":")
+
+    def load_config(self):
+        """从YAML加载配置"""
+        try:
+            import yaml
+            if PLATFORM_YAML.exists():
+                with open(PLATFORM_YAML, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f)
+                    if 'build_system' in data:
+                        bs = data['build_system']
+                        if 'localization' in bs:
+                            self.current_language = bs['localization'].get('language', 'zh_CN')
+                        if 'presets' in bs:
+                            self.current_preset = bs['presets'].get('default', 'balanced')
+        except:
+            pass
+    
+    def init_ui(self):
+        """初始化UI"""
+        self.set_default_size(1200, 800)
+        self.set_title(self._("title"))
+        
+        # 创建主容器
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(main_box)
+        
+        # 创建菜单栏
+        self.create_menu_bar()
+        main_box.pack_start(self.menu_bar, False, False, 0)
+        
+        # 创建工具栏
+        self.create_tool_bar()
+        main_box.pack_start(self.toolbar, False, False, 0)
+        
+        # 创建中央部件
+        self.create_central_widget()
+        main_box.pack_start(self.central_paned, True, True, 0)
+        
+        # 创建状态栏
+        self.create_status_bar()
+        main_box.pack_start(self.status_bar, False, False, 0)
+        
+        self.show_all()
+    
+    def create_menu_bar(self):
+        """创建菜单栏"""
+        self.menu_bar = Gtk.MenuBar()
+        
+        # 文件菜单
+        file_menu = Gtk.MenuItem.new_with_label(self._("file"))
+        file_submenu = Gtk.Menu()
+        
+        new_profile_item = Gtk.MenuItem.new_with_label(self._("new_profile"))
+        new_profile_item.connect("activate", self.new_profile)
+        file_submenu.append(new_profile_item)
+        
+        open_profile_item = Gtk.MenuItem.new_with_label(self._("open_profile"))
+        open_profile_item.connect("activate", self.open_profile)
+        file_submenu.append(open_profile_item)
+        
+        save_profile_item = Gtk.MenuItem.new_with_label(self._("save_profile"))
+        save_profile_item.connect("activate", self.save_profile)
+        file_submenu.append(save_profile_item)
+        
+        file_submenu.append(Gtk.SeparatorMenuItem())
+        
+        export_config_item = Gtk.MenuItem.new_with_label(self._("export_config"))
+        export_config_item.connect("activate", self.export_config)
+        file_submenu.append(export_config_item)
+        
+        import_config_item = Gtk.MenuItem.new_with_label(self._("import_config"))
+        import_config_item.connect("activate", self.import_config)
+        file_submenu.append(import_config_item)
+        
+        file_submenu.append(Gtk.SeparatorMenuItem())
+        
+        preferences_item = Gtk.MenuItem.new_with_label(self._("preferences"))
+        preferences_item.connect("activate", self.preferences)
+        file_submenu.append(preferences_item)
+        
+        file_submenu.append(Gtk.SeparatorMenuItem())
+        
+        exit_item = Gtk.MenuItem.new_with_label(self._("exit"))
+        exit_item.connect("activate", self.close)
+        file_submenu.append(exit_item)
+        
+        file_menu.set_submenu(file_submenu)
+        self.menu_bar.append(file_menu)
+        
+        # 视图菜单
+        view_menu = Gtk.MenuItem.new_with_label(self._("view"))
+        view_submenu = Gtk.Menu()
+        
+        dark_theme_item = Gtk.MenuItem.new_with_label(self._("dark_theme"))
+        dark_theme_item.connect("activate", lambda x: self.set_theme("dark"))
+        view_submenu.append(dark_theme_item)
+        
+        light_theme_item = Gtk.MenuItem.new_with_label(self._("light_theme"))
+        light_theme_item.connect("activate", lambda x: self.set_theme("light"))
+        view_submenu.append(light_theme_item)
+        
+        view_menu.set_submenu(view_submenu)
+        self.menu_bar.append(view_menu)
+        
+        # 构建菜单
+        build_menu = Gtk.MenuItem.new_with_label(self._("build"))
+        build_submenu = Gtk.Menu()
+        
+        start_build_item = Gtk.MenuItem.new_with_label(self._("start_build"))
+        start_build_item.connect("activate", self.start_build)
+        build_submenu.append(start_build_item)
+        
+        stop_build_item = Gtk.MenuItem.new_with_label(self._("stop_build"))
+        stop_build_item.connect("activate", self.stop_build)
+        build_submenu.append(stop_build_item)
+        
+        build_submenu.append(Gtk.SeparatorMenuItem())
+        
+        clean_item = Gtk.MenuItem.new_with_label(self._("clean"))
+        clean_item.connect("activate", self.clean)
+        build_submenu.append(clean_item)
+        
+        install_item = Gtk.MenuItem.new_with_label(self._("install"))
+        install_item.connect("activate", self.install)
+        build_submenu.append(install_item)
+        
+        build_menu.set_submenu(build_submenu)
+        self.menu_bar.append(build_menu)
+        
+        # 帮助菜单
+        help_menu = Gtk.MenuItem.new_with_label(self._("help"))
+        help_submenu = Gtk.Menu()
+        
+        documentation_item = Gtk.MenuItem.new_with_label(self._("documentation"))
+        documentation_item.connect("activate", self.show_documentation)
+        help_submenu.append(documentation_item)
+        
+        about_item = Gtk.MenuItem.new_with_label(self._("about"))
+        about_item.connect("activate", self.show_about)
+        help_submenu.append(about_item)
+        
+        help_menu.set_submenu(help_submenu)
+        self.menu_bar.append(help_menu)
+    
+    def create_tool_bar(self):
+        """创建工具栏"""
+        self.toolbar = Gtk.Toolbar()
+        self.toolbar.set_style(Gtk.ToolbarStyle.BOTH_HORIZ)
+        
+        # 构建按钮
+        self.start_build_btn = Gtk.ToolButton.new_from_stock(Gtk.STOCK_EXECUTE)
+        self.start_build_btn.set_label(self._("start_build"))
+        self.start_build_btn.connect("clicked", self.start_build)
+        self.toolbar.insert(self.start_build_btn, 0)
+        
+        # 停止按钮
+        self.stop_build_btn = Gtk.ToolButton.new_from_stock(Gtk.STOCK_STOP)
+        self.stop_build_btn.set_label(self._("stop_build"))
+        self.stop_build_btn.connect("clicked", self.stop_build)
+        self.stop_build_btn.set_sensitive(False)
+        self.toolbar.insert(self.stop_build_btn, 1)
+        
+        self.toolbar.insert(Gtk.SeparatorToolItem(), 2)
+        
+        # 清理按钮
+        clean_btn = Gtk.ToolButton.new_from_stock(Gtk.STOCK_CLEAR)
+        clean_btn.set_label(self._("clean"))
+        clean_btn.connect("clicked", self.clean)
+        self.toolbar.insert(clean_btn, 3)
+        
+        # 安装按钮
+        install_btn = Gtk.ToolButton.new_from_stock(Gtk.STOCK_APPLY)
+        install_btn.set_label(self._("install"))
+        install_btn.connect("clicked", self.install)
+        self.toolbar.insert(install_btn, 4)
+        
+        self.toolbar.insert(Gtk.SeparatorToolItem(), 5)
+        
+        # 预设标签
+        preset_label = Gtk.Label()
+        preset_label.set_text(self._("preset") + ":")
+        preset_item = Gtk.ToolItem()
+        preset_item.add(preset_label)
+        self.toolbar.insert(preset_item, 6)
+        
+        # 预设下拉框
+        self.preset_combo = Gtk.ComboBoxText()
+        presets = ["balanced", "release", "debug", "minimal", "performance"]
+        for preset in presets:
+            self.preset_combo.append_text(self._(preset))
+        self.preset_combo.set_active(presets.index(self.current_preset))
+        self.preset_combo.connect("changed", self.on_preset_changed)
+        preset_item = Gtk.ToolItem()
+        preset_item.add(self.preset_combo)
+        self.toolbar.insert(preset_item, 7)
+        
+        self.toolbar.insert(Gtk.SeparatorToolItem(), 8)
+
+        # 语言标签 - 显示当前选择的语言名称
+        self.language_label = Gtk.Label()
+        self.update_language_label()
+        language_item = Gtk.ToolItem()
+        language_item.add(self.language_label)
+        self.toolbar.insert(language_item, 9)
+
+        # 语言下拉框
+        self.language_combo = Gtk.ComboBoxText()
+        languages = I18N["zh_CN"]["languages"]
+        # 格式: "简体中文" 或 "English"
+        for code, name in languages.items():
+            self.language_combo.append_text(name)
+        self.language_combo.set_active(list(languages.keys()).index(self.current_language))
+        self.language_combo.connect("changed", self.on_language_changed)
+        language_item = Gtk.ToolItem()
+        language_item.add(self.language_combo)
+        self.toolbar.insert(language_item, 10)
+    
+    def create_central_widget(self):
+        """创建中央部件"""
+        self.central_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        
+        # 左侧：配置选项卡
+        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        
+        # 创建配置选项卡
+        self.create_config_tabs()
+        left_box.pack_start(self.notebook, True, True, 0)
+        
+        self.central_paned.pack1(left_box, True, False)
+        
+        # 右侧：输出和日志
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        
+        # 进度条
+        self.progress_bar = Gtk.ProgressBar()
+        self.progress_bar.set_show_text(True)
+        right_box.pack_start(self.progress_bar, False, False, 0)
+        
+        # 输出和日志标签页
+        self.output_notebook = Gtk.Notebook()
+        
+        # 构建输出
+        output_scrolled = Gtk.ScrolledWindow()
+        output_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.output_text = Gtk.TextView()
+        self.output_text.set_editable(False)
+        self.output_text.set_monospace(True)
+        output_scrolled.add(self.output_text)
+        self.output_notebook.append_page(output_scrolled, Gtk.Label.new(self._("output")))
+        
+        # 构建日志
+        log_scrolled = Gtk.ScrolledWindow()
+        log_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.log_text = Gtk.TextView()
+        self.log_text.set_editable(False)
+        self.log_text.set_monospace(True)
+        log_scrolled.add(self.log_text)
+        self.output_notebook.append_page(log_scrolled, Gtk.Label.new(self._("log")))
+        
+        right_box.pack_start(self.output_notebook, True, True, 0)
+        
+        self.central_paned.pack2(right_box, True, False)
+        
+        # 设置分割比例
+        self.central_paned.set_position(500)
+    
+    def create_config_tabs(self):
+        """创建配置选项卡"""
+        # 构建配置页
+        self.create_build_config_tab()
+        
+        # 运行时配置页
+        self.create_runtime_config_tab()
+        
+        # 系统限制页
+        self.create_system_limits_tab()
+        
+        # 功能特性页
+        self.create_features_tab()
+        
+        # CPU特性页
+        self.create_cpu_features_tab()
+        
+        # 调度器页
+        self.create_scheduler_tab()
+        
+        # 安全配置页
+        self.create_security_tab()
+        
+        # 内存配置页
+        self.create_memory_tab()
+        
+        # 调试选项页
+        self.create_debug_tab()
+        
+        # 驱动配置页
+        self.create_drivers_tab()
+        
+        # 性能配置页
+        self.create_performance_tab()
+    
+    def create_build_config_tab(self):
+        """创建构建配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # 优化级别
+        row = 0
+        grid.attach(Gtk.Label.new(self._("optimize_level") + ":"), 0, row, 1, 1)
+        self.optimize_spin = Gtk.SpinButton()
+        self.optimize_spin.set_range(0, 3)
+        self.optimize_spin.set_value(2)
+        grid.attach(self.optimize_spin, 1, row, 1, 1)
+        
+        # 调试符号
+        row += 1
+        self.debug_symbols_check = Gtk.CheckButton.new_with_label(self._("debug_symbols"))
+        grid.attach(self.debug_symbols_check, 0, row, 2, 1)
+        
+        # LTO
+        row += 1
+        self.lto_check = Gtk.CheckButton.new_with_label(self._("lto"))
+        grid.attach(self.lto_check, 0, row, 2, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("build_config")))
+    
+    def create_runtime_config_tab(self):
+        """创建运行时配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        label = Gtk.Label()
+        label.set_markup("<i>运行时配置通过platform.yaml传递给内核</i>")
+        label.set_halign(Gtk.Align.START)
+        box.pack_start(label, False, False, 0)
+        
+        self.notebook.append_page(box, Gtk.Label.new(self._("runtime_config")))
+    
+    def create_system_limits_tab(self):
+        """创建系统限制选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # 最大域数
+        row = 0
+        grid.attach(Gtk.Label.new(self._("max_domains") + ":"), 0, row, 1, 1)
+        self.max_domains_spin = Gtk.SpinButton()
+        self.max_domains_spin.set_range(1, 512)
+        self.max_domains_spin.set_value(256)
+        grid.attach(self.max_domains_spin, 1, row, 1, 1)
+        
+        # 最大能力数
+        row += 1
+        grid.attach(Gtk.Label.new(self._("max_capabilities") + ":"), 0, row, 1, 1)
+        self.max_capabilities_spin = Gtk.SpinButton()
+        self.max_capabilities_spin.set_range(512, 4096)
+        self.max_capabilities_spin.set_value(2048)
+        grid.attach(self.max_capabilities_spin, 1, row, 1, 1)
+        
+        # 最大线程数
+        row += 1
+        grid.attach(Gtk.Label.new(self._("max_threads") + ":"), 0, row, 1, 1)
+        self.max_threads_spin = Gtk.SpinButton()
+        self.max_threads_spin.set_range(1, 512)
+        self.max_threads_spin.set_value(256)
+        grid.attach(self.max_threads_spin, 1, row, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("system_limits")))
+    
+    def create_features_tab(self):
+        """创建功能特性选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(5)
+        
+        # 功能列表
+        self.feature_checks = {}
+        features = ["smp", "acpi", "pci", "usb", "virtio", "efi"]
+        
+        for i, feature in enumerate(features):
+            self.feature_checks[feature] = Gtk.CheckButton.new_with_label(self._(feature))
+            grid.attach(self.feature_checks[feature], 0, i, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("features")))
+    
+    def create_cpu_features_tab(self):
+        """创建CPU特性选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(5)
+        
+        self.cpu_feature_checks = {}
+        cpu_features = ["MMX", "SSE", "SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2", "AES-NI", "RDRAND"]
+        
+        for i, feature in enumerate(cpu_features):
+            self.cpu_feature_checks[feature] = Gtk.CheckButton.new_with_label(feature)
+            self.cpu_feature_checks[feature].set_active(True)
+            grid.attach(self.cpu_feature_checks[feature], 0, i, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("cpu_features")))
+    
+    def create_scheduler_tab(self):
+        """创建调度器选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # 调度策略
+        row = 0
+        grid.attach(Gtk.Label.new(self._("scheduler_policy") + ":"), 0, row, 1, 1)
+        self.scheduler_policy_combo = Gtk.ComboBoxText()
+        self.scheduler_policy_combo.append_text("priority_rr")
+        self.scheduler_policy_combo.append_text("round_robin")
+        self.scheduler_policy_combo.append_text("fifo")
+        self.scheduler_policy_combo.set_active(0)
+        grid.attach(self.scheduler_policy_combo, 1, row, 1, 1)
+        
+        # 时间片
+        row += 1
+        grid.attach(Gtk.Label.new(self._("time_slice") + "(ms):"), 0, row, 1, 1)
+        self.time_slice_spin = Gtk.SpinButton()
+        self.time_slice_spin.set_range(1, 1000)
+        self.time_slice_spin.set_value(10)
+        grid.attach(self.time_slice_spin, 1, row, 1, 1)
+        
+        # 抢占式调度
+        row += 1
+        self.preemptive_check = Gtk.CheckButton.new_with_label(self._("preemptive"))
+        self.preemptive_check.set_active(True)
+        grid.attach(self.preemptive_check, 0, row, 2, 1)
+        
+        # 负载均衡
+        row += 1
+        self.load_balancing_check = Gtk.CheckButton.new_with_label(self._("load_balancing"))
+        self.load_balancing_check.set_active(True)
+        grid.attach(self.load_balancing_check, 0, row, 2, 1)
+        
+        # 负载阈值
+        row += 1
+        grid.attach(Gtk.Label.new(self._("load_threshold") + "(%):"), 0, row, 1, 1)
+        self.load_balance_threshold_spin = Gtk.SpinButton()
+        self.load_balance_threshold_spin.set_range(1, 100)
+        self.load_balance_threshold_spin.set_value(80)
+        grid.attach(self.load_balance_threshold_spin, 1, row, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("scheduler")))
+    
+    def create_security_tab(self):
+        """创建安全配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(5)
+        
+        self.security_checks = {}
+        security_features = [
+            ("KASLR", False),
+            ("SMEP", False),
+            ("SMAP", False),
+            ("audit", True),
+            ("form_verification", True),
+            ("cap_verify", True),
+            ("guard_pages", True),
+            ("zero_on_free", True)
+        ]
+        
+        for i, (feature, default) in enumerate(security_features):
+            self.security_checks[feature] = Gtk.CheckButton.new_with_label(self._(feature))
+            self.security_checks[feature].set_active(default)
+            grid.attach(self.security_checks[feature], 0, i, 1, 1)
+        
+        # 隔离模式
+        row = len(security_features)
+        grid.attach(Gtk.Label.new(self._("isolation_mode") + ":"), 0, row, 1, 1)
+        self.isolation_mode_combo = Gtk.ComboBoxText()
+        self.isolation_mode_combo.append_text("strict")
+        self.isolation_mode_combo.append_text("permissive")
+        self.isolation_mode_combo.set_active(0)
+        grid.attach(self.isolation_mode_combo, 1, row, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("security")))
+    
+    def create_memory_tab(self):
+        """创建内存配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # 堆大小
+        row = 0
+        grid.attach(Gtk.Label.new(self._("heap_size") + "(MB):"), 0, row, 1, 1)
+        self.heap_size_spin = Gtk.SpinButton()
+        self.heap_size_spin.set_range(16, 4096)
+        self.heap_size_spin.set_value(128)
+        grid.attach(self.heap_size_spin, 1, row, 1, 1)
+        
+        # 栈大小
+        row += 1
+        grid.attach(Gtk.Label.new(self._("stack_size") + "(KB):"), 0, row, 1, 1)
+        self.stack_size_spin = Gtk.SpinButton()
+        self.stack_size_spin.set_range(4, 64)
+        self.stack_size_spin.set_value(8)
+        grid.attach(self.stack_size_spin, 1, row, 1, 1)
+        
+        # 页面缓存
+        row += 1
+        grid.attach(Gtk.Label.new(self._("page_cache") + "(%):"), 0, row, 1, 1)
+        self.page_cache_spin = Gtk.SpinButton()
+        self.page_cache_spin.set_range(0, 50)
+        self.page_cache_spin.set_value(20)
+        grid.attach(self.page_cache_spin, 1, row, 1, 1)
+        
+        # 缓冲区缓存
+        row += 1
+        grid.attach(Gtk.Label.new(self._("buffer_cache") + "(KB):"), 0, row, 1, 1)
+        self.buffer_cache_spin = Gtk.SpinButton()
+        self.buffer_cache_spin.set_range(256, 16384)
+        self.buffer_cache_spin.set_value(1024)
+        grid.attach(self.buffer_cache_spin, 1, row, 1, 1)
+        
+        # 最大页表数
+        row += 1
+        grid.attach(Gtk.Label.new(self._("max_page_tables") + ":"), 0, row, 1, 1)
+        self.max_page_tables_spin = Gtk.SpinButton()
+        self.max_page_tables_spin.set_range(64, 1024)
+        self.max_page_tables_spin.set_value(256)
+        grid.attach(self.max_page_tables_spin, 1, row, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("memory")))
+    
+    def create_debug_tab(self):
+        """创建调试选项选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(5)
+        
+        self.debug_checks = {}
+        debug_features = [
+            ("console_log", True),
+            ("serial_log", True),
+            ("panic_on_bug", True),
+            ("stack_canary", True),
+            ("bounds_check", False),
+            ("verbose", False),
+            ("trace", False)
+        ]
+        
+        for i, (feature, default) in enumerate(debug_features):
+            self.debug_checks[feature] = Gtk.CheckButton.new_with_label(feature)
+            self.debug_checks[feature].set_active(default)
+            grid.attach(self.debug_checks[feature], 0, i, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("debug_tab")))
+    
+    def create_drivers_tab(self):
+        """创建驱动配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(10)
+        
+        # 驱动列表
+        self.driver_checks = {}
+        drivers = ["console_driver", "keyboard_driver", "ps2_mouse", "uart_driver"]
+        
+        for i, driver in enumerate(drivers):
+            self.driver_checks[driver] = Gtk.CheckButton.new_with_label(driver)
+            self.driver_checks[driver].set_active(True)
+            grid.attach(self.driver_checks[driver], 0, i, 1, 1)
+        
+        # 波特率
+        row = len(drivers)
+        grid.attach(Gtk.Label.new(self._("baud_rate") + ":"), 0, row, 1, 1)
+        self.baud_rate_combo = Gtk.ComboBoxText()
+        for rate in ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]:
+            self.baud_rate_combo.append_text(rate)
+        self.baud_rate_combo.set_active(4)
+        grid.attach(self.baud_rate_combo, 1, row, 1, 1)
+        
+        # 数据位
+        row += 1
+        grid.attach(Gtk.Label.new(self._("data_bits") + ":"), 0, row, 1, 1)
+        self.data_bits_combo = Gtk.ComboBoxText()
+        for bits in ["5", "6", "7", "8"]:
+            self.data_bits_combo.append_text(bits)
+        self.data_bits_combo.set_active(3)
+        grid.attach(self.data_bits_combo, 1, row, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("drivers")))
+    
+    def create_performance_tab(self):
+        """创建性能配置选项卡"""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+        
+        grid = Gtk.Grid()
+        grid.set_column_spacing(10)
+        grid.set_row_spacing(5)
+        
+        self.performance_checks = {}
+        performance_features = [
+            ("fast_path", True),
+            ("perf_counter", False),
+            ("cpu_affinity", True),
+            ("numa_opt", False),
+            ("latency_opt", False),
+            ("throughput_opt", False)
+        ]
+        
+        for i, (feature, default) in enumerate(performance_features):
+            self.performance_checks[feature] = Gtk.CheckButton.new_with_label(feature)
+            self.performance_checks[feature].set_active(default)
+            grid.attach(self.performance_checks[feature], 0, i, 1, 1)
+        
+        box.pack_start(grid, False, False, 0)
+        self.notebook.append_page(box, Gtk.Label.new(self._("performance_tab")))
+    
+    def create_status_bar(self):
+        """创建状态栏"""
+        self.status_bar = Gtk.Statusbar()
+        self.status_bar_context = self.status_bar.get_context_id("main")
+    
+    def set_theme(self, theme: str):
+        """设置主题"""
+        self.current_theme = theme
+        self.apply_theme()
+    
+    def apply_theme(self):
+        """应用主题"""
+        settings = Gtk.Settings.get_default()
+        
+        if self.current_theme == "dark":
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+        else:
+            settings.set_property("gtk-application-prefer-dark-theme", False)
+    
+    def on_language_changed(self, combo):
+        """语言改变事件"""
+        index = combo.get_active()
+        languages = I18N["zh_CN"]["languages"]
+        self.current_language = list(languages.keys())[index]
+
+        # 更新语言标签
+        self.update_language_label()
+
+        # 重新翻译语言下拉框的选项
+        combo.block_handlers()
+        combo.remove_all()
+        for code, name in languages.items():
+            combo.append_text(name)
+        combo.set_active(index)
+        combo.unblock_handlers()
+
+        self.retranslate_ui()
+    
+    def on_preset_changed(self, combo):
+        """预设改变事件"""
+        self.current_preset = combo.get_active_text()
+        self.apply_preset()
+    
+    def apply_preset(self):
+        """应用预设配置"""
+        preset_map = {
+            self._("balanced"): "balanced",
+            self._("release"): "release",
+            self._("debug"): "debug",
+            self._("minimal"): "minimal",
+            self._("performance"): "performance"
+        }
+        
+        preset_code = preset_map.get(self.current_preset, "balanced")
+        # 这里应该根据预设更新配置
+        # 暂时只打印消息
+        self.log(f"应用预设: {preset_code}")
+    
+    def retranslate_ui(self):
+        """重新翻译UI"""
+        self.set_title(self._("title"))
+        
+        # 重新翻译菜单
+        # GTK的菜单需要重新创建或更新
+        # 这里简化处理，只更新状态栏
+        self.update_status(self._("ready"))
+        
+        # 重新翻译预设下拉框
+        active = self.preset_combo.get_active()
+        
+        # 阻止信号触发以避免递归
+        self.preset_combo.block_handlers()
+        self.preset_combo.remove_all()
+        presets = ["balanced", "release", "debug", "minimal", "performance"]
+        for preset in presets:
+            self.preset_combo.append_text(self._(preset))
+        self.preset_combo.set_active(active)
+        self.preset_combo.unblock_handlers()
+        
+        # 重新翻译语言下拉框
+        self.update_language_label()
+        current_lang_code = self.current_language  # 保存当前语言代码
+        active_lang = self.language_combo.get_active()
+        
+        # 阻止信号触发以避免递归
+        combo.block_handlers()
+        combo.remove_all()
+        languages = I18N.get("zh_CN", {}).get("languages", {})
+        lang_code_list = list(languages.keys())
+        for code in lang_code_list:
+            name = languages[code]
+            display_text = f"{name} ({name})"
+            combo.append_text(display_text)
+        
+        # 根据语言代码恢复选择
+        if current_lang_code in lang_code_list:
+            combo.set_active(lang_code_list.index(current_lang_code))
+        elif active_lang < len(lang_code_list):
+            combo.set_active(active_lang)
+        
+        combo.unblock_handlers()
+        
+        # 确保current_language有效
+        if self.current_language not in I18N:
+            self.current_language = "zh_CN"  # 默认语言
+        
+        # 重新翻译标签页
+        tab_names = [self._("build_config"), self._("runtime_config"), 
+                    self._("system_limits"), self._("features"),
+                    self._("cpu_features"), self._("scheduler"), self._("security"), 
+                    self._("memory"), self._("debug_tab"), self._("drivers"), 
+                    self._("performance_tab")]
+        for i, name in enumerate(tab_names):
+            if i < self.notebook.get_n_pages():
+                page = self.notebook.get_nth_page(i)
+                label = self.notebook.get_tab_label(page)
+                label.set_text(name)
+        
+        # 重新翻译输出标签页
+        for i in range(self.output_notebook.get_n_pages()):
+            page = self.output_notebook.get_nth_page(i)
+            label = self.output_notebook.get_tab_label(page)
+            tab_names = [self._("output"), self._("log")]
+            if i < len(tab_names):
+                label.set_text(tab_names[i])
+    
+    def update_status(self, message: str):
+        """更新状态栏"""
+        self.status_bar.push(self.status_bar_context, message)
+    
+    def log(self, message: str, level: str = "info"):
+        """添加日志"""
+        buffer = self.log_text.get_buffer()
+        end_iter = buffer.get_end_iter()
+        buffer.insert(end_iter, f"[{level.upper()}] {message}\n")
+    
+    def append_output(self, text: str):
+        """添加输出"""
+        buffer = self.output_text.get_buffer()
+        end_iter = buffer.get_end_iter()
+        buffer.insert(end_iter, text)
+    
+    def start_build(self):
+        """开始构建"""
+        if self.is_building:
+            return
+        
+        self.is_building = True
+        self.start_build_btn.set_sensitive(False)
+        self.stop_build_btn.set_sensitive(True)
+        self.update_status(self._("building"))
+        
+        # 清空输出
+        output_buffer = self.output_text.get_buffer()
+        output_buffer.set_text("")
+        
+        log_buffer = self.log_text.get_buffer()
+        log_buffer.set_text("")
+        
+        self.log("开始构建...")
+        
+        # 在新线程中运行构建
+        self.build_thread = threading.Thread(target=self.run_build_thread)
+        self.build_thread.start()
+    
+    def run_build_thread(self):
+        """运行构建线程"""
+        try:
+            process = subprocess.Popen(
+                ["make", "all"],
+                cwd=str(ROOT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            for line in process.stdout:
+                GLib.idle_add(self.append_output, line)
+            
+            return_code = process.wait()
+            
+            if return_code == 0:
+                GLib.idle_add(self.on_build_success)
+            else:
+                GLib.idle_add(self.on_build_failed)
+                
+        except Exception as e:
+            GLib.idle_add(self.on_build_error, str(e))
+    
+    def on_build_success(self):
+        """构建成功"""
+        self.is_building = False
+        self.start_build_btn.set_sensitive(True)
+        self.stop_build_btn.set_sensitive(False)
+        self.update_status(self._("build_success"))
+        self.log("构建成功！", "success")
+        self.progress_bar.set_fraction(1.0)
+    
+    def on_build_failed(self):
+        """构建失败"""
+        self.is_building = False
+        self.start_build_btn.set_sensitive(True)
+        self.stop_build_btn.set_sensitive(False)
+        self.update_status(self._("build_failed"))
+        self.log("构建失败！", "error")
+        self.progress_bar.set_fraction(0.0)
+    
+    def on_build_error(self, error: str):
+        """构建错误"""
+        self.is_building = False
+        self.start_build_btn.set_sensitive(True)
+        self.stop_build_btn.set_sensitive(False)
+        self.update_status(self._("build_failed"))
+        self.log(f"构建错误: {error}", "error")
+        self.progress_bar.set_fraction(0.0)
+    
+    def stop_build(self):
+        """停止构建"""
+        if self.build_thread and self.build_thread.is_alive():
+            self.is_building = False
+            self.log("正在停止构建...", "warning")
+            # 这里应该终止构建进程
+            # 暂时只设置状态
+            self.start_build_btn.set_sensitive(True)
+            self.stop_build_btn.set_sensitive(False)
+            self.update_status(self._("build_stopped"))
+    
+    def clean(self):
+        """清理构建"""
+        self.log("清理构建文件...")
+        try:
+            subprocess.run(["make", "clean"], cwd=str(ROOT_DIR), check=True)
+            self.log("清理完成", "success")
+        except subprocess.CalledProcessError as e:
+            self.log(f"清理失败: {e}", "error")
+    
+    def install(self):
+        """安装"""
+        self.log("安装构建产物...")
+        try:
+            subprocess.run(["make", "install"], cwd=str(ROOT_DIR), check=True)
+            self.log("安装完成", "success")
+        except subprocess.CalledProcessError as e:
+            self.log(f"安装失败: {e}", "error")
+    
+    # 以下为占位函数
+    def new_profile(self, widget):
+        pass
+    
+    def open_profile(self, widget):
+        pass
+    
+    def save_profile(self, widget):
+        pass
+    
+    def export_config(self, widget):
+        pass
+    
+    def import_config(self, widget):
+        pass
+    
+    def preferences(self, widget):
+        pass
+    
+    def show_documentation(self, widget):
+        pass
+    
+    def show_about(self, widget):
+        dialog = Gtk.AboutDialog()
+        dialog.set_program_name(PROJECT)
+        dialog.set_version(VERSION)
+        dialog.set_comments("HIC内核构建系统")
+        dialog.run()
+        dialog.destroy()
+
+
+class HICBuildApp(Gtk.Application):
+    """HIC构建系统应用"""
+    
+    def __init__(self):
+        super().__init__(application_id="com.hic.buildsystem")
+    
+    def do_activate(self):
+        win = HICBuildGUI(self)
+        win.present()
+
+
+def main():
+    """主函数"""
+    app = HICBuildApp()
+    app.run(sys.argv)
+
+
+if __name__ == "__main__":
+    main()
 
 
 class BuildConfigDialog(Gtk.Dialog):
@@ -174,7 +1249,7 @@ class BuildConfigDialog(Gtk.Dialog):
             box, "启用详细输出", "显示详细的编译和运行信息"
         )
         
-        notebook.append_page(box, Gtk.Label.new("调试"))
+        notebook.append_page(box, Gtk.Label.new(self._("debug_tab")))
     
     def create_security_page(self, notebook):
         """创建安全配置页"""
@@ -245,7 +1320,7 @@ class BuildConfigDialog(Gtk.Dialog):
         
         self.config_vars['CONFIG_SECURITY_LEVEL'] = combo
         
-        notebook.append_page(box, Gtk.Label.new("安全"))
+        notebook.append_page(box, Gtk.Label.new(self._("security")))
     
     def create_performance_page(self, notebook):
         """创建性能配置页"""
@@ -282,7 +1357,7 @@ class BuildConfigDialog(Gtk.Dialog):
             box, "启用快速路径", "优化常见操作路径，提升响应速度"
         )
         
-        notebook.append_page(box, Gtk.Label.new("性能"))
+        notebook.append_page(box, Gtk.Label.new(self._("performance_tab")))
     
     def create_memory_page(self, notebook):
         """创建内存配置页"""
@@ -324,7 +1399,7 @@ class BuildConfigDialog(Gtk.Dialog):
             box, "页面缓存 (%):", 0, 50, 20, "建议值: 20-30%，提升文件系统性能"
         )
         
-        notebook.append_page(box, Gtk.Label.new("内存"))
+        notebook.append_page(box, Gtk.Label.new(self._("memory")))
     
     def create_spin_button_with_hint(self, parent, label_text, min_val, max_val, default_val, hint_text):
         """创建带提示的数字输入框"""
@@ -548,7 +1623,7 @@ class BuildConfigDialog(Gtk.Dialog):
         combo.add_attribute(renderer, "text", 0)
         
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        label = Gtk.Label.new("调度策略:")
+        label = Gtk.Label.new(self._("scheduler_policy") + ":")
         label.set_halign(Gtk.Align.START)
         hbox.pack_start(label, False, False, 0)
         hbox.pack_start(combo, True, True, 0)
@@ -566,7 +1641,7 @@ class BuildConfigDialog(Gtk.Dialog):
             box, "最大线程数:", 1, 1024, 256, "建议值: 128-512，根据CPU核心数调整"
         )
         
-        notebook.append_page(box, Gtk.Label.new("调度器"))
+        notebook.append_page(box, Gtk.Label.new(self._("scheduler")))
     
     def load_config(self):
         """加载当前配置"""

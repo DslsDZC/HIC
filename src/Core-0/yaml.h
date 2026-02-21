@@ -68,4 +68,7 @@ bool yaml_get_bool(yaml_node_t* node, bool default_val);
 hic_status_t yaml_load_build_config(const char* yaml_data, size_t size, 
                                      build_config_t* config);
 
+/* 从YAML加载系统限制配置 */
+hic_status_t yaml_load_system_limits(const char* yaml_data, size_t size);
+
 #endif /* HIC_KERNEL_YAML_H */

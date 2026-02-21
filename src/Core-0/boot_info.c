@@ -11,6 +11,7 @@
 
 #include "boot_info.h"
 #include "console.h"
+#include "minimal_uart.h"
 #include "pmm.h"
 #include "string.h"
 #include "hardware_probe.h"
@@ -61,42 +62,32 @@ hic_boot_info_t *g_boot_info = NULL;
  * - 所有操作都记录审计日志
  * - 遵循形式化验证要求
  */
-void kernel_entry(hic_boot_info_t* boot_info) {
+void kernel_boot_info_init(hic_boot_info_t* boot_info) {
+    // 初始化串口（从YAML配置或引导程序配置）
+    minimal_uart_init_from_bootinfo();
+    
+    // 输出 hello
+    console_puts("hello\n");
+    
     // 【安全检查1】验证boot_info指针
     if (boot_info == NULL) {
-        log_error("boot_info pointer is NULL!\n");
-        // 无法记录审计日志，因为系统未初始化
         goto panic;
     }
     
     // 保存启动信息
     g_boot_state.boot_info = boot_info;
     
-    // 初始化控制台（如果未初始化）
-    console_init(CONSOLE_TYPE_SERIAL);
-    
-    log_info("========== HIC内核启动 ==========\n");
-    log_info("版本: %s\n", HIC_VERSION);
-    log_info("boot_info指针: 0x%p\n", (void*)boot_info);
-    
     // 【安全检查2】验证boot_info魔数
     if (boot_info->magic != HIC_BOOT_INFO_MAGIC) {
-        log_error("boot_info魔数错误: 0x%08x (期望: 0x%08x)\n", 
-                 boot_info->magic, HIC_BOOT_INFO_MAGIC);
         goto panic;
     }
     
     // 【安全检查3】验证boot_info版本
     if (boot_info->version != HIC_BOOT_INFO_VERSION) {
-        log_error("boot_info版本不匹配: %u (期望: %u)\n", 
-                 boot_info->version, HIC_BOOT_INFO_VERSION);
         goto panic;
     }
     
-    log_info("boot_info验证成功\n");
-    
     // 【第一优先级】初始化审计日志系统
-    log_info("[SECURITY] 初始化审计日志系统...\n");
     audit_system_init();
     
     // 分配审计日志缓冲区（从可用内存的末尾开始）
@@ -116,85 +107,110 @@ void kernel_entry(hic_boot_info_t* boot_info) {
         
         if (audit_buffer_base != 0) {
             audit_system_init_buffer(audit_buffer_base, audit_buffer_size);
-            log_info("[SECURITY] 审计日志缓冲区已分配: 0x%lx, 大小: %lu bytes\n", 
-                    audit_buffer_base, audit_buffer_size);
             
             // 记录第一个审计事件：内核启动（使用DOMAIN_CREATE表示系统域创建）
             audit_log_event(AUDIT_EVENT_DOMAIN_CREATE, 0, 0, 0, NULL, 0, true);
-        } else {
-            log_warning("[SECURITY] 警告: 无法分配审计日志缓冲区\n");
         }
     }
     
     // 验证启动信息
     if (!boot_info_validate(boot_info)) {
-        log_error("启动信息验证失败！\n");
         // 记录审计事件
         audit_log_event(AUDIT_EVENT_EXCEPTION, 0, 0, 0, NULL, 0, false);
         goto panic;
     }
     
-    log_info("启动信息验证成功\n");
-    
     // 记录审计事件
     audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
     
     // 【特权层初始化】初始化特权服务管理器
-    log_info("[PRIV-1] 初始化特权服务管理器...\n");
     privileged_service_init();
-    log_info("[PRIV-1] 特权服务管理器初始化完成\n");
+    
+    // 【演示：加载内置Privileged-1服务】
+    // 创建一个简单的内置服务来演示Privileged-1层
+    console_puts("[BOOT] Loading builtin Privileged-1 service...\n");
+    
+    domain_quota_t builtin_quota = {
+        .max_memory = 1024 * 1024,  /* 1MB */
+        .max_threads = 2,
+        .max_caps = 16,
+        .cpu_quota_percent = 5,
+    };
+    
+    domain_id_t builtin_domain_id;
+    hic_status_t status = privileged_service_load(
+        1,  /* 模块实例ID（模拟） */
+        "builtin_test_service",
+        SERVICE_TYPE_CUSTOM,
+        &builtin_quota,
+        &builtin_domain_id
+    );
+    
+    if (status == HIC_SUCCESS) {
+        console_puts("[BOOT] Builtin service loaded, domain_id: ");
+        console_putu32(builtin_domain_id);
+        console_puts("\n");
+        
+        // 注册一个简单的端点
+        cap_id_t endpoint_cap;
+        status = privileged_service_register_endpoint(
+            builtin_domain_id,
+            "test_endpoint",
+            0,  /* 处理函数地址（模拟） */
+            0x3000,  /* 系统调用号 */
+            &endpoint_cap
+        );
+        
+        if (status == HIC_SUCCESS) {
+            console_puts("[BOOT] Test endpoint registered\n");
+        }
+        
+        // 启动服务
+        status = privileged_service_start(builtin_domain_id);
+        if (status == HIC_SUCCESS) {
+            console_puts("[BOOT] Builtin service started successfully\n");
+            console_puts("[BOOT] >>> Privileged-1 layer is now active <<<\n");
+        } else {
+            console_puts("[BOOT] Failed to start builtin service\n");
+        }
+    } else {
+        console_puts("[BOOT] Failed to load builtin service\n");
+    }
     
     // 处理启动信息
     boot_info_process(boot_info);
     
     // 静态硬件探测
-    log_info("开始静态硬件探测...\n");    // 硬件信息由Bootloader提供，内核只接收和使用
-log_info("Bootloader提供硬件信息:\n");
-log_info("  CPU核心: %u\n", g_boot_state.hw.cpu.logical_cores);
-log_info("  总内存: %lu MB\n", g_boot_state.hw.memory.total_physical / (1024 * 1024));
-log_info("  设备数量: %u\n", g_boot_state.hw.devices.device_count);
-
-// 模块自动加载驱动
-module_auto_load_drivers(&g_boot_state.hw.devices);
+    // 硬件信息由Bootloader提供，内核只接收和使用
+    
+    // 模块自动加载驱动
+    module_auto_load_drivers(&g_boot_state.hw.devices);
     
     // 初始化内存管理器
-    log_info("初始化内存管理器...\n");
     boot_info_init_memory(boot_info);
     
     // 硬件信息由Bootloader提供，内核只接收和使用
     // 不在内核中进行硬件探测
-    log_info("使用Bootloader提供的硬件信息\n");
     
     // 解析命令行
     if (boot_info->cmdline[0] != '\0') {
-        log_info("命令行: %s\n", boot_info->cmdline);
         boot_info_parse_cmdline(boot_info->cmdline);
     }
     
     // 初始化模块加载器
-    log_info("初始化模块加载器...\n");
     module_loader_init();
     
     // 自动加载驱动
-    log_info("自动加载硬件驱动...\n");
     module_auto_load_drivers(&g_boot_state.hw.devices);
-    
-    // 打印启动信息摘要
-    boot_info_print_summary();
     
     // 标记启动完成
     g_boot_state.valid = 1;
-    
-    log_info("========== 内核初始化完成 ==========\n");
     
     /* 进入主循环 */
     kernel_main_loop();
     
 panic:
-    log_error("内核启动失败，进入紧急模式\n");
-    while (1) {
-        hal_halt();  /* 使用HAL接口 */
-    }
+    hal_halt();  /* 使用HAL接口 */
 }
 
 /**
