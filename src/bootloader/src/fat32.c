@@ -375,9 +375,38 @@ static EFI_STATUS read_file_content(fat32_fs_t *fs, uint32_t first_cluster,
 /**
  * 读取文件
  */
+/**
+ * 打开文件（仅获取文件信息，不读取内容）
+ */
+__attribute__((unused)) EFI_STATUS fat32_open_file(fat32_fs_t *fs, const char *path, uint64_t *file_size)
+{
+    if (!fs || !fs->initialized || !path || !file_size) {
+        return EFI_INVALID_PARAMETER;
+    }
+    
+    console_printf("[FAT32] Opening file: %s\n", path);
+    
+    // 导航到文件
+    uint32_t first_cluster;
+    uint32_t size;
+    EFI_STATUS status = navigate_path(fs, path, &first_cluster, &size);
+    if (EFI_ERROR(status)) {
+        console_printf("[FAT32] File not found: %s\n", path);
+        return status;
+    }
+    
+    *file_size = size;
+    console_printf("[FAT32] File opened: size=%d bytes\n", (int)size);
+    
+    return EFI_SUCCESS;
+}
+
+/**
+ * 读取文件内容
+ */
 __attribute__((unused)) EFI_STATUS fat32_read_file(fat32_fs_t *fs, const char *path, void **buffer, uint64_t *size)
 {
-    if (!fs || !fs->initialized || !path || !buffer || !size) {
+    if (!fs || !fs->initialized || !path || !buffer || !size || !gBS) {
         return EFI_INVALID_PARAMETER;
     }
     

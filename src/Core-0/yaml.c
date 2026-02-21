@@ -10,9 +10,15 @@
  */
 
 #include "yaml.h"
+#include "runtime_config.h"
+#include "boot_info.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 #include "lib/string.h"
+
+/* 外部引用 */
+extern hic_boot_info_t *g_boot_info;
+extern runtime_config_t g_runtime_config;
 
 /* 跳过空白字符 */
 static void skip_whitespace(yaml_parser_t* parser)
@@ -398,6 +404,225 @@ hic_status_t yaml_load_build_config(const char* yaml_data, size_t size,
     }
     
     /* 解析配置项 */
+    yaml_parser_destroy(parser);
+    
+    return HIC_SUCCESS;
+}
+
+/* 从YAML加载系统限制配置 */
+hic_status_t yaml_load_system_limits(const char* yaml_data, size_t size)
+{
+    if (!yaml_data) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 创建解析器 */
+    yaml_parser_t* parser = yaml_parser_create(yaml_data, size);
+    if (!parser) {
+        return HIC_ERROR_NO_MEMORY;
+    }
+    
+    /* 解析YAML */
+    if (yaml_parse(parser) != 0) {
+        yaml_parser_destroy(parser);
+        return HIC_ERROR_INVALID_DOMAIN;
+    }
+    
+    /* 获取根节点 */
+    yaml_node_t* root = yaml_get_root(parser);
+    if (!root) {
+        yaml_parser_destroy(parser);
+        return HIC_ERROR_INVALID_DOMAIN;
+    }
+    
+    /* 解析uart节点（顶层配置，不限于调试模式） */
+    yaml_node_t* uart_node = yaml_find_node(root, "uart");
+    if (uart_node && uart_node->type == YAML_TYPE_MAPPING) {
+        /* 解析port */
+        yaml_node_t* uart_subnode = yaml_find_node(uart_node, "port");
+        if (uart_subnode) {
+            u32 port = (u32)yaml_get_u64(uart_subnode, 0x3F8);
+            /* 通过boot_info传递串口端口给minimal_uart */
+            if (g_boot_info) {
+                g_boot_info->debug.serial_port = (u16)port;
+            }
+        }
+        
+        /* 解析baud_rate */
+        uart_subnode = yaml_find_node(uart_node, "baud_rate");
+        if (uart_subnode) {
+            u32 baud = (u32)yaml_get_u64(uart_subnode, 115200);
+            g_runtime_config.serial_baud = baud;
+        }
+    }
+    
+    /* 解析system_limits节点 */
+    yaml_node_t* limits_node = yaml_find_node(root, "system_limits");
+    if (limits_node && limits_node->type == YAML_TYPE_MAPPING) {
+        /* 解析max_domains */
+        yaml_node_t* subnode = yaml_find_node(limits_node, "max_domains");
+        if (subnode) {
+            g_runtime_config.max_domains = (u32)yaml_get_u64(subnode, 256);
+        }
+        
+        /* 解析max_capabilities */
+        subnode = yaml_find_node(limits_node, "max_capabilities");
+        if (subnode) {
+            g_runtime_config.max_capabilities = (u32)yaml_get_u64(subnode, 2048);
+        }
+        
+        /* 解析capabilities_per_domain */
+        subnode = yaml_find_node(limits_node, "capabilities_per_domain");
+        if (subnode) {
+            g_runtime_config.capabilities_per_domain = (u32)yaml_get_u64(subnode, 128);
+        }
+        
+        /* 解析max_threads */
+        subnode = yaml_find_node(limits_node, "max_threads");
+        if (subnode) {
+            g_runtime_config.max_threads = (u32)yaml_get_u64(subnode, 256);
+        }
+        
+        /* 解析threads_per_domain */
+        subnode = yaml_find_node(limits_node, "threads_per_domain");
+        if (subnode) {
+            g_runtime_config.threads_per_domain = (u32)yaml_get_u64(subnode, 16);
+        }
+        
+        /* 解析max_services */
+        subnode = yaml_find_node(limits_node, "max_services");
+        if (subnode) {
+            g_runtime_config.max_services = (u32)yaml_get_u64(subnode, 64);
+        }
+        
+        /* 解析max_pci_devices */
+        subnode = yaml_find_node(limits_node, "max_pci_devices");
+        if (subnode) {
+            g_runtime_config.max_pci_devices = (u32)yaml_get_u64(subnode, 64);
+        }
+        
+        /* 解析max_memory_regions */
+        subnode = yaml_find_node(limits_node, "max_memory_regions");
+        if (subnode) {
+            g_runtime_config.max_memory_regions = (u32)yaml_get_u64(subnode, 32);
+        }
+        
+        /* 解析max_interrupt_routes */
+        subnode = yaml_find_node(limits_node, "max_interrupt_routes");
+        if (subnode) {
+            g_runtime_config.max_interrupt_routes = (u32)yaml_get_u64(subnode, 64);
+        }
+        
+        /* 解析kernel_size_limit */
+        subnode = yaml_find_node(limits_node, "kernel_size_limit");
+        if (subnode) {
+            g_runtime_config.kernel_size_limit = yaml_get_u64(subnode, 2097152);
+        }
+        
+        /* 解析bss_size_limit */
+        subnode = yaml_find_node(limits_node, "bss_size_limit");
+        if (subnode) {
+            g_runtime_config.bss_size_limit = yaml_get_u64(subnode, 524288);
+        }
+        
+        /* 解析max_domains_per_user */
+        subnode = yaml_find_node(limits_node, "max_domains_per_user");
+        if (subnode) {
+            g_runtime_config.max_domains_per_user = (u32)yaml_get_u64(subnode, 64);
+        }
+    }
+    
+    /* 解析memory节点 */
+    yaml_node_t* memory_node = yaml_find_node(root, "memory");
+    if (memory_node && memory_node->type == YAML_TYPE_MAPPING) {
+        /* 解析page_cache_percent */
+        yaml_node_t* mem_subnode = yaml_find_node(memory_node, "cache");
+        if (mem_subnode && mem_subnode->type == YAML_TYPE_MAPPING) {
+            yaml_node_t* cache_node = yaml_find_node(mem_subnode, "page_cache_percent");
+            if (cache_node) {
+                g_runtime_config.page_cache_percent = (u32)yaml_get_u64(cache_node, 20);
+            }
+        }
+        
+        /* 解析guard_pages */
+        mem_subnode = yaml_find_node(memory_node, "guard_pages");
+        if (mem_subnode) {
+            g_runtime_config.guard_pages = yaml_get_bool(mem_subnode, true);
+        }
+        
+        /* 解析guard_page_size */
+        mem_subnode = yaml_find_node(memory_node, "guard_page_size");
+        if (mem_subnode) {
+            g_runtime_config.guard_page_size = (u32)yaml_get_u64(mem_subnode, 4096);
+        }
+        
+        /* 解析zero_on_free */
+        mem_subnode = yaml_find_node(memory_node, "zero_on_free");
+        if (mem_subnode) {
+            g_runtime_config.zero_on_free = yaml_get_bool(mem_subnode, true);
+        }
+    }
+    
+    /* 解析scheduler节点 */
+    yaml_node_t* scheduler_node = yaml_find_node(root, "scheduler");
+    if (scheduler_node && scheduler_node->type == YAML_TYPE_MAPPING) {
+        /* 解析time_slice_ms */
+        yaml_node_t* sched_subnode = yaml_find_node(scheduler_node, "time_slice_ms");
+        if (sched_subnode) {
+            g_runtime_config.time_slice_ms = (u32)yaml_get_u64(sched_subnode, 10);
+        }
+        
+        /* 解析preemptive */
+        sched_subnode = yaml_find_node(scheduler_node, "preemptive");
+        if (sched_subnode) {
+            g_runtime_config.preemptive = yaml_get_bool(sched_subnode, true);
+        }
+        
+        /* 解析load_balancing */
+        sched_subnode = yaml_find_node(scheduler_node, "load_balancing");
+        if (sched_subnode && sched_subnode->type == YAML_TYPE_MAPPING) {
+            yaml_node_t* lb_node = yaml_find_node(sched_subnode, "threshold_percent");
+            if (lb_node) {
+                g_runtime_config.load_balancing_threshold = (u32)yaml_get_u64(lb_node, 80);
+            }
+            
+            lb_node = yaml_find_node(sched_subnode, "migration_interval_ms");
+            if (lb_node) {
+                g_runtime_config.migration_interval_ms = (u32)yaml_get_u64(lb_node, 100);
+            }
+        }
+    }
+    
+    /* 解析security节点 */
+    yaml_node_t* security_node = yaml_find_node(root, "security");
+    if (security_node && security_node->type == YAML_TYPE_MAPPING) {
+        /* 解析capability节点 */
+        yaml_node_t* cap_node = yaml_find_node(security_node, "capability");
+        if (cap_node && cap_node->type == YAML_TYPE_MAPPING) {
+            /* 解析verify_on_access */
+            yaml_node_t* sec_subnode = yaml_find_node(cap_node, "verify_on_access");
+            if (sec_subnode) {
+                g_runtime_config.verify_on_access = yaml_get_bool(sec_subnode, true);
+            }
+            
+            /* 解析revoke_delay_ms */
+            sec_subnode = yaml_find_node(cap_node, "revoke_delay_ms");
+            if (sec_subnode) {
+                g_runtime_config.capability_revoke_delay_ms = (u32)yaml_get_u64(sec_subnode, 100);
+            }
+        }
+        
+        /* 解析privileged_access */
+        yaml_node_t* priv_node = yaml_find_node(security_node, "privileged_access");
+        if (priv_node && priv_node->type == YAML_TYPE_MAPPING) {
+            /* 解析log_privileged_ops */
+            yaml_node_t* sec_subnode = yaml_find_node(priv_node, "log_privileged_ops");
+            if (sec_subnode) {
+                g_runtime_config.log_privileged_ops = yaml_get_bool(sec_subnode, true);
+            }
+        }
+    }
+    
     yaml_parser_destroy(parser);
     
     return HIC_SUCCESS;

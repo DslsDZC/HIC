@@ -12,8 +12,8 @@ EFI_STATUS load_kernel_image_embedded(void **kernel_data, uint64_t *kernel_size)
     console_puts("[BOOTLOADER AUDIT] Stage 3: Loading Kernel Image (embedded)\n");
     
     /* 直接使用嵌入的内核数据 */
-    *kernel_data = (void *)build_bin_hic_kernel_elf;
-    *kernel_size = build_bin_hic_kernel_elf_len;
+    *kernel_data = (void *)bin_hic_kernel_elf;
+    *kernel_size = bin_hic_kernel_elf_len;
     
     console_puts("[BOOTLOADER AUDIT] Stage 3: Embedded kernel loaded\n");
     

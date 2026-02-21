@@ -34,8 +34,8 @@ typedef unsigned char bool;
 #endif
 #endif
 
-/* 能力表大小 */
-#define CAP_TABLE_SIZE     65536
+/* 能力表大小 - 优化以减少内核BSS段大小 */
+#define CAP_TABLE_SIZE     2048   /* 从65536减小到2048，满足形式化验证要求 */
 
 /* 内存权限标志 */
 #define CAP_MEM_READ   (1U << 0)

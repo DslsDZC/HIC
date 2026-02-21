@@ -11,20 +11,9 @@
 #include "types.h"
 #include "hal.h"
 
-/* VGA控制台（x86特有） */
-#if defined(__x86_64__)
-#define VGA_WIDTH   80
-#define VGA_HEIGHT  25
-#define VGA_BUFFER  (volatile u16*)0xB8000
-#define VGA_COLOR   0x0F  /* 白色 */
-#endif
-
 /* 控制台类型 */
 typedef enum {
-    CONSOLE_TYPE_SERIAL,
-    CONSOLE_TYPE_VGA,
-    CONSOLE_TYPE_FRAMEBUFFER,
-    CONSOLE_TYPE_NONE
+    CONSOLE_TYPE_SERIAL
 } console_type_t;
 
 /* 控制台信息 */
@@ -32,11 +21,6 @@ typedef struct {
     console_type_t type;
     u16 serial_port;
     u32 serial_baud;
-    u64 framebuffer_base;
-    u32 framebuffer_width;
-    u32 framebuffer_height;
-    u32 framebuffer_pitch;
-    u32 framebuffer_bpp;
 } console_info_t;
 
 /* 控制台初始化 */
@@ -50,9 +34,6 @@ void console_vprintf(const char *fmt, va_list args);
 
 /* 控制台控制 */
 void console_clear(void);
-void console_set_color(u8 foreground, u8 background);
-void console_get_cursor(int *x, int *y);
-void console_set_cursor(int x, int y);
 
 /* 格式化输出辅助 */
 void console_puthex64(u64 value);

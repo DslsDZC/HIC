@@ -33,20 +33,12 @@
 # 参数: %rdi = hic_boot_info_t* boot_info
 _start:
 kernel_entry:
-    # 调试：输出到串口确认内核被调用
+    # 输出调试信息：'K' 表示内核入口
     mov $'K', %al
     call .serial_putchar
-    mov $'E', %al
-    call .serial_putchar
-    mov $'R', %al
-    call .serial_putchar
-    mov $'N', %al
-    call .serial_putchar
-    mov $'E', %al
-    call .serial_putchar
-    mov $'L', %al
-    call .serial_putchar
-    mov $'\n', %al
+    
+    # 输出调试信息：'1' 表示保存寄存器
+    mov $'1', %al
     call .serial_putchar
     
     # 保存调用者上下文
@@ -60,11 +52,21 @@ kernel_entry:
     # 保存boot_info指针
     mov %rdi, %r15
 
-    # 调用C语言内核入口点
-    mov $'C', %al
+    # 输出调试信息：'2' 表示设置参数
+    mov $'2', %al
     call .serial_putchar
+    
+    # 调用C语言内核入口点
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
+    
+    # 如果kernel_start返回，输出错误信息
+    mov $'E', %al
+    call .serial_putchar
+    mov $'R', %al
+    call .serial_putchar
+    mov $'R', %al
+    call .serial_putchar
     
     # 如果kernel_start返回，进入无限循环
 .kernel_halt:

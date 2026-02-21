@@ -420,6 +420,25 @@ int snprintf(char *str, size_t size, const char *fmt, ...)
                     *buf++ = *s++;
                     remaining--;
                 }
+            } else if (*p == 'p') {
+                void *ptr = va_arg(args, void*);
+                char temp[32];
+                int i = 0;
+                uint64_t val = (uint64_t)ptr;
+                /* 输出0x前缀 */
+                const char *prefix = "0x";
+                while (*prefix && remaining > 1) {
+                    *buf++ = *prefix++;
+                    remaining--;
+                }
+                do {
+                    temp[i++] = "0123456789ABCDEF"[val % 16];
+                    val /= 16;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
             } else if (*p == 'd' || *p == 'i') {
                 int val = va_arg(args, int);
                 char temp[32];
@@ -457,6 +476,55 @@ int snprintf(char *str, size_t size, const char *fmt, ...)
                 do {
                     temp[i++] = "0123456789ABCDEF"[val % 16];
                     val /= 16;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else if (*p == 'l' && *(p+1) == 'x') {
+                unsigned long val = va_arg(args, unsigned long);
+                p++;
+                char temp[32];
+                int i = 0;
+                do {
+                    temp[i++] = "0123456789ABCDEF"[val % 16];
+                    val /= 16;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else if (*p == 'l' && *(p+1) == 'l' && *(p+2) == 'd') {
+                int64_t val = va_arg(args, int64_t);
+                p += 2;
+                char temp[32];
+                int i = 0;
+                if (val < 0) {
+                    *buf++ = '-';
+                    remaining--;
+                    val = -val;
+                }
+                do {
+                    temp[i++] = (char)('0' + (val % 10));
+                    val /= 10;
+                } while (val > 0);
+                while (i > 0 && remaining > 1) {
+                    *buf++ = temp[--i];
+                    remaining--;
+                }
+            } else if (*p == 'l' && *(p+1) == 'd') {
+                long val = va_arg(args, long);
+                p++;
+                char temp[32];
+                int i = 0;
+                if (val < 0) {
+                    *buf++ = '-';
+                    remaining--;
+                    val = -val;
+                }
+                do {
+                    temp[i++] = (char)('0' + (val % 10));
+                    val /= 10;
                 } while (val > 0);
                 while (i > 0 && remaining > 1) {
                     *buf++ = temp[--i];

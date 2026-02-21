@@ -24,8 +24,8 @@
 /* 当前运行的线程（原子操作保护） */
 thread_t *g_current_thread = NULL;
 
-/* 全局线程表 */
-thread_t g_threads[MAX_THREADS] = {0};
+/* 外部引用的线程表（定义在thread.c中） */
+extern thread_t g_threads[MAX_THREADS];
 
 /* 就绪队列（无锁设计 - 使用数组+索引） */
 #define MAX_READY_THREADS 64

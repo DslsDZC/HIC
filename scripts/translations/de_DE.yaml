@@ -1,0 +1,121 @@
+about: Über
+acpi: ACPI-Unterstützung
+aes: AES-NI
+audit: Audit-Protokoll
+avx: AVX
+avx2: AVX2
+balanced: Ausgewogen
+baud_rate: Baudrate
+bounds_check: Grenzprüfung
+buffer_cache: Buffer Cache
+build: Erstellen
+build_config: Build-Konfiguration
+build_failed: Erstellen fehlgeschlagen
+build_stopped: Erstellung gestoppt
+build_success: Erfolgreich erstellt
+building: Erstellen...
+cap_verify: Capability-Verifizierung
+clean: Bereinigen
+console_driver: Konsolentreiber
+console_log: Konsolenprotokoll
+copy: Kopieren
+cpu_affinity: CPU-Affinität
+cpu_features: CPU-Funktionen
+cut: Ausschneiden
+dark_theme: Dunkles Thema
+data_bits: Datenbits
+debug: Debug
+debug_symbols: Debug-Symbole
+debug_tab: Debug
+documentation: Dokumentation
+drivers: Treiber
+edit: Bearbeiten
+efi: UEFI-Unterstützung
+exit: Beenden
+export_config: Konfiguration exportieren
+fast_path: Fast Path
+features: Funktionen
+file: Datei
+form_verification: Formale Verifikation
+guard_pages: Guard Pages
+heap_size: Heap-Größe
+help: Hilfe
+import_config: Konfiguration importieren
+install: Installieren
+interface: Schnittstelle
+isolation_mode: Isolationsmodus
+kaslr: KASLR
+keyboard_driver: Tastaturtreiber
+language: Sprache
+languages:
+  de_DE: Deutsch
+  en_US: English
+  ja_JP: 日本語
+  zh_CN: 简体中文
+latency_opt: Latenzoptimierung
+light_theme: Helles Thema
+load_balancing: Lastausgleich
+load_threshold: Lastschwelle
+log: Protokoll
+lto: LTO
+max_capabilities: Maximale Capabilities
+max_domains: Maximale Domänen
+max_page_tables: Maximale Page Tables
+max_threads: Maximale Threads
+memory: Speicher
+minimal: Minimal
+mmx: MMX
+new_profile: Neues Profil
+numa_opt: NUMA-Optimierung
+open_profile: Profil öffnen
+optimize_level: Optimierungsstufe
+output: Ausgabe
+page_cache: Page Cache
+panic_on_bug: Panic bei Bug
+paste: Einfügen
+pci: PCI-Unterstützung
+perf_counter: Performance Counter
+performance: Leistung
+performance_tab: Leistung
+preemptive: Präemptiv
+preferences: Einstellungen
+preset: Voreinstellung
+presets: Voreinstellungen
+profile: Profil
+ps2_mouse: PS/2-Maus
+rdrand: RDRAND
+ready: Bereit
+redo: Wiederholen
+release: Release
+runtime_config: Laufzeitkonfiguration
+save_profile: Profil speichern
+scheduler: Scheduler
+scheduler_policy: Scheduler-Richtlinie
+security: Sicherheit
+serial_log: Serielles Protokoll
+smap: SMAP
+smep: SMEP
+smp: SMP
+sse: SSE
+sse2: SSE2
+sse3: SSE3
+sse4_1: SSE4.1
+sse4_2: SSE4.2
+ssse3: SSSE3
+stack_canary: Stack Canary
+stack_size: Stack-Größe
+start_build: Erstellen starten
+stop_build: Erstellen stoppen
+system_limits: Systemgrenzen
+theme: Thema
+throughput_opt: Durchsatzoptimierung
+time_slice: Zeitscheibe
+title: HIC Kernel-Buildsystem
+trace: Trace
+uart_driver: UART-Treiber
+undo: Rückgängig
+usb: USB-Unterstützung
+verbose: Ausführlich
+view: Ansicht
+virtio: VirtIO-Unterstützung
+zero_on_free: Zero on Free

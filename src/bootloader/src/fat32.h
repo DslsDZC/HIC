@@ -154,6 +154,7 @@ typedef struct {
 
 /* 函数声明 */
 EFI_STATUS fat32_init(fat32_fs_t *fs, EFI_BLOCK_IO_PROTOCOL *block_io);
+BOOLEAN fat32_is_valid(fat32_fs_t *fs);
 EFI_STATUS fat32_open_file(fat32_fs_t *fs, const char *path, uint64_t *file_size);
 EFI_STATUS fat32_read_file(fat32_fs_t *fs, const char *path, void **buffer, uint64_t *size);
 void fat32_free_buffer(void *buffer);

@@ -628,4 +628,182 @@ bool privileged_service_check_dependencies(domain_id_t domain_id)
     return true;
 }
 
+/* 注销服务端点 */
+hic_status_t privileged_service_unregister_endpoint(domain_id_t domain_id,
+                                                    cap_id_t endpoint_cap)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    service_endpoint_t *endpoint = service->endpoints;
+    service_endpoint_t *prev = NULL;
+    
+    while (endpoint) {
+        if (endpoint->endpoint_cap == endpoint_cap) {
+            /* 从路由表移除 */
+            if (endpoint->syscall_num < 256) {
+                g_service_manager.syscall_route_table[endpoint->syscall_num] = NULL;
+            }
+            
+            /* 从链表移除 */
+            if (prev) {
+                prev->next = endpoint->next;
+            } else {
+                service->endpoints = endpoint->next;
+            }
+            
+            /* 撤销能力 */
+            cap_revoke(endpoint_cap);
+            
+            /* 释放端点结构 */
+            pmm_free_frames((phys_addr_t)endpoint, 1);
+            
+            service->endpoint_count--;
+            
+            return HIC_SUCCESS;
+        }
+        
+        prev = endpoint;
+        endpoint = endpoint->next;
+    }
+    
+    return HIC_ERROR_NOT_FOUND;
+}
+
+/* 注销中断处理函数 */
+hic_status_t privileged_service_unregister_irq_handler(domain_id_t domain_id,
+                                                       u32 irq_vector)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    for (u32 i = 0; i < service->irq_count; i++) {
+        if (service->irq_vectors[i] == irq_vector) {
+            /* 移除该中断向量 */
+            for (u32 j = i; j < service->irq_count - 1; j++) {
+                service->irq_vectors[j] = service->irq_vectors[j + 1];
+            }
+            
+            service->irq_count--;
+            
+            return HIC_SUCCESS;
+        }
+    }
+    
+    return HIC_ERROR_NOT_FOUND;
+}
+
+/* 释放MMIO区域 */
+hic_status_t privileged_service_unmap_mmio(domain_id_t domain_id,
+                                           virt_addr_t virt_addr)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    for (u32 i = 0; i < service->mmio_count; i++) {
+        if (service->mmio_regions[i] == (phys_addr_t)virt_addr) {
+            /* 移除该MMIO区域 */
+            for (u32 j = i; j < service->mmio_count - 1; j++) {
+                service->mmio_regions[j] = service->mmio_regions[j + 1];
+                service->mmio_sizes[j] = service->mmio_sizes[j + 1];
+            }
+            
+            service->mmio_count--;
+            
+            return HIC_SUCCESS;
+        }
+    }
+    
+    return HIC_ERROR_NOT_FOUND;
+}
+
+/* 检查CPU配额 */
+hic_status_t privileged_service_check_cpu_quota(domain_id_t domain_id)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+
+    domain_t domain_info;
+    hic_status_t status = domain_get_info(domain_id, &domain_info);
+    if (status != HIC_SUCCESS) {
+        return status;
+    }
+    
+    /* 简化：检查CPU配额百分比 */
+    if (domain_info.quota.cpu_quota_percent < 100) {
+        /* 如果CPU配额不是100%，需要检查是否超限 */
+        /* 这里简化处理，实际应该统计CPU使用率 */
+    }
+    
+    return HIC_SUCCESS;
+}
+
+/* 更新服务统计 */
+void privileged_service_update_stats(domain_id_t domain_id,
+                                    u64 cpu_time_ns,
+                                    u64 syscall_count)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service) {
+        return;
+    }
+    
+    service->cpu_time_total += cpu_time_ns;
+    service->syscalls_total += syscall_count;
+}
+
+/* 通过UUID查找服务 */
+privileged_service_t* privileged_service_find_by_uuid(const char *uuid)
+{
+    privileged_service_t *service = g_service_manager.service_list;
+    
+    while (service) {
+        bool match = true;
+        for (int i = 0; i < 8; i++) {
+            if (service->uuid[i] != uuid[i]) {
+                match = false;
+                break;
+            }
+        }
+        
+        if (match) {
+            return service;
+        }
+        
+        service = service->next;
+    }
+    
+    return NULL;
+}
+
+/* 获取依赖列表 */
+u32 privileged_service_get_dependencies(domain_id_t domain_id,
+                                        domain_id_t *deps,
+                                        u32 max_deps)
+{
+    privileged_service_t *service = privileged_service_get_info(domain_id);
+    if (!service || !deps) {
+        return 0;
+    }
+    
+    u32 count = service->dep_count;
+    if (count > max_deps) {
+        count = max_deps;
+    }
+    
+    for (u32 i = 0; i < count; i++) {
+        deps[i] = service->dependencies[i];
+    }
+    
+    return count;
+}
+
 

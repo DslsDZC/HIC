@@ -200,7 +200,7 @@ extern boot_state_t g_boot_state;
  * 参数：
  *   boot_info - Bootloader传递的启动信息结构
  */
-void kernel_entry(hic_boot_info_t* boot_info);
+void kernel_boot_info_init(hic_boot_info_t* boot_info);
 
 /**
  * 验证启动信息

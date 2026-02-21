@@ -1,0 +1,121 @@
+about: About
+acpi: ACPI Support
+aes: AES-NI
+audit: Audit Log
+avx: AVX
+avx2: AVX2
+balanced: Balanced
+baud_rate: Baud Rate
+bounds_check: Bounds Check
+buffer_cache: Buffer Cache
+build: Build
+build_config: Build Config
+build_failed: Build Failed
+build_stopped: Build Stopped
+build_success: Build Successful
+building: Building...
+cap_verify: Capability Verification
+clean: Clean
+console_driver: Console Driver
+console_log: Console Log
+copy: Copy
+cpu_affinity: CPU Affinity
+cpu_features: CPU Features
+cut: Cut
+dark_theme: Dark Theme
+data_bits: Data Bits
+debug: Debug
+debug_symbols: Debug Symbols
+debug_tab: Debug
+documentation: Documentation
+drivers: Drivers
+edit: Edit
+efi: UEFI Support
+exit: Exit
+export_config: Export Config
+fast_path: Fast Path
+features: Features
+file: File
+form_verification: Formal Verification
+guard_pages: Guard Pages
+heap_size: Heap Size
+help: Help
+import_config: Import Config
+install: Install
+interface: Interface
+isolation_mode: Isolation Mode
+kaslr: KASLR
+keyboard_driver: Keyboard Driver
+language: Language
+languages:
+  de_DE: Deutsch
+  en_US: English
+  ja_JP: 日本語
+  zh_CN: 简体中文
+latency_opt: Latency Optimization
+light_theme: Light Theme
+load_balancing: Load Balancing
+load_threshold: Load Threshold
+log: Log
+lto: LTO
+max_capabilities: Max Capabilities
+max_domains: Max Domains
+max_page_tables: Max Page Tables
+max_threads: Max Threads
+memory: Memory
+minimal: Minimal
+mmx: MMX
+new_profile: New Profile
+numa_opt: NUMA Optimization
+open_profile: Open Profile
+optimize_level: Optimize Level
+output: Output
+page_cache: Page Cache
+panic_on_bug: Panic on Bug
+paste: Paste
+pci: PCI Support
+perf_counter: Performance Counter
+performance: Performance
+performance_tab: Performance
+preemptive: Preemptive
+preferences: Preferences
+preset: Preset
+presets: Presets
+profile: Profile
+ps2_mouse: PS/2 Mouse
+rdrand: RDRAND
+ready: Ready
+redo: Redo
+release: Release
+runtime_config: Runtime Config
+save_profile: Save Profile
+scheduler: Scheduler
+scheduler_policy: Scheduler Policy
+security: Security
+serial_log: Serial Log
+smap: SMAP
+smep: SMEP
+smp: SMP
+sse: SSE
+sse2: SSE2
+sse3: SSE3
+sse4_1: SSE4.1
+sse4_2: SSE4.2
+ssse3: SSSE3
+stack_canary: Stack Canary
+stack_size: Stack Size
+start_build: Start Build
+stop_build: Stop Build
+system_limits: System Limits
+theme: Theme
+throughput_opt: Throughput Optimization
+time_slice: Time Slice
+title: HIC Kernel Build System
+trace: Trace
+uart_driver: UART Driver
+undo: Undo
+usb: USB Support
+verbose: Verbose
+view: View
+virtio: VirtIO Support
+zero_on_free: Zero on Free

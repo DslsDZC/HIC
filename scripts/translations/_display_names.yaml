@@ -1,0 +1,21 @@
+language_display_names:
+  de_DE:
+    de_DE: Deutsch
+    en_US: English
+    ja_JP: 日本語
+    zh_CN: 简体中文
+  en_US:
+    de_DE: Deutsch
+    en_US: English
+    ja_JP: 日本語
+    zh_CN: 简体中文
+  ja_JP:
+    de_DE: Deutsch
+    en_US: English
+    ja_JP: 日本語
+    zh_CN: 简体中文
+  zh_CN:
+    de_DE: Deutsch
+    en_US: English
+    ja_JP: 日本語
+    zh_CN: 简体中文

@@ -29,6 +29,9 @@ static log_level_t g_log_level = LOG_LEVEL_INFO;
 // 串口配置
 static uint16_t g_serial_port = 0x3F8;  // COM1
 
+// 串口是否已初始化的标志
+static bool g_serial_initialized = false;
+
 // 静态函数前置声明
 static void outb(uint16_t port, uint8_t value);
 static uint8_t inb(uint16_t port);
@@ -42,20 +45,22 @@ static int vsnprintf(char *buffer, size_t size, const char *fmt, va_list args);
  */
 void console_init(void)
 {
-    // 初始化串口（内核启动后会继续使用）
-    serial_init(0x3F8);  // COM1, 115200 baud
-    
-    // 直接使用UEFI ConOut，不依赖其他初始化
-    if (gST && gST->con_out) {
-        gST->con_out->ClearScreen(gST->con_out);
+    // 只初始化一次串口（避免重复初始化导致的问题）
+    if (!g_serial_initialized) {
+        serial_init(0x3F8);  // COM1, 115200 baud
     }
+    
+    // 暂时禁用UEFI ConOut操作，避免可能的重复输出
+    // if (gST && gST->con_out) {
+    //     gST->con_out->ClearScreen(gST->con_out);
+    // }
 }
 
 /**
  * 输出字符到控制台（仅UEFI，不输出到串口）
  * 注意：串口输出由serial_putchar单独处理
  */
-static void console_putchar_uefi(char c)
+static void __attribute__((unused)) console_putchar_uefi(char c)
 {
     // 仅使用UEFI ConOut协议输出到屏幕
     if (gST && gST->con_out) {
@@ -71,11 +76,11 @@ static void console_putchar_uefi(char c)
  */
 void console_putchar(char c)
 {
-    // 输出到串口
+    // 仅输出到串口
     serial_putchar(g_serial_port, c);
     
-    // 输出到UEFI屏幕
-    console_putchar_uefi(c);
+    // 暂时禁用UEFI屏幕输出，避免字符重复问题
+    // console_putchar_uefi(c);
 }
 
 /**
@@ -84,15 +89,28 @@ void console_putchar(char c)
  */
 void console_puts(const char *str)
 {
-    // 输出到串口
+    // 仅输出到串口
     serial_puts(g_serial_port, str);
     
-    // 输出到UEFI屏幕（逐字符输出，避免重复串口输出）
+    // 暂时禁用UEFI屏幕输出，避免字符重复问题
+    /*
     if (gST && gST->con_out) {
-        while (*str) {
-            console_putchar_uefi(*str++);
+        // 将ASCII字符串转换为CHAR16字符串
+        size_t len = 0;
+        const char *p = str;
+        while (*p++) len++;
+        
+        // 使用栈上缓冲区（限制长度以避免栈溢出）
+        CHAR16 buf[256];
+        size_t copy_len = (len < 255) ? len : 255;
+        
+        for (size_t i = 0; i < copy_len; i++) {
+            buf[i] = (CHAR16)str[i];
         }
+        buf[copy_len] = 0;
+        gST->con_out->OutputString(gST->con_out, buf);
     }
+    */
 }
 
 /**
@@ -359,6 +377,11 @@ void log_trace(const char *fmt, ...)
  */
 void serial_init(uint16_t port)
 {
+    // 如果已经初始化过，直接返回
+    if (g_serial_initialized) {
+        return;
+    }
+    
     g_serial_port = port;
     
     // 禁用中断
@@ -374,11 +397,14 @@ void serial_init(uint16_t port)
     // 8位数据，无校验，1停止位
     outb(port + 3, 0x03);
     
-    // 启用FIFO，清除缓冲区
-    outb(port + 2, 0xC7);
+    // 禁用FIFO，清除缓冲区
+    outb(port + 2, 0x00);
     
-    // 启用RTS和DTR
-    outb(port + 4, 0x0B);
+    // 禁用RTS和DTR
+    outb(port + 4, 0x00);
+    
+    // 标记串口已初始化
+    g_serial_initialized = true;
 }
 
 /**
