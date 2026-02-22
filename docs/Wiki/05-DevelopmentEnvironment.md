@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -414,7 +414,7 @@ python3 -c "import rich; print(rich.__version__)"
 
 ```bash
 # 克隆项目（如果还没有）
-git clone https://github.com/DslsDZC/HIC.git
+git clone https://github.com/*/HIC.git
 cd hic
 
 # 测试构建

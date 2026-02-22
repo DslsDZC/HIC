@@ -656,9 +656,9 @@ make build-balanced
 
 ## 联系方式
 
-- 作者: DslsDZC
-- 邮箱: dsls.dzc@gmail.com
-- 项目主页: https://github.com/DslsDZC/HIC
+- 作者: *
+- 邮箱: *@gmail.com
+- 项目主页: https://github.com/*/HIC
 
 ---
 

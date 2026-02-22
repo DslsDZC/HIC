@@ -1,13 +1,13 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
 # HIC (Hierarchical Isolation Core) Architecture Reference Documentation
 
-Author: DslsDZC
-Email: dsls.dzc@gmail.com
+Author: *
+Email: *@gmail.com
 
 ## 1. Design Philosophy and Fundamental Goals
 

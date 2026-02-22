@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HIC 构建系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 15px 20px;
+            border-bottom: 1px solid #3d3d3d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.5em;
+            color: #4a9eff;
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .content {
+            flex: 1;
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .group-box {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #3d3d3d;
+            border-radius: 4px;
+        }
+
+        .group-box h3 {
+            font-size: 1em;
+            margin-bottom: 10px;
+            color: #4a9eff;
+        }
+
+        .control {
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+        }
+
+        button:hover {
+            background: #3a8eef;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #3d3d3d;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #1a1a1a;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #4a9eff;
+            transition: width 0.3s ease;
+        }
+
+        .output {
+            flex: 1;
+            background: #1a1a1a;
+            border: 1px solid #3d3d3d;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .status-bar {
+            background: #2d2d2d;
+            padding: 10px 20px;
+            border-top: 1px solid #3d3d3d;
+            font-size: 14px;
+        }
+
+        .message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 4px;
+            max-width: 400px;
+            z-index: 1000;
+        }
+
+        .message.info {
+            background: #4a9eff;
+            color: white;
+        }
+
+        .message.warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .message.error {
+            background: #f44336;
+            color: white;
+        }
+
+        .close-btn {
+            float: right;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .tab-button {
+            background: #3d3d3d;
+            color: #e0e0e0;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .tab-button.active {
+            background: #4a9eff;
+            color: white;
+        }
+
+        .splitter {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .splitter.horizontal {
+            flex-direction: row;
+        }
+
+        .splitter.vertical {
+            flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="app-title">HIC 构建系统</h1>
+            <div>
+                <button onclick="socket.emit('command', {'widget_id': 'theme-toggle', 'value': 'dark'})">深色主题</button>
+                <button onclick="socket.emit('command', {'widget_id': 'theme-toggle', 'value': 'light'})">浅色主题</button>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="sidebar" id="sidebar">
+                <div class="group-box">
+                    <h3>构建</h3>
+                    <div class="control">
+                        <button onclick="sendCommand('build-all')">构建全部</button>
+                    </div>
+                    <div class="control">
+                        <button onclick="sendCommand('build-bootloader')">构建引导程序</button>
+                    </div>
+                    <div class="control">
+                        <button onclick="sendCommand('build-kernel')">构建内核</button>
+                    </div>
+                </div>
+
+                <div class="group-box">
+                    <h3>配置</h3>
+                    <div class="control">
+                        <label>预设</label>
+                        <select id="preset-select">
+                            <option value="balanced">平衡</option>
+                            <option value="release">发布</option>
+                            <option value="debug">调试</option>
+                            <option value="minimal">最小</option>
+                            <option value="performance">性能</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="group-box">
+                    <h3>镜像</h3>
+                    <div class="control">
+                        <button onclick="sendCommand('create-iso')">创建 ISO</button>
+                    </div>
+                    <div class="control">
+                        <button onclick="sendCommand('create-fat32')">创建 FAT32</button>
+                    </div>
+                </div>
+
+                <div class="group-box">
+                    <h3>操作</h3>
+                    <div class="control">
+                        <button onclick="sendCommand('clean')">清理</button>
+                    </div>
+                    <div class="control">
+                        <button onclick="sendCommand('install')">安装</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress" style="width: 0%"></div>
+                </div>
+                <div class="output" id="output">
+                    <div>欢迎使用 HIC 构建系统</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="status">
+            就绪
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('已连接到服务器');
+            updateStatus('已连接');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('已断开连接');
+            updateStatus('已断开');
+        });
+
+        socket.on('message', (data) => {
+            showMessage(data.title, data.message, data.type);
+        });
+
+        socket.on('widget_update', (data) => {
+            const widget = document.getElementById(data.id);
+            if (widget) {
+                if (data.data.type === 'progress') {
+                    widget.style.width = data.data.value + '%';
+                } else if (data.data.type === 'textarea') {
+                    widget.textContent = data.data.content;
+                    widget.scrollTop = widget.scrollHeight;
+                }
+            }
+        });
+
+        function sendCommand(command) {
+            updateStatus('执行中: ' + command);
+            socket.emit('command', {
+                widget_id: command,
+                value: null
+            });
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function appendOutput(text) {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.textContent = text;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function showMessage(title, message, type) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${type}`;
+            msgDiv.innerHTML = `
+                <span class="close-btn" onclick="this.parentElement.remove()">&times;</span>
+                <strong>${title}</strong><br>
+                ${message}
+            `;
+            document.body.appendChild(msgDiv);
+
+            setTimeout(() => {
+                msgDiv.remove();
+            }, 5000);
+        }
+
+        // 预设选择
+        document.getElementById('preset-select').addEventListener('change', (e) => {
+            sendCommand('set-preset:' + e.target.value);
+        });
+    </script>
+</body>
+</html>

@@ -31,7 +31,7 @@
       "-o",
       "obj/uefi_main.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_main.o"
   },
   {
@@ -66,7 +66,7 @@
       "-o",
       "obj/uefi_bootlog.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_bootlog.o"
   },
   {
@@ -101,7 +101,7 @@
       "-o",
       "obj/uefi_stdlib.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_stdlib.o"
   },
   {
@@ -136,7 +136,7 @@
       "-o",
       "obj/uefi_string.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_string.o"
   },
   {
@@ -171,7 +171,7 @@
       "-o",
       "obj/uefi_console.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_console.o"
   },
   {
@@ -206,7 +206,7 @@
       "-o",
       "obj/uefi_efi_guids.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_efi_guids.o"
   },
   {
@@ -241,7 +241,7 @@
       "-o",
       "obj/uefi_embedded_kernel_loader.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_embedded_kernel_loader.o"
   },
   {
@@ -276,7 +276,7 @@
       "-o",
       "obj/uefi_fat32.o"
     ],
-    "directory": "/home/DslsDZC/HIC/src/bootloader",
+    "directory": "/home/*/HIC/src/bootloader",
     "output": "obj/uefi_fat32.o"
   }
 ]

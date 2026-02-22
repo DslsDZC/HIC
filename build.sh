@@ -22,6 +22,9 @@ echo ""
 if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "用法: ./build.sh [选项]"
     echo ""
+    echo "快速启动:"
+    echo "  start              - 启动快速构建向导（推荐新手）"
+    echo ""
     echo "构建选项:"
     echo "  bootloader   - 仅构建引导程序"
     echo "  kernel       - 仅构建内核"
@@ -31,7 +34,8 @@ if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "界面选项:"
     echo "  gui          - 运行GUI构建界面"
     echo "  tui          - 运行TUI构建界面"
-    echo "  cli          - 运行CLI构建界面"
+    echo "  cli          - 运行CLI交互式Shell"
+    echo "  web          - 运行Web界面"
     echo ""
     echo "配置选项:"
     echo "  cli --config        - 显示当前编译配置"
@@ -69,6 +73,12 @@ setup_venv() {
 
 # 根据参数执行不同操作
 case "$1" in
+    start)
+        echo -e "${YELLOW}启动快速构建向导...${RESET}"
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/quick_start.py"
+        ;;
+    
     bootloader)
         echo -e "${YELLOW}构建引导程序...${RESET}"
         cd "${SCRIPT_DIR}/src/bootloader"
@@ -116,7 +126,7 @@ case "$1" in
     gui)
         echo -e "${YELLOW}运行GUI构建界面...${RESET}"
         setup_venv
-        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/build_gui.py"
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/gui_unified.py"
         ;;
     
     tui)
@@ -126,9 +136,9 @@ case "$1" in
         ;;
     
     cli)
-        echo -e "${YELLOW}运行CLI构建界面...${RESET}"
+        echo -e "${YELLOW}运行HIC交互式构建系统Shell...${RESET}"
         setup_venv
-        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/build_system.py"
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/hic_shell.py"
         ;;
     
     setup-venv)
