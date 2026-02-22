@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -305,8 +305,8 @@ A: HIC目前处于v0.1.0阶段，核心功能已实现，但还需要更多的�
 A: 可以通过以下方式获取帮助：
 1. 查看 [Wiki文档](./index.md)
 2. 查看 [故障排查](./38-Troubleshooting.md)
-3. 提交 [Issue](https://github.com/DslsDZC/HIC/issues)
-4. 加入 [讨论区](https://github.com/DslsDZC/HIC/discussions)
+3. 提交 [Issue](https://github.com/*/HIC/issues)
+4. 加入 [讨论区](https://github.com/*/HIC/discussions)
 
 ### Q: 如何报告Bug？
 

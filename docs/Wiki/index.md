@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -94,9 +94,9 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 相关链接
 
-- [GitHub仓库](https://github.com/DslsDZC/HIC)
-- [Issue追踪](https://github.com/DslsDZC/HIC/issues)
-- [讨论区](https://github.com/DslsDZC/HIC/discussions)
+- [GitHub仓库](https://github.com/*/HIC)
+- [Issue追踪](https://github.com/*/HIC/issues)
+- [讨论区](https://github.com/*/HIC/discussions)
 
 ## 许可证
 

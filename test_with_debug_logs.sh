@@ -2,7 +2,7 @@
 # HIC内核调试启动脚本（带详细日志）
 # 启用QEMU/OVMF详细调试以排查UEFI FAT32驱动问题
 
-cd /home/DslsDZC/HIC
+cd /home/*/HIC
 
 # 清理进程
 pkill -9 qemu-system-x86_64 2>/dev/null || true

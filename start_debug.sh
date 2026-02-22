@@ -3,7 +3,7 @@
 # 使用方法: ./start_debug.sh
 # 然后在另一个终端运行: gdb -x scripts/debug_manual.gdb build/bin/hic-kernel.elf
 
-cd /home/DslsDZC/HIC
+cd /home/*/HIC
 
 # 清理进程
 pkill -9 qemu-system-x86_64 2>/dev/null || true

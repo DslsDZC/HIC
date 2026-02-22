@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -310,8 +310,8 @@ A: 可以使用QEMU的调试功能，或者添加串口输出进行调试。
 
 - 查看 [常见问题](./36-FAQ.md)
 - 查看 [故障排查](./38-Troubleshooting.md)
-- 提交 [Issue](https://github.com/DslsDZC/HIC/issues)
-- 加入 [讨论区](https://github.com/DslsDZC/HIC/discussions)
+- 提交 [Issue](https://github.com/*/HIC/issues)
+- 加入 [讨论区](https://github.com/*/HIC/discussions)
 
 ---
 

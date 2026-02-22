@@ -21,37 +21,40 @@ QEMU_MEM = 512M
 QEMU_OVMF_CODE = /usr/share/edk2-ovmf/x64/OVMF_CODE.4m.fd
 QEMU_OVMF_VARS = /usr/share/edk2-ovmf/x64/OVMF_VARS.4m.fd
 
-# ========================================
 # 主要构建目标
-# ========================================
 
 # 默认目标 - 启动增强的构建系统
 all: build
 
+# 快速构建向导（推荐新手）
+start:
+	@echo "启动快速构建向导"
+	@python3 scripts/quick_start.py
+
 # 构建引导程序
 bootloader:
-	@echo "=== 构建引导程序 ==="
+	@echo "构建引导程序"
 	@cd $(BOOTLOADER_DIR) && $(MAKE) clean
 	@cd $(BOOTLOADER_DIR) && $(MAKE) all
 	@echo "引导程序构建完成"
 
 # 构建内核
 kernel:
-	@echo "=== 构建内核 ==="
+	@echo "构建内核"
 	@cd $(BUILD_DIR) && $(MAKE) clean
 	@cd $(BUILD_DIR) && $(MAKE) all
 	@echo "内核构建完成"
 
 # 生成HIC镜像
 image: kernel
-	@echo "=== 生成HIC镜像 ==="
+	@echo "生成HIC镜像"
 	@cd $(BUILD_DIR) && gcc -O2 create_hic_image.c -o create_hic_image
 	@cd $(BUILD_DIR) && ./create_hic_image bin/hic-kernel.elf bin/hic-kernel.hic
 	@echo "HIC镜像生成完成"
 
 # 更新磁盘镜像
 update-disk: image bootloader
-	@echo "=== 更新磁盘镜像 ==="
+	@echo "更新磁盘镜像"
 	@sudo umount /tmp/hic_mnt 2>/dev/null || true
 	@sudo losetup -f output/hic-uefi-disk.img /dev/loop0 2>/dev/null || true
 	@sudo partprobe /dev/loop0 2>/dev/null || true
@@ -65,7 +68,7 @@ update-disk: image bootloader
 
 # 清理
 clean: clean-debug clean-iso
-	@echo "=== 清理构建文件 ==="
+	@echo "清理构建文件"
 	@cd $(BOOTLOADER_DIR) && $(MAKE) clean || true
 	@cd $(BUILD_DIR) && $(MAKE) clean || true
 	@rm -rf $(OUTPUT_DIR)/*
@@ -73,7 +76,7 @@ clean: clean-debug clean-iso
 
 # 安装（将输出文件复制到output目录）
 install:
-	@echo "=== 安装构建产物 ==="
+	@echo "安装构建产物"
 	@mkdir -p $(OUTPUT_DIR)
 	@if [ -f $(BOOTLOADER_DIR)/bin/bootx64.efi ]; then \
 		cp $(BOOTLOADER_DIR)/bin/bootx64.efi $(OUTPUT_DIR)/; \
@@ -101,9 +104,7 @@ install-disk: $(ISO_FILE)
 	@echo "  sudo dd if=$(ISO_FILE) of=/dev/sdX bs=4M status=progress && sync"
 	@echo "替换 /dev/sdX 为您的目标设备"
 
-# ========================================
 # 构建系统界面
-# ========================================
 
 # 运行构建系统（自动选择界面）
 build:
@@ -127,6 +128,10 @@ build-cli:
 	@echo "=== 运行构建系统 (CLI) ==="
 	@python3 scripts/build_system.py --interface cli
 
+build-web:
+	@echo "=== 运行构建系统 (Web GUI) ==="
+	@python3 scripts/gui_unified.py --backend web
+
 # 使用预设配置构建
 build-balanced:
 	@python3 scripts/build_system.py --preset balanced
@@ -143,9 +148,7 @@ build-minimal:
 build-performance:
 	@python3 scripts/build_system.py --preset performance
 
-# ========================================
 # ISO镜像创建
-# ========================================
 
 # 创建ISO镜像
 iso: $(ISO_FILE)
@@ -207,9 +210,7 @@ iso-test: $(ISO_FILE)
 		-m $(QEMU_MEM) -nographic \
 		2>&1 | tail -100
 
-# ========================================
 # 调试相关
-# ========================================
 
 # 创建GDB脚本
 gdb-script:
@@ -282,15 +283,16 @@ test: update-disk
 		-nographic \
 		2>&1 | tail -100
 
-# ========================================
 # 帮助信息
-# ========================================
 
 help:
 	@echo "$(PROJECT) 构建系统 v$(VERSION)"
 	@echo ""
-	@echo "用法:"
-	@echo "  make                    - 启动构建系统（自动选择最佳界面）"
+	@echo "===== 快速开始 ====="
+	@echo "  make start             - 启动快速构建向导（推荐新手）"
+	@echo "  make build             - 自动选择界面（推荐）"
+	@echo ""
+	@echo "===== 基本构建 ====="
 	@echo "  make all                - 构建所有组件"
 	@echo "  make bootloader         - 仅构建引导程序"
 	@echo "  make kernel             - 仅构建内核"
@@ -298,45 +300,45 @@ help:
 	@echo "  make update-disk        - 更新磁盘镜像"
 	@echo "  make clean              - 清理所有构建文件"
 	@echo "  make install            - 安装构建产物到output目录"
-	@echo "  make install-disk       - 安装ISO到磁盘（需要sudo）"
 	@echo ""
-	@echo "构建系统界面:"
+	@echo "===== 构建系统界面 ====="
 	@echo "  make build              - 自动选择界面（推荐）"
 	@echo "  make build-qt           - 强制使用Qt GUI界面"
 	@echo "  make build-gtk          - 强制使用GTK GUI界面"
 	@echo "  make build-tui          - 强制使用TUI界面"
-	@echo "  make build-cli          - 强制使用CLI界面"
+	@echo "  make build-cli          - 强制使用CLI交互式Shell"
+	@echo "  make build-web          - 强制使用Web GUI界面（浏览器）"
 	@echo ""
-	@echo "预设配置:"
+	@echo "===== 预设配置 ====="
 	@echo "  make build-balanced     - 使用平衡配置"
 	@echo "  make build-release      - 使用发布配置"
 	@echo "  make build-debug        - 使用调试配置"
 	@echo "  make build-minimal      - 使用最小配置"
 	@echo "  make build-performance  - 使用性能配置"
 	@echo ""
-	@echo "ISO镜像:"
+	@echo "===== ISO镜像 ====="
 	@echo "  make iso                - 创建ISO安装镜像"
 	@echo "  make clean-iso          - 清理ISO文件"
 	@echo "  make iso-list           - 查看ISO内容"
 	@echo "  make iso-test           - 测试ISO镜像"
 	@echo ""
-	@echo "调试:"
+	@echo "===== 调试 ====="
 	@echo "  make debug              - 完整GDB调试流程"
 	@echo "  make gdb                - 仅启动GDB调试"
 	@echo "  make gdb-script         - 创建GDB脚本"
 	@echo "  make qemu               - 启动QEMU（后台）"
 	@echo "  make test               - 快速测试启动（无GDB）"
-	@echo ""
-	@echo "调试详细:"
 	@echo "  make clean-debug        - 清理调试文件"
 	@echo ""
-	@echo "示例:"
-	@echo "  make build-balanced && make install          # 使用平衡配置构建并安装"
-	@echo "  make kernel && make image && make iso        # 构建完整ISO"
-	@echo "  make build-debug && make debug               # 调试内核启动"
-	@echo "  make iso && make install-disk                # 创建并安装ISO"
+	@echo "===== 常用组合 ====="
+	@echo "  make start                                  # 快速开始（推荐）"
+	@echo "  make build-balanced && make install         # 平衡配置构建并安装"
+	@echo "  make kernel && make image && make iso       # 构建完整ISO"
+	@echo "  make build-debug && make debug              # 调试内核启动"
+	@echo "  make iso && make install-disk               # 创建并安装ISO"
 	@echo ""
-	@echo "文档:"
+	@echo "===== 文档 ====="
 	@echo "  docs/Wiki/03-QuickStart.md                   - 快速开始指南"
 	@echo "  docs/Wiki/04-BuildSystem.md                  - 构建系统详细说明"
 	@echo "  docs/Wiki/08-Core0.md                        - Core-0层详解"
+	@echo "  docs/BUILD_SYSTEM_GUIDE.md                   - 构建系统完整指南"

@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 * <*@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -166,9 +166,9 @@ make all
 
 ## 联系方式
 
-- 作者: DslsDZC
-- Email: dsls.dzc@gmail.com
-- GitHub: https://github.com/DslsDZC/HIC
+- 作者: *
+- Email: *@gmail.com
+- GitHub: https://github.com/*/HIC
 
 ## 版本
 

@@ -2,7 +2,7 @@ build:
   debug_symbols: true
   lto: false
   mode: dynamic
-  optimize_level: 2
+  optimize_level: 0
   strip: false
 build_system:
   interface:
@@ -147,7 +147,7 @@ cpu_features:
   sse4_2: true
   ssse3: true
 debug:
-  bounds_check: false
+  bounds_check: true
   console_log: true
   panic_on_bug: true
   serial_log: true

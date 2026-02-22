@@ -127,8 +127,8 @@ following additional permission, which supplements the terms of GPL-2.0-only:
 9. Contact Information
 
    For questions regarding this exception, please contact the HIC project maintainers
-   at: dsls.dzc@gmail.com
+   at: *@gmail.com
 
    The official version of this exception is maintained at:
-   [https://github.com/DslsDZC/HIC/LICENSE/LicenseRef-HIC-service-exception.txt]
+   [https://github.com/*/HIC/LICENSE/LicenseRef-HIC-service-exception.txt]
 
