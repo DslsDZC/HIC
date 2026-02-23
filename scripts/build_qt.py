@@ -155,12 +155,14 @@ class HICBuildGUI(QMainWindow):
         self.current_language = "zh_CN"
         self.current_theme = "dark"
         self.current_preset = "balanced"
+        self.build_mode = "simple"  # simple 或 advanced
         self.build_thread: Optional[BuildThread] = None
         self.config_data: Dict[str, Any] = {}
-        
+
         self.init_ui()
         self.load_config()
         self.apply_theme()
+        self.update_mode_visibility()
     
     def init_ui(self):
         """初始化UI"""
@@ -283,8 +285,22 @@ class HICBuildGUI(QMainWindow):
         toolbar.addAction(self.install_action)
         
         toolbar.addSeparator()
-        
-        # 预设选择
+
+        # 模式切换
+        self.mode_label = QLabel(self._("mode") + ": ")
+        toolbar.addWidget(self.mode_label)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem(self._("simple_mode"), "simple")
+        self.mode_combo.addItem(self._("advanced_mode"), "advanced")
+        # 根据当前模式设置索引
+        mode_index = 0 if self.build_mode == "simple" else 1
+        self.mode_combo.setCurrentIndex(mode_index)
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        toolbar.addWidget(self.mode_combo)
+
+        toolbar.addSeparator()
+
+        # 预设选择（仅在简单模式下显示）
         self.preset_label = QLabel(self._("preset") + ": ")
         toolbar.addWidget(self.preset_label)
         self.preset_combo = QComboBox()
@@ -441,7 +457,7 @@ class HICBuildGUI(QMainWindow):
         # 构建模式
         self.build_mode_combo = QComboBox()
         self.build_mode_combo.addItems(["dynamic", "static"])
-        layout.addRow("Build Mode:", self.build_mode_combo)
+        layout.addRow(self._("preset") + ":", self.build_mode_combo)
         
         # 优化级别
         self.optimize_spin = QSpinBox()
@@ -462,7 +478,7 @@ class HICBuildGUI(QMainWindow):
         # 剥离符号
         self.strip_check = QCheckBox()
         self.strip_check.setChecked(False)
-        layout.addRow("Strip Symbols:", self.strip_check)
+        layout.addRow(self._("debug_symbols") + ":", self.strip_check)
     
     def create_runtime_config_page(self, parent: QWidget):
         """创建运行时配置页面"""
@@ -501,31 +517,31 @@ class HICBuildGUI(QMainWindow):
         self.max_domains_spin = QSpinBox()
         self.max_domains_spin.setRange(1, 1024)
         self.max_domains_spin.setValue(256)
-        layout.addRow("Max Domains:", self.max_domains_spin)
+        layout.addRow(self._("max_domains") + ":", self.max_domains_spin)
         
         # 最大能力数
         self.max_capabilities_spin = QSpinBox()
         self.max_capabilities_spin.setRange(1, 16384)
         self.max_capabilities_spin.setValue(2048)
-        layout.addRow("Max Capabilities:", self.max_capabilities_spin)
+        layout.addRow(self._("max_capabilities") + ":", self.max_capabilities_spin)
         
         # 最大线程数
         self.max_threads_spin = QSpinBox()
         self.max_threads_spin.setRange(1, 4096)
         self.max_threads_spin.setValue(256)
-        layout.addRow("Max Threads:", self.max_threads_spin)
+        layout.addRow(self._("max_threads") + ":", self.max_threads_spin)
         
         # 每域最大能力数
         self.cap_per_domain_spin = QSpinBox()
         self.cap_per_domain_spin.setRange(1, 1024)
         self.cap_per_domain_spin.setValue(128)
-        layout.addRow("Max Caps per Domain:", self.cap_per_domain_spin)
+        layout.addRow(self._("max_capabilities") + " " + self._("per_domain") + ":", self.cap_per_domain_spin)
         
         # 每域最大线程数
         self.thread_per_domain_spin = QSpinBox()
         self.thread_per_domain_spin.setRange(1, 256)
         self.thread_per_domain_spin.setValue(16)
-        layout.addRow("Max Threads per Domain:", self.thread_per_domain_spin)
+        layout.addRow(self._("max_threads") + " " + self._("per_domain") + ":", self.thread_per_domain_spin)
     
     def create_features_page(self, parent: QWidget):
         """创建功能特性页面"""
@@ -534,12 +550,12 @@ class HICBuildGUI(QMainWindow):
         # SMP
         self.smp_check = QCheckBox()
         self.smp_check.setChecked(True)
-        layout.addRow("SMP Support:", self.smp_check)
-        
+        layout.addRow(self._("smp") + ":", self.smp_check)
+
         # APIC
         self.apic_check = QCheckBox()
         self.apic_check.setChecked(True)
-        layout.addRow("APIC Support:", self.apic_check)
+        layout.addRow("APIC:", self.apic_check)
         
         # ACPI
         self.acpi_check = QCheckBox()
@@ -554,7 +570,7 @@ class HICBuildGUI(QMainWindow):
         # AHCI
         self.ahci_check = QCheckBox()
         self.ahci_check.setChecked(True)
-        layout.addRow("AHCI Support:", self.ahci_check)
+        layout.addRow("AHCI:", self.ahci_check)
         
         # USB
         self.usb_check = QCheckBox()
@@ -578,57 +594,57 @@ class HICBuildGUI(QMainWindow):
         # MMX
         self.mmx_check = QCheckBox()
         self.mmx_check.setChecked(True)
-        layout.addRow("MMX:", self.mmx_check)
-        
+        layout.addRow(self._("mmx") + ":", self.mmx_check)
+
         # SSE
         self.sse_check = QCheckBox()
         self.sse_check.setChecked(True)
-        layout.addRow("SSE:", self.sse_check)
-        
+        layout.addRow(self._("sse") + ":", self.sse_check)
+
         # SSE2
         self.sse2_check = QCheckBox()
         self.sse2_check.setChecked(True)
-        layout.addRow("SSE2:", self.sse2_check)
-        
+        layout.addRow(self._("sse2") + ":", self.sse2_check)
+
         # SSE3
         self.sse3_check = QCheckBox()
         self.sse3_check.setChecked(True)
-        layout.addRow("SSE3:", self.sse3_check)
+        layout.addRow(self._("sse3") + ":", self.sse3_check)
         
         # SSSE3
         self.ssse3_check = QCheckBox()
         self.ssse3_check.setChecked(True)
-        layout.addRow("SSSE3:", self.ssse3_check)
-        
+        layout.addRow(self._("ssse3") + ":", self.ssse3_check)
+
         # SSE4.1
         self.sse4_1_check = QCheckBox()
         self.sse4_1_check.setChecked(True)
-        layout.addRow("SSE4.1:", self.sse4_1_check)
-        
+        layout.addRow(self._("sse4_1") + ":", self.sse4_1_check)
+
         # SSE4.2
         self.sse4_2_check = QCheckBox()
         self.sse4_2_check.setChecked(True)
-        layout.addRow("SSE4.2:", self.sse4_2_check)
-        
+        layout.addRow(self._("sse4_2") + ":", self.sse4_2_check)
+
         # AVX
         self.avx_check = QCheckBox()
         self.avx_check.setChecked(True)
-        layout.addRow("AVX:", self.avx_check)
-        
+        layout.addRow(self._("avx") + ":", self.avx_check)
+
         # AVX2
         self.avx2_check = QCheckBox()
         self.avx2_check.setChecked(True)
-        layout.addRow("AVX2:", self.avx2_check)
-        
+        layout.addRow(self._("avx2") + ":", self.avx2_check)
+
         # AES
         self.aes_check = QCheckBox()
         self.aes_check.setChecked(True)
-        layout.addRow("AES-NI:", self.aes_check)
-        
+        layout.addRow(self._("aes") + ":", self.aes_check)
+
         # RDRAND
         self.rdrand_check = QCheckBox()
         self.rdrand_check.setChecked(True)
-        layout.addRow("RDRAND:", self.rdrand_check)
+        layout.addRow(self._("rdrand") + ":", self.rdrand_check)
     
     def create_scheduler_page(self, parent: QWidget):
         """创建调度器页面"""
@@ -673,17 +689,17 @@ class HICBuildGUI(QMainWindow):
         # KASLR
         self.kaslr_check = QCheckBox()
         self.kaslr_check.setChecked(False)
-        layout.addRow("KASLR:", self.kaslr_check)
-        
+        layout.addRow(self._("kaslr") + ":", self.kaslr_check)
+
         # SMEP
         self.smep_check = QCheckBox()
         self.smep_check.setChecked(False)
-        layout.addRow("SMEP:", self.smep_check)
-        
+        layout.addRow(self._("smep") + ":", self.smep_check)
+
         # SMAP
         self.smap_check = QCheckBox()
         self.smap_check.setChecked(False)
-        layout.addRow("SMAP:", self.smap_check)
+        layout.addRow(self._("smap") + ":", self.smap_check)
         
         # 审计日志
         self.audit_check = QCheckBox()
@@ -874,7 +890,7 @@ class HICBuildGUI(QMainWindow):
         languages = I18N["zh_CN"]["languages"]
         if self.current_language in languages:
             current_language_name = languages[self.current_language]
-            self.language_label.setText(current_language_name + ":")
+            self.language_label.setText(current_language_name + "：")
 
     def update_status(self, message: str):
         """更新状态栏"""
@@ -926,13 +942,28 @@ class HICBuildGUI(QMainWindow):
     def on_language_changed(self, index: int):
         """语言改变事件"""
         code = self.language_combo.itemData(index)
-        if code and code in I18N:
-            self.current_language = code
+        self.current_language = code
 
-            # 更新语言标签
-            self.update_language_label()
+        # 刷新整个界面
+        self.refresh_all_ui()
 
-            self.retranslate_ui()
+        self.update_status(f"语言已切换到 {self._('language')}")
+
+    def refresh_all_ui(self):
+        """刷新所有UI元素"""
+        # 重新翻译整个界面
+        self.retranslate_ui()
+
+        # 更新模式选择器
+        if hasattr(self, 'mode_label'):
+            self.mode_label.setText(self._("mode") + "：")
+        if hasattr(self, 'mode_combo'):
+            current_mode_index = self.mode_combo.currentIndex()
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setItemText(0, self._("simple_mode"))
+            self.mode_combo.setItemText(1, self._("advanced_mode"))
+            self.mode_combo.setCurrentIndex(current_mode_index)
+            self.mode_combo.blockSignals(False)
     
     def retranslate_ui(self):
         """重新翻译UI"""
@@ -986,8 +1017,8 @@ class HICBuildGUI(QMainWindow):
         self.stop_action.setText(self._("stop_build"))
         self.clean_action.setText(self._("clean"))
         self.install_action.setText(self._("install"))
-        self.preset_label.setText(self._("preset") + ": ")
-        self.language_label.setText(self._("language") + ": ")
+        self.preset_label.setText(self._("preset") + "：")
+        self.language_label.setText(self._("language") + "：")
         
         # 重新翻译配置标签页
         self.config_tabs.setTabText(0, self._("build_config"))
@@ -1046,14 +1077,50 @@ class HICBuildGUI(QMainWindow):
         
         # 恢复信号
         self.language_combo.blockSignals(False)
-        
+
         # 重新翻译输出标签页
         self.output_tabs.setTabText(0, self._("output"))
         self.output_tabs.setTabText(1, self._("log"))
-        
+
         # 更新状态
         self.update_status(self._("ready"))
-    
+
+    def on_mode_changed(self, index: int):
+        """模式切换事件"""
+        mode = self.mode_combo.itemData(index)
+        self.build_mode = mode
+        self.update_mode_visibility()
+        self.update_status(f"已切换到 {self._(mode + '_mode')}")
+
+    def update_mode_visibility(self):
+        """更新界面元素的可见性"""
+        is_simple = self.build_mode == "simple"
+
+        # 简单模式：隐藏预设选择，使用固定预设
+        if is_simple:
+            self.preset_label.setVisible(False)
+            self.preset_combo.setVisible(False)
+            self.current_preset = "balanced"  # 简单模式使用平衡预设
+        else:
+            self.preset_label.setVisible(True)
+            self.preset_combo.setVisible(True)
+
+        # 更新配置标签页的可见性
+        self.update_config_tabs_visibility()
+
+    def update_config_tabs_visibility(self):
+        """更新配置标签页的可见性"""
+        is_simple = self.build_mode == "simple"
+
+        # 简单模式只显示基本配置，隐藏高级配置标签页
+        if hasattr(self, 'config_tabs'):
+            tab_count = self.config_tabs.count()
+            for i in range(tab_count):
+                if is_simple and i > 0:  # 只保留第一个标签页（构建配置）
+                    self.config_tabs.setTabVisible(i, False)
+                else:
+                    self.config_tabs.setTabVisible(i, True)
+
     def on_preset_changed(self, text: str):
         """预设改变事件"""
         # 将文本映射回代码

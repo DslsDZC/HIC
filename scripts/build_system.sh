@@ -370,9 +370,9 @@ clean_build() {
 # 显示帮助
 show_help() {
     cat <<EOF
-${MAGENTA}========================================${RESET}
+${MAGENTA}=${RESET}
 ${MAGENTA}HIC系统构建系统 v${VERSION}${RESET}
-${MAGENTA}========================================${RESET}
+${MAGENTA}=${RESET}
 
 ${GREEN}用法:${RESET}
   $0 [选项]
@@ -450,9 +450,9 @@ main() {
     fi
 
     # 开始构建
-    echo -e "${MAGENTA}========================================${RESET}"
+    echo -e "${MAGENTA}=${RESET}"
     echo -e "${MAGENTA}${PROJECT} 构建系统 v${VERSION}${RESET}"
-    echo -e "${MAGENTA}========================================${RESET}"
+    echo -e "${MAGENTA}=${RESET}"
     echo ""
 
     # 检查依赖
@@ -495,10 +495,10 @@ main() {
     fi
 
     echo ""
-    echo -e "${MAGENTA}========================================${RESET}"
+    echo -e "${MAGENTA}=${RESET}"
     echo -e "${GREEN}构建完成!${RESET}"
     echo -e "${CYAN}输出目录: ${OUTPUT_DIR}${RESET}"
-    echo -e "${MAGENTA}========================================${RESET}"
+    echo -e "${MAGENTA}=${RESET}"
 
     exit 0
 }

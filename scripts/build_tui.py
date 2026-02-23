@@ -78,13 +78,13 @@ class BuildTUI:
         self.current_menu = [
             MenuItem("配置构建选项", self.config_build, "配置编译时参数"),
             MenuItem("配置运行时选项", self.config_runtime, "配置运行时参数"),
-            MenuItem("---", self.no_action, ""),
+            MenuItem("", self.no_action, ""),
             MenuItem("命令行模式构建", self.build_console, "使用命令行模式编译整个系统"),
             MenuItem("文本GUI模式构建", self.build_tui, "使用文本GUI模式编译系统"),
             MenuItem("图形化GUI模式构建", self.build_gui, "使用图形化GUI模式编译系统"),
             MenuItem("清理构建文件", self.clean_build, "清理所有构建生成的文件"),
             MenuItem("安装依赖 (Arch Linux)", self.install_deps, "安装编译所需的依赖包"),
-            MenuItem("---", self.no_action, ""),
+            MenuItem("", self.no_action, ""),
             MenuItem("显示帮助", self.show_help, "显示构建系统帮助信息"),
             MenuItem("退出", self.exit_program, "退出构建系统"),
         ]
@@ -226,7 +226,7 @@ class BuildTUI:
     
     def config_build(self):
         """配置编译时选项"""
-        self.log("=== 编译时配置 ===", "info")
+        self.log(" 编译时配置 ", "info")
         self.log("正在加载编译配置...", "info")
         
         config_file = os.path.join(ROOT_DIR, "..", "build_config.mk")
@@ -299,7 +299,7 @@ class BuildTUI:
     
     def config_runtime(self):
         """配置运行时选项"""
-        self.log("=== 运行时配置 ===", "info")
+        self.log(" 运行时配置 ", "info")
         
         runtime_config = os.path.join(ROOT_DIR, "..", "runtime_config.yaml.example")
         
@@ -326,7 +326,7 @@ class BuildTUI:
     
     def show_help(self):
         """显示帮助"""
-        self.log("=== HIC系统构建系统帮助 ===")
+        self.log(" HIC系统构建系统帮助 ")
         self.log("命令行模式: make 或 make console")
         self.log("文本GUI模式: make tui 或 ./build_tui.py")
         self.log("图形化GUI模式: make gui")
@@ -346,7 +346,7 @@ class BuildTUI:
         height, width = self.stdscr.getmaxyx()
         
         # 绘制标题
-        title = f"=== {PROJECT} 构建系统 v{VERSION} ==="
+        title = f" {PROJECT} 构建系统 v{VERSION} "
         title_pos = (width - len(title)) // 2
         self.stdscr.addstr(2, title_pos, title, curses.color_pair(COLOR_PAIR_TITLE))
         

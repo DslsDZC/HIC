@@ -10,7 +10,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
 echo "HIC 构建系统 v0.1.0"
-echo "===================="
+echo "=="
 echo ""
 
 # 检查依赖
@@ -39,7 +39,7 @@ echo ""
 
 # 检测显示环境
 HAS_DISPLAY_ENV=0
-if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ "$XDG_SESSION_TYPE" = "wayland" ] || [ "$XDG_SESSION_TYPE" = "x11" ]; then
+if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ "$XDG_SESSION_TYPE"  "x11" ]; then
     HAS_DISPLAY_ENV=1
     echo "检测到桌面显示环境 ✓"
 else
@@ -55,7 +55,7 @@ HAS_TUI=0
 
 # 检测显示环境
 HAS_DISPLAY=0
-if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ "$XDG_SESSION_TYPE" = "wayland" ] || [ "$XDG_SESSION_TYPE" = "x11" ]; then
+if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ] || [ "$XDG_SESSION_TYPE"  "x11" ]; then
     HAS_DISPLAY=1
 fi
 

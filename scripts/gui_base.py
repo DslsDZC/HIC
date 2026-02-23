@@ -208,6 +208,7 @@ class HICBuildGUIBase(ABC):
 
     def __init__(self, backend: GUIBackend):
         self.backend = backend
+        self.backend_type = backend.__class__.__name__.replace("Backend", "").lower() if backend else "unknown"
         self.current_language = "zh_CN"
         self.current_theme = "dark"
         self.current_preset = "balanced"
@@ -460,22 +461,22 @@ def detect_available_backends() -> List[str]:
 def create_gui_backend(backend_type: str) -> Optional[GUIBackend]:
     """创建 GUI 后端"""
     if backend_type == "qt":
-        from .gui_qt_backend import QtBackend
+        from gui_qt_backend import QtBackend
         return QtBackend()
     elif backend_type == "gtk":
-        from .gui_gtk_backend import GtkBackend
+        from gui_gtk_backend import GtkBackend
         return GtkBackend()
     elif backend_type == "tk":
-        from .gui_tk_backend import TkBackend
+        from gui_tk_backend import TkBackend
         return TkBackend()
     elif backend_type == "web":
-        from .gui_web_backend import WebBackend
+        from gui_web_backend import WebBackend
         return WebBackend()
     elif backend_type == "kivy":
-        from .gui_kivy_backend import KivyBackend
+        from gui_kivy_backend import KivyBackend
         return KivyBackend()
     elif backend_type == "dearpygui":
-        from .gui_dearpygui_backend import DearPyGuiBackend
+        from gui_dearpygui_backend import DearPyGuiBackend
         return DearPyGuiBackend()
     else:
         return None

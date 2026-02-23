@@ -63,10 +63,10 @@ class BuildSystem:
         self.build_log.append(log_entry)
         print(log_entry)
 
-    def check_dependencies(self) -> bool:
+    def check_dependencies(self, auto_install: bool = False) -> bool:
         """检查构建依赖"""
         self.log("检查构建依赖...")
-        
+
         required_tools = ["gcc", "make", "objcopy", "objdump"]
         missing_tools = []
 
@@ -76,18 +76,77 @@ class BuildSystem:
 
         if missing_tools:
             self.log(f"缺少依赖: {', '.join(missing_tools)}", "ERROR")
-            return False
+            
+            # 如果启用自动安装
+            if auto_install:
+                self.log("尝试自动安装依赖...", "INFO")
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["python3", str(SCRIPT_DIR / "dependency_manager.py")],
+                        cwd=PROJECT_ROOT,
+                        check=True,
+                        capture_output=True,
+                        text=True
+                    )
+                    self.log("依赖自动安装完成", "SUCCESS")
+                    
+                    # 重新检查
+                    missing_tools = [tool for tool in required_tools if not self._command_exists(tool)]
+                    if missing_tools:
+                        self.log(f"自动安装后仍缺少依赖: {', '.join(missing_tools)}", "ERROR")
+                        return False
+                except subprocess.CalledProcessError as e:
+                    self.log(f"自动安装失败: {e.stderr}", "ERROR")
+                    self.log("请手动运行: python3 scripts/dependency_manager.py", "INFO")
+                    return False
+            else:
+                self.log("请运行: python3 scripts/dependency_manager.py 或 make deps", "INFO")
+                return False
 
         # 检查UEFI工具
         if not self._command_exists("x86_64-w64-mingw32-gcc"):
+            if auto_install:
+                self.log("尝试自动安装 x86_64-w64-mingw32-gcc...", "INFO")
+                try:
+                    subprocess.run(
+                        ["python3", str(SCRIPT_DIR / "dependency_manager.py"), "--install", "x86_64-w64-mingw32-gcc"],
+                        cwd=PROJECT_ROOT,
+                        check=True,
+                        capture_output=True
+                    )
+                except:
+                    pass
             self.log("警告: 未找到 x86_64-w64-mingw32-gcc，无法构建UEFI引导程序", "WARNING")
 
         # 检查BIOS工具
         if not self._command_exists("x86_64-elf-gcc"):
+            if auto_install:
+                self.log("尝试自动安装 x86_64-elf-gcc...", "INFO")
+                try:
+                    subprocess.run(
+                        ["python3", str(SCRIPT_DIR / "dependency_manager.py"), "--install", "x86_64-elf-gcc"],
+                        cwd=PROJECT_ROOT,
+                        check=True,
+                        capture_output=True
+                    )
+                except:
+                    pass
             self.log("警告: 未找到 x86_64-elf-gcc，无法构建内核", "WARNING")
 
         # 检查签名工具
         if not self._command_exists("openssl"):
+            if auto_install:
+                self.log("尝试自动安装 openssl...", "INFO")
+                try:
+                    subprocess.run(
+                        ["python3", str(SCRIPT_DIR / "dependency_manager.py"), "--install", "openssl"],
+                        cwd=PROJECT_ROOT,
+                        check=True,
+                        capture_output=True
+                    )
+                except:
+                    pass
             self.log("警告: 未找到 openssl，无法进行签名操作", "WARNING")
 
         self.log("依赖检查完成")
@@ -367,7 +426,7 @@ class BuildSystem:
 
         self.log(f"构建报告生成完成: {report_file}")
 
-    def build(self, targets: List[str] = None) -> bool:
+    def build(self, targets: List[str] = None, auto_install_deps: bool = False) -> bool:
         """执行完整构建"""
         self.log("=" * 60)
         self.log(f"{self.config['project']} 构建系统 v{self.config['version']}")
@@ -378,8 +437,11 @@ class BuildSystem:
             targets = ["uefi", "bios", "kernel"]
 
         # 检查依赖
-        if not self.check_dependencies():
-            self.log("依赖检查失败，构建终止", "ERROR")
+        if not self.check_dependencies(auto_install=auto_install_deps):
+            if not auto_install_deps:
+                self.log("依赖检查失败，构建终止", "ERROR")
+                self.log("提示: 运行 'python3 scripts/dependency_manager.py' 自动安装依赖", "INFO")
+                self.log("或运行 'make deps' 自动安装所有依赖", "INFO")
             return False
 
         # 创建构建目录
@@ -467,7 +529,7 @@ class BuildSystem:
         }
         
         for category, keys in categories.items():
-            self.log(f"\n【{category}】", "INFO")
+            self.log(f"\n{category}", "INFO")
             for key in keys:
                 if key in config:
                     value = config[key]
@@ -792,6 +854,12 @@ def cli_main(args: List[str]) -> int:
     )
 
     parser.add_argument(
+        "--auto-deps",
+        action="store_true",
+        help="自动安装缺失的依赖"
+    )
+
+    parser.add_argument(
         "--install",
         action="store_true",
         help="构建后自动安装"
@@ -844,10 +912,14 @@ def cli_main(args: List[str]) -> int:
 
     # 构建模式
     targets = parsed_args.target if parsed_args.target else []
-    
+
     if not targets:
         # 默认构建全部
-        success = run_command(["make", "all"])
+        if parsed_args.auto_deps:
+            build_system = BuildSystem()
+            success = build_system.build(auto_install_deps=True)
+        else:
+            success = run_command(["make", "all"])
     else:
         # 根据目标构建
         if "all" in targets:

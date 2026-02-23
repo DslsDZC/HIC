@@ -24,9 +24,9 @@ OUTPUT_DIR="${OUTPUT_DIR}"
 
 # 显示横幅
 show_banner() {
-    echo "${MAGENTA}========================================${RESET}"
+    echo "${MAGENTA}=${RESET}"
     echo "${MAGENTA}HIC系统构建系统 v${VERSION}${RESET}"
-    echo "${MAGENTA}========================================${RESET}"
+    echo "${MAGENTA}=${RESET}"
     echo ""
 }
 

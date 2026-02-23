@@ -1,0 +1,299 @@
+{
+  "x86_64-elf-gcc": {
+    "name": "x86_64-elf GCC工具链",
+    "version": "13.2.0",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "cross-x86_64-elf-gcc",
+          "cross-x86_64-elf-binutils"
+        ],
+        "apt": [
+          "gcc-x86-64-elf-binutils",
+          "gcc-x86-64-elf"
+        ],
+        "dnf": [
+          "x86_64-elf-gcc",
+          "x86_64-elf-binutils"
+        ],
+        "apt-get": [
+          "gcc-x86-64-elf-binutils",
+          "gcc-x86-64-elf"
+        ],
+        "yum": [
+          "x86_64-elf-gcc",
+          "x86_64-elf-binutils"
+        ],
+        "source": {
+          "url": "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz",
+          "sha256": "e275e76493a0b074f43cda6e4c8b48b4403939863cf3fe4e5b06a2f8e5950d9d",
+          "binutils_url": "https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz",
+          "binutils_sha256": "ae9a5789e2544f8246294eef6cee9ac32aaabf2f5204b8aa816d8a5b467e3d8a"
+        }
+      },
+      "macos": {
+        "brew": [
+          "x86_64-elf-gcc"
+        ],
+        "source": {
+          "url": "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz",
+          "sha256": "e275e76493a0b074f43cda6e4c8b48b4403939863cf3fe4e5b06a2f8e5950d9d",
+          "binutils_url": "https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz",
+          "binutils_sha256": "ae9a5789e2544f8246294eef6cee9ac32aaabf2f5204b8aa816d8a5b467e3d8a"
+        }
+      },
+      "windows": {
+        "choco": [
+          "mingw-w64-x86_64-toolchain"
+        ],
+        "source": {
+          "url": "https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz",
+          "sha256": "e275e76493a0b074f43cda6e4c8b48b4403939863cf3fe4e5b06a2f8e5950d9d",
+          "binutils_url": "https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz",
+          "binutils_sha256": "ae9a5789e2544f8246294eef6cee9ac32aaabf2f5204b8aa816d8a5b467e3d8a"
+        }
+      }
+    }
+  },
+  "x86_64-w64-mingw32-gcc": {
+    "name": "MinGW-w64 工具链",
+    "version": "13.2.0",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "mingw-w64-gcc",
+          "mingw-w64-binutils",
+          "mingw-w64-headers"
+        ],
+        "apt": [
+          "gcc-mingw-w64-x86-64",
+          "g++-mingw-w64-x86-64"
+        ],
+        "dnf": [
+          "mingw64-gcc",
+          "mingw64-binutils"
+        ],
+        "source": {
+          "url": "https://github.com/mirror/mingw-w64/releases/download/v11.0.0/mingw-w64-v11.0.0.tar.bz2",
+          "sha256": "a7569a6d3f9c4b5d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6"
+        }
+      },
+      "macos": {
+        "brew": [
+          "mingw-w64"
+        ],
+        "source": {
+          "url": "https://github.com/mirror/mingw-w64/releases/download/v11.0.0/mingw-w64-v11.0.0.tar.bz2",
+          "sha256": "a7569a6d3f9c4b5d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6"
+        }
+      },
+      "windows": {
+        "choco": [
+          "mingw"
+        ],
+        "source": {
+          "url": "https://github.com/mirror/mingw-w64/releases/download/v11.0.0/mingw-w64-v11.0.0.tar.bz2",
+          "sha256": "a7569a6d3f9c4b5d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6d5a6"
+        }
+      }
+    }
+  },
+  "gcc": {
+    "name": "GNU GCC",
+    "version": "13.2.0",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "gcc",
+          "gcc-libs"
+        ],
+        "apt": [
+          "build-essential",
+          "gcc"
+        ],
+        "dnf": [
+          "gcc",
+          "gcc-c++"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "gcc"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "gcc"
+        ]
+      }
+    }
+  },
+  "make": {
+    "name": "GNU Make",
+    "version": "4.4.1",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "make"
+        ],
+        "apt": [
+          "build-essential"
+        ],
+        "dnf": [
+          "make"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "make"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "make"
+        ]
+      }
+    }
+  },
+  "python3": {
+    "name": "Python 3",
+    "version": "3.12",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "python",
+          "python-pip"
+        ],
+        "apt": [
+          "python3",
+          "python3-pip"
+        ],
+        "dnf": [
+          "python3",
+          "python3-pip"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "python"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "python"
+        ]
+      }
+    }
+  },
+  "nasm": {
+    "name": "NASM 汇编器",
+    "version": "2.16",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "nasm"
+        ],
+        "apt": [
+          "nasm"
+        ],
+        "dnf": [
+          "nasm"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "nasm"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "nasm"
+        ]
+      }
+    }
+  },
+  "qemu-system-x86_64": {
+    "name": "QEMU",
+    "version": "8.2",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "qemu-system-x86",
+          "ovmf"
+        ],
+        "apt": [
+          "qemu-system-x86",
+          "ovmf"
+        ],
+        "dnf": [
+          "qemu-system-x86",
+          "edk2-ovmf"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "qemu"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "qemu"
+        ]
+      }
+    }
+  },
+  "openssl": {
+    "name": "OpenSSL",
+    "version": "3.0",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "openssl"
+        ],
+        "apt": [
+          "openssl"
+        ],
+        "dnf": [
+          "openssl"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "openssl"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "openssl"
+        ]
+      }
+    }
+  },
+  "git": {
+    "name": "Git",
+    "version": "2.43",
+    "sources": {
+      "linux": {
+        "pacman": [
+          "git"
+        ],
+        "apt": [
+          "git"
+        ],
+        "dnf": [
+          "git"
+        ]
+      },
+      "macos": {
+        "brew": [
+          "git"
+        ]
+      },
+      "windows": {
+        "choco": [
+          "git"
+        ]
+      }
+    }
+  }
+}
