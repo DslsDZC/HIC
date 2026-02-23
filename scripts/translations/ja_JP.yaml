@@ -48,10 +48,10 @@ kaslr: KASLR
 keyboard_driver: キーボードドライバ
 language: 言語
 languages:
-  de_DE: Deutsch
-  en_US: English
+  de_DE: Deutsch (German)
+  en_US: English (英語)
   ja_JP: 日本語
-  zh_CN: 简体中文
+  zh_CN: 简体中文 (中国語簡体字)
 latency_opt: レイテンシ最適化
 light_theme: ライトテーマ
 load_balancing: 負荷分散
@@ -63,9 +63,12 @@ max_domains: 最大ドメイン数
 max_page_tables: 最大ページテーブル数
 max_threads: 最大スレッド数
 memory: メモリ
-minimal: 最小
+minimal: ミニマル
 mmx: MMX
-new_profile: 新規プロファイル
+mode: モード
+simple_mode: シンプルモード
+advanced_mode: アドバンストモード
+new_profile: 新しいプロファイル
 numa_opt: NUMA最適化
 open_profile: プロファイルを開く
 optimize_level: 最適化レベル

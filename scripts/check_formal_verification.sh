@@ -4,7 +4,7 @@
 
 set -e
 
-echo "=== HIC 形式化验证一致性检查 ==="
+echo " HIC 形式化验证一致性检查 "
 echo ""
 
 # 颜色定义
@@ -38,7 +38,7 @@ check_item() {
 }
 
 echo "1. 检查数学证明文档"
-echo "-----------------------------------"
+echo "--"
 
 check_item "math_proofs.tex 存在" "test -f src/Core-0/math_proofs.tex"
 check_item "math_proofs.tex 包含7个定理" "grep -c '\\\\begin{theorem}' src/Core-0/math_proofs.tex | grep -q '^7$'"
@@ -52,7 +52,7 @@ check_item "包含原子性保证定理" "grep -q '原子性保证' src/Core-0/m
 
 echo ""
 echo "2. 检查形式化验证代码"
-echo "-----------------------------------"
+echo "--"
 
 check_item "formal_verification.h 存在" "test -f src/Core-0/formal_verification.h"
 check_item "formal_verification.c 存在" "test -f src/Core-0/formal_verification.c"
@@ -60,7 +60,7 @@ check_item "包含7个不变式检查函数（含增强版）" "grep 'static boo
 
 echo ""
 echo "3. 检查定理与代码的对应关系"
-echo "-----------------------------------"
+echo "--"
 
 check_item "定理1 -> 不变式1 (能力守恒性)" \
     "grep -q 'invariant_capability_conservation' src/Core-0/formal_verification.c"
@@ -77,7 +77,7 @@ check_item "定理6 -> 不变式6 (类型安全性)" \
 
 echo ""
 echo "4. 检查关键实现"
-echo "-----------------------------------"
+echo "--"
 
 check_item "实现不变式检查接口" \
     "grep -q 'fv_check_all_invariants' src/Core-0/formal_verification.c"
@@ -96,7 +96,7 @@ check_item "实现详细报告生成" \
 
 echo ""
 echo "5. 检查增强功能"
-echo "-----------------------------------"
+echo "--"
 
 check_item "实现不变式依赖关系" \
     "grep -q 'fv_get_invariant_dependencies' src/Core-0/formal_verification.c"
@@ -111,7 +111,7 @@ check_item "实现形式化规范" \
 
 echo ""
 echo "6. 检查文档一致性"
-echo "-----------------------------------"
+echo "--"
 
 check_item "形式化验证文档存在" \
     "test -f docs/Wiki/15-FormalVerification.md"
@@ -122,7 +122,7 @@ check_item "文档列出核心不变式" \
 
 echo ""
 echo "7. 检查代码质量"
-echo "-----------------------------------"
+echo "--"
 
 check_item "包含中文注释" \
     "grep -q 'HIC内核形式化验证模块' src/Core-0/formal_verification.c"
@@ -133,7 +133,7 @@ check_item "包含函数文档注释" \
 
 echo ""
 echo "8. 检查与数学证明的数学表达式一致性"
-echo "-----------------------------------"
+echo "--"
 
 check_item "能力守恒性实现（get_domain_initial_cap_quota, get_domain_granted_caps, get_domain_revoked_caps）" \
     "grep -q 'get_domain_initial_cap_quota' src/Core-0/formal_verification.c && grep -q 'get_domain_granted_caps' src/Core-0/formal_verification.c && grep -q 'get_domain_revoked_caps' src/Core-0/formal_verification.c"
@@ -144,7 +144,7 @@ check_item "权限单调性实现（is_permission_subset）" \
 
 echo ""
 echo "9. 检查增强实现的完整性"
-echo "-----------------------------------"
+echo "--"
 
 check_item "检查点注册（至少10个）" \
     "grep -c 'fv_register_checkpoint' src/Core-0/formal_verification.c | grep -q '^1[0-9]$'"
@@ -156,7 +156,7 @@ check_item "依赖关系表定义" \
     "grep -q 'invariant_dependency_t' src/Core-0/formal_verification.c"
 
 echo ""
-echo "=== 检查结果汇总 ==="
+echo " 检查结果汇总 "
 echo ""
 echo -e "总检查数: $TOTAL_CHECKS"
 echo -e "${GREEN}通过: $PASSED_CHECKS${NC}"

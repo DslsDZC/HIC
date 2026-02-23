@@ -1,1 +1,63 @@
+# HIC 项目 .gitignore
+
+# 构建输出
+build/
+output/
+iso_output/
+
+# 工具链缓存（可选，如果不想提交到版本控制）
+# .toolchains/
+.toolchains/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
 scripts/venv/
+scripts/__pycache__/
+scripts/build/
+scripts/output/
+
+# 调试文件
+*.gdb
+*.log
+debug_*.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.bak
+*.o
+*.elf
+*.bin
+*.efi
+
+# QEMU
+/tmp/qemu_*
+/tmp/hic_mnt
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 签名密钥（不应提交）
+build/signing_key.pem
+build/signing_cert.pem
+*.sig
+*.sig.json
+
+# 构建报告
+build_report.json
+build.log
+
+# 平台配置（包含敏感信息）
+platform.yaml.local

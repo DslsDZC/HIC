@@ -19,7 +19,7 @@ from datetime import datetime
 try:
     import gi
     gi.require_version('Gtk', '3.0')
-    from gi.repository import Gtk, GLib, Pango, Gdk
+    from gi.repository import Gtk, GLib, Pango, Gdk, GObject
 except ImportError:
     print("错误: 缺少 GTK3 库")
     print("请安装以下依赖:")
@@ -121,7 +121,7 @@ class HICBuildGUI(Gtk.ApplicationWindow):
         languages = I18N["zh_CN"]["languages"]
         if self.current_language in languages:
             current_language_name = languages[self.current_language]
-            self.language_label.set_text(current_language_name + ":")
+            self.language_label.set_text(current_language_name + "：")
 
     def load_config(self):
         """从YAML加载配置"""
@@ -302,7 +302,7 @@ class HICBuildGUI(Gtk.ApplicationWindow):
         
         # 预设标签
         preset_label = Gtk.Label()
-        preset_label.set_text(self._("preset") + ":")
+        preset_label.set_text(self._("preset") + "：")
         preset_item = Gtk.ToolItem()
         preset_item.add(preset_label)
         self.toolbar.insert(preset_item, 6)
@@ -390,21 +390,24 @@ class HICBuildGUI(Gtk.ApplicationWindow):
     
     def create_config_tabs(self):
         """创建配置选项卡"""
+        # 创建配置选项卡容器
+        self.notebook = Gtk.Notebook()
+
         # 构建配置页
         self.create_build_config_tab()
-        
+
         # 运行时配置页
         self.create_runtime_config_tab()
-        
+
         # 系统限制页
         self.create_system_limits_tab()
-        
+
         # 功能特性页
         self.create_features_tab()
-        
+
         # CPU特性页
         self.create_cpu_features_tab()
-        
+
         # 调度器页
         self.create_scheduler_tab()
         
@@ -837,12 +840,12 @@ class HICBuildGUI(Gtk.ApplicationWindow):
         self.update_language_label()
 
         # 重新翻译语言下拉框的选项
-        combo.block_handlers()
+        GObject.signal_handlers_block_by_func(combo, self.on_language_changed)
         combo.remove_all()
         for code, name in languages.items():
             combo.append_text(name)
         combo.set_active(index)
-        combo.unblock_handlers()
+        GObject.signal_handlers_unblock_by_func(combo, self.on_language_changed)
 
         self.retranslate_ui()
     
@@ -877,23 +880,23 @@ class HICBuildGUI(Gtk.ApplicationWindow):
         
         # 重新翻译预设下拉框
         active = self.preset_combo.get_active()
-        
+
         # 阻止信号触发以避免递归
-        self.preset_combo.block_handlers()
+        GObject.signal_handlers_block_by_func(self.preset_combo, self.on_preset_changed)
         self.preset_combo.remove_all()
         presets = ["balanced", "release", "debug", "minimal", "performance"]
         for preset in presets:
             self.preset_combo.append_text(self._(preset))
         self.preset_combo.set_active(active)
-        self.preset_combo.unblock_handlers()
+        GObject.signal_handlers_unblock_by_func(self.preset_combo, self.on_preset_changed)
         
         # 重新翻译语言下拉框
         self.update_language_label()
         current_lang_code = self.current_language  # 保存当前语言代码
         active_lang = self.language_combo.get_active()
-        
+
         # 阻止信号触发以避免递归
-        combo.block_handlers()
+        GObject.signal_handlers_block_by_func(combo, self.on_language_changed)
         combo.remove_all()
         languages = I18N.get("zh_CN", {}).get("languages", {})
         lang_code_list = list(languages.keys())
@@ -901,14 +904,14 @@ class HICBuildGUI(Gtk.ApplicationWindow):
             name = languages[code]
             display_text = f"{name} ({name})"
             combo.append_text(display_text)
-        
+
         # 根据语言代码恢复选择
         if current_lang_code in lang_code_list:
             combo.set_active(lang_code_list.index(current_lang_code))
         elif active_lang < len(lang_code_list):
             combo.set_active(active_lang)
-        
-        combo.unblock_handlers()
+
+        GObject.signal_handlers_unblock_by_func(combo, self.on_language_changed)
         
         # 确保current_language有效
         if self.current_language not in I18N:

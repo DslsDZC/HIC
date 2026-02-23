@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from .gui_base import detect_available_backends, create_gui_backend, HICBuildGUIBase
+# 修复相对导入问题
+import gui_base
+from gui_base import detect_available_backends, create_gui_backend, HICBuildGUIBase
+
+# 项目信息
+PROJECT = "HIC"
+VERSION = "0.1.0"
 
 
 class UnifiedHICBuildGUI(HICBuildGUIBase):

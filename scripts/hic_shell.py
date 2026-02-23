@@ -41,7 +41,7 @@ HIC 构建系统 v0.1.0
         self.current_dir = HIC_DIR
         self.build_config = {}
 
-    # ==================== 基础命令 ====================
+    # == 基础命令 ==
 
     def do_exit(self, arg):
         """退出 HIC Shell"""
@@ -102,7 +102,7 @@ HIC 构建系统 - 快速帮助
         """清屏"""
         os.system('clear' if os.name == 'posix' else 'cls')
 
-    # ==================== 构建命令 ====================
+    # == 构建命令 ==
 
     def do_BUILD(self, arg):
         """构建所有组件（引导程序 + 内核）"""
@@ -134,13 +134,13 @@ HIC 构建系统 - 快速帮助
         """安装构建产物"""
         self._run_make('install')
 
-    # ==================== 配置命令 ====================
+    # == 配置命令 ==
 
     def do_CONFIG_SHOW(self, arg):
         """显示当前编译配置"""
         config_file = PROJECT_ROOT / 'build_config.mk'
         if config_file.exists():
-            print("\n=== 当前编译配置 ===")
+            print("\n 当前编译配置 ")
             with open(config_file, 'r') as f:
                 for line in f:
                     if line.strip() and not line.startswith('#'):
@@ -186,7 +186,7 @@ HIC 构建系统 - 快速帮助
 
         self._run_make(f'build-{arg}')
 
-    # ==================== 镜像创建命令 ====================
+    # == 镜像创建命令 ==
 
     def do_IMAGE_FAT32(self, arg):
         """创建FAT32磁盘镜像"""
@@ -250,7 +250,7 @@ HIC 构建系统 - 快速帮助
         self.do_IMAGE_QCOW2('')
         print("✓ 所有镜像格式创建完成")
 
-    # ==================== 系统命令 ====================
+    # == 系统命令 ==
 
     def do_CD(self, arg):
         """切换目录（相对于HIC根目录）"""
@@ -394,7 +394,7 @@ HIC 构建系统 - 快速帮助
             print(f"执行: {line}")
             self._run_command(line, shell=True)
 
-    # ==================== 调试命令 ====================
+    # == 调试命令 ==
 
     def do_DEBUG(self, arg):
         """启动GDB调试"""
@@ -408,7 +408,7 @@ HIC 构建系统 - 快速帮助
         """启动QEMU"""
         self._run_make('qemu')
 
-    # ==================== 辅助方法 ====================
+    # == 辅助方法 ==
 
     def _run_make(self, target: str) -> int:
         """运行 Make 命令"""
@@ -445,7 +445,7 @@ HIC 构建系统 - 快速帮助
 
         return self._run_command(cmd)
 
-    # ==================== Tab 补全 ====================
+    # == Tab 补全 ==
 
     def complete_CD(self, text, line, begidx, endidx):
         """CD 命令的 Tab 补全"""

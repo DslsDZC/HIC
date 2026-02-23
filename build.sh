@@ -15,11 +15,11 @@ RESET='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${CYAN}HIC 构建系统${RESET}"
-echo "===================="
+echo "=="
 echo ""
 
 # 检查参数
-if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+if [ "$1"  "--help" ]; then
     echo "用法: ./build.sh [选项]"
     echo ""
     echo "快速启动:"
@@ -30,6 +30,11 @@ if [ "$1" = "help" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "  kernel       - 仅构建内核"
     echo "  clean        - 清理构建文件"
     echo "  install      - 安装构建产物"
+    echo ""
+    echo "依赖管理（跨平台）:"
+    echo "  deps         - 自动安装所有构建依赖"
+    echo "  deps-check   - 检查依赖状态"
+    echo "  deps-install - 安装指定依赖"
     echo ""
     echo "界面选项:"
     echo "  gui          - 运行GUI构建界面"
@@ -73,6 +78,30 @@ setup_venv() {
 
 # 根据参数执行不同操作
 case "$1" in
+    deps)
+        echo -e "${YELLOW}自动安装构建依赖...${RESET}"
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/dependency_manager.py"
+        ;;
+
+    deps-check)
+        echo -e "${YELLOW}检查依赖状态...${RESET}"
+        setup_venv
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/dependency_manager.py" --check
+        ;;
+
+    deps-install)
+        if [ -z "$2" ]; then
+            echo -e "${RED}错误: 请指定要安装的工具${RESET}"
+            echo "用法: ./build.sh deps-install <工具1> <工具2> ..."
+            exit 1
+        fi
+        echo -e "${YELLOW}安装指定依赖...${RESET}"
+        setup_venv
+        shift
+        "${SCRIPT_DIR}/scripts/venv/bin/python" "${SCRIPT_DIR}/scripts/dependency_manager.py" --install "$@"
+        ;;
+
     start)
         echo -e "${YELLOW}启动快速构建向导...${RESET}"
         setup_venv
@@ -190,7 +219,7 @@ case "$1" in
         echo -e "${GREEN}安装完成${RESET}"
         
         echo ""
-        echo -e "${CYAN}====================${RESET}"
+        echo -e "${CYAN}==${RESET}"
         echo -e "${GREEN}构建完成！${RESET}"
         echo "输出文件位于: ${SCRIPT_DIR}/output/"
         ;;

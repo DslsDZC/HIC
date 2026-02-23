@@ -6,7 +6,8 @@ HIC 构建系统 Web GUI 后端
 """
 
 from typing import Dict, List, Optional, Any, Callable
-from .gui_base import GUIBackend
+import gui_base
+from gui_base import GUIBackend
 
 try:
     from flask import Flask, render_template, request, jsonify
@@ -254,12 +255,15 @@ class WebBackend(GUIBackend):
     def run(self):
         """运行 Web 应用"""
         # 注入 CSS 样式
-        style_manager = get_style_manager()
-        css = style_manager.get_css('web')
-        
+        try:
+            import style_manager
+            css = style_manager.get_css('web') if hasattr(style_manager, 'get_css') else ""
+        except (ImportError, AttributeError):
+            css = ""  # 如果没有样式管理器，使用默认样式
+
         # 修改模板以注入 CSS
         original_render = self.app.template_folder
-        
+
         self.app.run(host='0.0.0.0', port=5000, debug=False)
 
     def exit(self) -> None:

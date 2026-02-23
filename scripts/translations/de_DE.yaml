@@ -49,9 +49,9 @@ keyboard_driver: Tastaturtreiber
 language: Sprache
 languages:
   de_DE: Deutsch
-  en_US: English
-  ja_JP: 日本語
-  zh_CN: 简体中文
+  en_US: English (Englisch)
+  ja_JP: 日本語 (Japanisch)
+  zh_CN: 简体中文 (Vereinfachtes Chinesisch)
 latency_opt: Latenzoptimierung
 light_theme: Helles Thema
 load_balancing: Lastausgleich
@@ -60,11 +60,14 @@ log: Protokoll
 lto: LTO
 max_capabilities: Maximale Capabilities
 max_domains: Maximale Domänen
-max_page_tables: Maximale Page Tables
+max_page_tables: Maximale Seitentabellen
 max_threads: Maximale Threads
 memory: Speicher
 minimal: Minimal
 mmx: MMX
+mode: Modus
+simple_mode: Einfacher Modus
+advanced_mode: Erweiterter Modus
 new_profile: Neues Profil
 numa_opt: NUMA-Optimierung
 open_profile: Profil öffnen
