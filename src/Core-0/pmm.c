@@ -49,6 +49,8 @@ static inline int test_bit(u8 *bitmap, u64 index)
 /* 初始化物理内存管理器 */
 void pmm_init(void)
 {
+    console_puts("[PMM] Initializing Physical Memory Manager...\n");
+    
     memzero(frame_bitmap, sizeof(frame_bitmap));
     total_frames = 0;
     free_frames = 0;
@@ -56,7 +58,12 @@ void pmm_init(void)
     g_used_memory = 0;
     mem_regions = NULL;
     
+    console_puts("[PMM] Frame bitmap cleared (");
+    console_putu32(MAX_FRAMES);
+    console_puts(" frames)\n");
+    console_puts("[PMM] Memory counters initialized\n");
     console_puts("[PMM] Physical Memory Manager initialized\n");
+    console_puts("[PMM] Ready for memory region registration\n");
 }
 
 /* 添加内存区域 */

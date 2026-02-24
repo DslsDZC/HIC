@@ -48,6 +48,12 @@ void privileged_service_init(void)
     console_puts("[PRIV-SVC] Maximum services: ");
     console_putu32(MAX_SERVICES);
     console_puts("\n");
+    
+    /* 【演示：特权层 hello 输出】
+     * 证明 Privileged-1 层已经成功初始化并可以执行代码
+     */
+    console_puts("[PRIV-SVC] Hello from Privileged-1 layer!\n");
+    console_puts("[PRIV-SVC] Privileged services are ready to serve\n");
 }
 
 /* 从模块加载服务 */

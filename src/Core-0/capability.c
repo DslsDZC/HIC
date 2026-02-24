@@ -34,14 +34,26 @@ domain_key_t g_domain_keys[HIC_DOMAIN_MAX];
 /* ==================== 初始化 ==================== */
 
 void capability_system_init(void) {
+    console_puts("[CAP] Initializing capability system...\n");
+    
     memzero(g_global_cap_table, sizeof(g_global_cap_table));
+    console_puts("[CAP] Global capability table cleared (");
+    console_putu32(CAP_TABLE_SIZE);
+    console_puts(" entries)\n");
+    
     memzero(g_domain_keys, sizeof(g_domain_keys));
+    console_puts("[CAP] Domain key table cleared (");
+    console_putu32(HIC_DOMAIN_MAX);
+    console_puts(" domains)\n");
     
     /* 为 Core-0 初始化密钥 */
     g_domain_keys[HIC_DOMAIN_CORE].seed = 0x12345678;
     g_domain_keys[HIC_DOMAIN_CORE].multiplier = 0x9E3779B9;
+    console_puts("[CAP] Core-0 domain key initialized\n");
     
     console_puts("[CAP] Capability system initialized (secure & fast, < 5ns)\n");
+    console_puts("[CAP] Security: Handle obfuscation enabled\n");
+    console_puts("[CAP] Performance: Inlined verification ready\n");
 }
 
 /* 初始化域密钥（使用伪随机数） */

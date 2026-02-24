@@ -134,10 +134,10 @@ void runtime_config_load_from_bootinfo(void)
     }
     
     /* 从platform.yaml加载配置 */
-    if (g_boot_state.boot_info->config_data && g_boot_state.boot_info->config_size > 0) {
+    if (g_boot_state.boot_info->config.config_data && g_boot_state.boot_info->config.config_size > 0) {
         runtime_config_load_from_yaml(
-            (const char*)g_boot_state.boot_info->config_data,
-            g_boot_state.boot_info->config_size
+            (const char*)g_boot_state.boot_info->config.config_data,
+            g_boot_state.boot_info->config.config_size
         );
     }
     
@@ -148,7 +148,7 @@ void runtime_config_load_from_bootinfo(void)
     }
     
     g_runtime_config.config_source = CONFIG_SOURCE_BOOTLOADER;
-    g_runtime_config.config_timestamp = g_boot_state.boot_info->boot_log.boot_time;
+    g_runtime_config.config_timestamp = 0;  /* TODO: 从其他地方获取时间戳 */
     
     console_puts("[CONFIG] Configuration loaded successfully\n");
 }

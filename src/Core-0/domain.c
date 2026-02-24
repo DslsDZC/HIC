@@ -33,7 +33,12 @@ void domain_system_init(void)
         g_domains[i].parent_domain = HIC_INVALID_DOMAIN;
     }
     
+    console_puts("[Domain] Domain table cleared (");
+    console_putu32(MAX_DOMAINS);
+    console_puts(" slots)\n");
+    
     /* 创建Core-0域 */
+    console_puts("[Domain] Creating Core-0 domain...\n");
     domain_quota_t core_quota = {
         .max_memory = 0x100000,      /* 1MB */
         .max_threads = 16,
@@ -43,10 +48,18 @@ void domain_system_init(void)
     
     domain_id_t core_domain;
     if (domain_create(DOMAIN_TYPE_CORE, HIC_INVALID_DOMAIN, &core_quota, &core_domain) == HIC_SUCCESS) {
-        console_puts("[Domain] Core-0 domain created\n");
+        console_puts("[Domain] Core-0 domain created (ID: ");
+        console_putu32(core_domain);
+        console_puts(")\n");
+    } else {
+        console_puts("[Domain] Failed to create Core-0 domain!\n");
     }
     
     g_domain_count = 1;
+    console_puts("[Domain] Domain system initialized\n");
+    console_puts("[Domain] Total domains: ");
+    console_putu32(g_domain_count);
+    console_puts("\n");
 }
 
 /**

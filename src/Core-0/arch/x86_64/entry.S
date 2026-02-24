@@ -13,22 +13,6 @@
 
 .extern kernel_start
 
-# 串口输出字符函数（内联）
-# 输入: %al = 字符
-.serial_putchar:
-    push %rdx
-    push %rax
-    mov $0x3FD, %dx           # 串口线状态寄存器
-.serial_putchar_wait:
-    in %dx, %al               # 读取状态
-    test $0x20, %al           # 检查发送缓冲区是否为空
-    jz .serial_putchar_wait
-    mov $0x3F8, %dx           # 串口数据寄存器
-    pop %rax                  # 恢复字符
-    out %al, %dx              # 输出字符
-    pop %rdx
-    ret
-
 # 内核入口点
 # 参数: %rdi = hic_boot_info_t* boot_info
 _start:
@@ -56,23 +40,49 @@ kernel_entry:
     mov $'2', %al
     call .serial_putchar
     
+    # 输出调试信息：'3' 表示检查boot_info指针
+    mov $'3', %al
+    call .serial_putchar
+    
+    # 检查boot_info指针是否为0
+    test %r15, %r15
+    jnz .boot_info_valid
+    
+    # boot_info指针为0，输出'E'表示错误
+    mov $'E', %al
+    call .serial_putchar
+    jmp .kernel_panic_loop
+
+.boot_info_valid:
+    # 输出调试信息：'4' 表示跳转到kernel_start
+    mov $'4', %al
+    call .serial_putchar
+    
     # 调用C语言内核入口点
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
     
-    # 如果kernel_start返回，输出错误信息
-    mov $'E', %al
-    call .serial_putchar
-    mov $'R', %al
-    call .serial_putchar
-    mov $'R', %al
-    call .serial_putchar
-    
-    # 如果kernel_start返回，进入无限循环
-.kernel_halt:
-    cli
-    hlt
-    jmp .kernel_halt
+    # 如果kernel_start返回，输出错误信息并停止
+    cli                   # 禁用中断
+.kernel_panic_loop:
+    hlt                   # 停止CPU
+    jmp .kernel_panic_loop
+
+# 串口输出字符函数（内联）
+# 输入: %al = 字符
+.serial_putchar:
+    push %rdx
+    push %rax
+    mov $0x3FD, %dx           # 串口线状态寄存器
+.serial_putchar_wait:
+    in %dx, %al               # 读取状态
+    test $0x20, %al           # 检查发送缓冲区是否为空
+    jz .serial_putchar_wait
+    mov $0x3F8, %dx           # 串口数据寄存器
+    pop %rax                  # 恢复字符
+    out %al, %dx              # 输出字符
+    pop %rdx
+    ret
 
 /* 数据段 */
 .section .data

@@ -177,7 +177,12 @@ void console_printf(const char *fmt, ...)
                     if (*fmt == 'l') {
                         fmt++;
                         uint64_t value = va_arg(args, uint64_t);
-                        uint64_to_str(value, buffer, 10);
+                        uint64_to_str(value, buffer, 16);
+                        console_puts(buffer);
+                    } else if (*fmt == 'x') {
+                        fmt++;
+                        uint64_t value = va_arg(args, uint64_t);
+                        uint64_to_str(value, buffer, 16);
                         console_puts(buffer);
                     } else {
                         long value = va_arg(args, long);

@@ -261,7 +261,6 @@ static void *allocate_pool_aligned(UINTN size, UINTN alignment)
 EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
     EFI_STATUS status;
-    INTN countdown;
     
     gImageHandle = ImageHandle;
     gST = SystemTable;
@@ -329,14 +328,7 @@ EFI_STATUS UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
         console_puts("[BOOTLOADER AUDIT] Stage 1: Loaded Image Protocol OK\n");
     }
     
-    /* 3秒倒计时自动进入内核 */
-    console_puts("[BOOTLOADER] Auto-boot in 3 seconds...\n");
-    for (countdown = 3; countdown > 0; countdown--) {
-        char msg[64];
-        snprintf(msg, sizeof(msg), "[BOOTLOADER] Booting in %d seconds...\n", countdown);
-        console_puts(msg);
-        gBS->Stall(1000000);
-    }
+    /* 直接启动内核（无倒计时） */
     console_puts("[BOOTLOADER] Starting kernel boot...\n");
     
     /* 加载平台配置 */
@@ -770,6 +762,8 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
  */
 hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 {
+    console_puts("=== PREPARE_BOOT_INFO START V2.0 ===\n");
+    
     hic_boot_info_t *boot_info;
     
     // 分配启动信息结构
@@ -804,9 +798,26 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     log_info("Platform config data: %llu bytes\n", g_platform_size);
 
     // 内核信息
-    // 手动解析入口点
+    // 检测内核格式并读取入口点
     uint8_t *raw_kernel = (uint8_t *)kernel_data;
-    uint64_t kernel_entry_point = *((uint64_t*)(raw_kernel + 12));
+    uint64_t kernel_entry_point = 0;
+    
+    // 检查是否是 ELF 格式
+    if (kernel_size >= 4 && raw_kernel[0] == 0x7f && raw_kernel[1] == 'E' && 
+        raw_kernel[2] == 'L' && raw_kernel[3] == 'F') {
+        // ELF 格式：从 ELF header 读取入口点（偏移 24，8 字节）
+        kernel_entry_point = *((uint64_t*)(raw_kernel + 24));
+        console_printf("[BOOTLOADER] Detected ELF format, entry_point=0x%lx\n", kernel_entry_point);
+    } else if (kernel_size >= 8 && memcmp(raw_kernel, "HIC_IMG", 8) == 0) {
+        // HIK 格式：从 HIK header 读取入口点偏移（偏移 12，8 字节）
+        uint64_t entry_offset = *((uint64_t*)(raw_kernel + 12));
+        kernel_entry_point = 0x100000 + entry_offset;
+        console_printf("[BOOTLOADER] Detected HIC format, entry_offset=0x%lx, entry_point=0x%lx\n", 
+                     entry_offset, kernel_entry_point);
+    } else {
+        console_puts("[BOOTLOADER] WARNING: Unknown kernel format, using default entry_point=0x100000\n");
+        kernel_entry_point = 0x100000;
+    }
     
     boot_info->kernel_base = kernel_data;
     boot_info->kernel_size = kernel_size;
@@ -838,13 +849,16 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     // 串口初始化在UEFI环境中不支持I/O端口访问，已禁用
     // serial_init(0x3F8);
 
+    // 获取内存映射
+    get_memory_map(boot_info);
+
     return boot_info;
 }
 
 /**
  * 获取内存映射
  */
-EFI_STATUS __attribute__((unused)) get_memory_map(hic_boot_info_t *boot_info)
+EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
 {
     EFI_STATUS status;
     UINTN map_size, map_key, desc_size;
@@ -853,12 +867,49 @@ EFI_STATUS __attribute__((unused)) get_memory_map(hic_boot_info_t *boot_info)
     hic_mem_entry_t *hic_map;
     UINTN entry_count;
     
+    console_puts("[BOOTLOADER] Getting memory map...\n");
+    
+    // 检查 gBS 指针
+    if (gBS == NULL) {
+        console_puts("[BOOTLOADER] ERROR: gBS is NULL\n");
+        return EFI_INVALID_PARAMETER;
+    }
+    
     // 第一次调用获取所需大小
-    map_size = 0;
-    status = gBS->GetMemoryMap(&map_size, NULL, &map_key, &desc_size, &desc_version);
-    if (status != EFI_BUFFER_TOO_SMALL) {
+    // 分配一个小的缓冲区来避免 NULL 指针问题
+    EFI_MEMORY_DESCRIPTOR *temp_map = (EFI_MEMORY_DESCRIPTOR *)allocate_pool(sizeof(EFI_MEMORY_DESCRIPTOR));
+    if (!temp_map) {
+        console_puts("[BOOTLOADER] ERROR: Failed to allocate temp map\n");
+        return EFI_OUT_OF_RESOURCES;
+    }
+    
+    map_size = sizeof(EFI_MEMORY_DESCRIPTOR);
+    map_key = 0;
+    desc_size = 0;
+    desc_version = 0;
+    
+    console_printf("[BOOTLOADER] Calling GetMemoryMap with map_size=%d\n", (int)map_size);
+    status = gBS->GetMemoryMap(&map_size, temp_map, &map_key, &desc_size, &desc_version);
+    console_printf("[BOOTLOADER] GetMemoryMap returned: status=%d, map_size=%d, desc_size=%d\n", 
+                 status, (int)map_size, (int)desc_size);
+    
+    free_pool(temp_map);
+    
+    // 检查返回的状态
+    // UEFI 错误代码格式: (code | (1UL << 31))
+    // status=5 实际上是 EFI_BUFFER_TOO_SMALL 的低 31 位
+    // 我们需要检查原始状态码是否为 5 或者是否为 EFI_BUFFER_TOO_SMALL
+    
+    UINTN status_code = status & 0x7FFFFFFF;  // 提取低 31 位
+    console_printf("[BOOTLOADER] Checking status: raw=%d, code=%d, EFI_BUFFER_TOO_SMALL=%d\n", 
+                 status, (int)status_code, EFI_BUFFER_TOO_SMALL);
+    
+    if (status_code != 5 && status != EFI_BUFFER_TOO_SMALL) {
+        console_printf("[BOOTLOADER] ERROR: GetMemoryMap first call failed: %d\n", status);
         return status;
     }
+    
+    console_puts("[BOOTLOADER] GetMemoryMap indicates buffer too small, proceeding...\n");
     
     // 分配内存
     map = allocate_pool(map_size);
@@ -869,12 +920,16 @@ EFI_STATUS __attribute__((unused)) get_memory_map(hic_boot_info_t *boot_info)
     // 获取内存映射
     status = gBS->GetMemoryMap(&map_size, map, &map_key, &desc_size, &desc_version);
     if (EFI_ERROR(status)) {
+        console_printf("[BOOTLOADER] ERROR: GetMemoryMap second call failed: %d\n", status);
         free_pool(map);
         return status;
     }
     
+    console_printf("[BOOTLOADER] Memory map size: %d bytes, desc_size: %d\n", (int)map_size, (int)desc_size);
+    
     // 转换为HIC格式
     entry_count = map_size / desc_size;
+    console_printf("[BOOTLOADER] Memory map entry count: %d\n", (int)entry_count);
     hic_map = allocate_pool(entry_count * sizeof(hic_mem_entry_t));
     if (!hic_map) {
         free_pool(map);
@@ -918,6 +973,9 @@ EFI_STATUS __attribute__((unused)) get_memory_map(hic_boot_info_t *boot_info)
     boot_info->mem_map_size = map_size;
     boot_info->mem_map_desc_size = sizeof(hic_mem_entry_t);
     boot_info->mem_map_entry_count = entry_count;
+    
+    console_printf("[BOOTLOADER] Memory map set: base=0x%p, entry_count=%d\n", 
+                 boot_info->mem_map, (int)boot_info->mem_map_entry_count);
     
     free_pool(map);
     return EFI_SUCCESS;
@@ -1014,7 +1072,12 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         // 读取入口点
         uint64_t entry_point = elf_hdr->e_entry;
         
-        console_printf("[BOOTLOADER] ELF entry point: 0x%lx\n", entry_point);
+        // 调试：手动读取入口点
+        uint64_t manual_entry = *((uint64_t*)(raw_bytes + 24));
+        
+        console_printf("[BOOTLOADER] ELF header address: 0x%p\n", elf_hdr);
+        console_printf("[BOOTLOADER] ELF entry from header: 0x%lx\n", entry_point);
+        console_printf("[BOOTLOADER] ELF entry manual read: 0x%lx\n", manual_entry);
         console_printf("[BOOTLOADER] ELF phoff: 0x%lx, phnum: %d\n", 
                      elf_hdr->e_phoff, elf_hdr->e_phnum);
         
