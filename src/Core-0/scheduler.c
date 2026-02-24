@@ -44,6 +44,8 @@ thread_t idle_thread;
 /* 初始化调度器 */
 void scheduler_init(void)
 {
+    console_puts("[SCHED] Initializing scheduler...\n");
+    
     for (int i = 0; i < 5; i++) {
         ready_queues[i].head = 0;
         ready_queues[i].tail = 0;
@@ -51,7 +53,10 @@ void scheduler_init(void)
         memzero((void*)ready_queues[i].threads, sizeof(ready_queues[i].threads));
     }
     
+    console_puts("[SCHED] Ready queues cleared (5 priority levels)\n");
+    
     g_current_thread = NULL;
+    console_puts("[SCHED] Current thread pointer reset\n");
     
     /* 初始化空闲线程 */
     memzero(&idle_thread, sizeof(thread_t));
@@ -59,7 +64,9 @@ void scheduler_init(void)
     idle_thread.state = THREAD_STATE_READY;
     idle_thread.priority = HIC_PRIORITY_IDLE;
     
+    console_puts("[SCHED] Idle thread initialized (ID: 0xFFFFFFFF)\n");
     console_puts("[SCHED] Scheduler initialized (lock-free)\n");
+    console_puts("[SCHED] Ready for thread scheduling\n");
 }
 
 /* 添加线程到就绪队列（无锁实现） */

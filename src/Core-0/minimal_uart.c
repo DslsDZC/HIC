@@ -181,8 +181,8 @@ void minimal_uart_init_from_bootinfo(void)
     }
 
     /* 优先使用config_data（外部YAML配置） */
-    const char *yaml_data = (const char *)g_boot_info->config_data;
-    size_t yaml_size = g_boot_info->config_size;
+    const char *yaml_data = (const char *)g_boot_info->config.config_data;
+    size_t yaml_size = g_boot_info->config.config_size;
 
     if (!yaml_data || yaml_size == 0) {
         minimal_uart_init();

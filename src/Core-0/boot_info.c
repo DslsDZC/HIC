@@ -17,6 +17,9 @@
 #include "hardware_probe.h"
 #include "audit.h"
 #include "module_loader.h"
+#include "capability.h"
+#include "domain.h"
+#include "thread.h"
 #include "../Privileged-1/privileged_service.h"
 #include <stdarg.h>
 #include <stddef.h>
@@ -114,14 +117,33 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     }
     
     // 验证启动信息
+    console_puts("[DEBUG] About to call boot_info_validate\n");
+    
     if (!boot_info_validate(boot_info)) {
         // 记录审计事件
         audit_log_event(AUDIT_EVENT_EXCEPTION, 0, 0, 0, NULL, 0, false);
         goto panic;
     }
     
+    console_puts("[DEBUG] boot_info_validate PASSED\n");
+    
     // 记录审计事件
     audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
+    
+    // 【能力系统初始化】初始化能力系统
+    console_puts("[BOOT] Initializing capability system...\n");
+    capability_system_init();
+    console_puts("[BOOT] Capability system initialized\n");
+    
+    // 【域系统初始化】初始化域系统
+    console_puts("[BOOT] Initializing domain system...\n");
+    domain_system_init();
+    console_puts("[BOOT] Domain system initialized\n");
+    
+    // 【调度器初始化】初始化调度器
+    console_puts("[BOOT] Initializing scheduler...\n");
+    scheduler_init();
+    console_puts("[BOOT] Scheduler initialized\n");
     
     // 【特权层初始化】初始化特权服务管理器
     privileged_service_init();
@@ -223,17 +245,24 @@ panic:
  * - 遵循形式化验证要求
  */
 bool boot_info_validate(hic_boot_info_t* boot_info) {
+    console_putchar('X');
+    console_puts("boot_info_validate START\n");
+    
     if (!boot_info) {
         log_error("启动信息指针为空\n");
         return false;
     }
     
-    /* 验证魔数 */
+    console_putchar('Y');
+    log_info("boot_info pointer OK: 0x%p\n", boot_info);
+
     if (boot_info->magic != HIC_BOOT_INFO_MAGIC) {
         log_error("启动信息魔数错误: 0x%08x (期望: 0x%08x)\n", 
                  boot_info->magic, HIC_BOOT_INFO_MAGIC);
         return false;
     }
+    
+    log_info("magic OK: 0x%08x\n", boot_info->magic);
     
     /* 验证版本 */
     if (boot_info->version != HIC_BOOT_INFO_VERSION) {
@@ -242,16 +271,22 @@ bool boot_info_validate(hic_boot_info_t* boot_info) {
         return false;
     }
     
+    log_info("version OK: %u\n", boot_info->version);
+    
     // 验证内存映射
     if (!boot_info->mem_map) {
         log_error("内存映射指针为空\n");
         return false;
     }
     
+    log_info("mem_map OK: 0x%p\n", boot_info->mem_map);
+    
     if (boot_info->mem_map_entry_count == 0) {
         log_error("内存映射条目数为0\n");
         return false;
     }
+    
+    log_info("mem_map_entry_count OK: %lu\n", boot_info->mem_map_entry_count);
     
     // 验证内核映像
     if (!boot_info->kernel_base) {
@@ -259,16 +294,22 @@ bool boot_info_validate(hic_boot_info_t* boot_info) {
         return false;
     }
     
+    log_info("kernel_base OK: 0x%p\n", boot_info->kernel_base);
+    
     if (boot_info->kernel_size == 0) {
         log_error("内核映像大小为0\n");
         return false;
     }
+    
+    log_info("kernel_size OK: %lu\n", boot_info->kernel_size);
     
     // 验证入口点
     if (boot_info->entry_point == 0) {
         log_error("内核入口点为0\n");
         return false;
     }
+    
+    log_info("entry_point OK: 0x%lx\n", boot_info->entry_point);
     
     log_info("boot_info验证通过\n");
     log_info("  内核基地址: 0x%p\n", boot_info->kernel_base);
@@ -432,7 +473,6 @@ void boot_info_init_acpi(hic_boot_info_t* boot_info) {
     }
     
     /* 保存RSDP指针供后续使用 */
-    boot_info->acpi_valid = true;
     
     log_info("ACPI初始化完成\n");
 }

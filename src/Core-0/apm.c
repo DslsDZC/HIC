@@ -153,8 +153,8 @@ void apm_init(void)
     }
 
     /* 获取 YAML 配置数据 */
-    const char *yaml_data = (const char *)g_boot_info->config_data;
-    size_t yaml_size = g_boot_info->config_size;
+    const char *yaml_data = (const char *)g_boot_info->config.config_data;
+    size_t yaml_size = g_boot_info->config.config_size;
 
     if (!yaml_data || yaml_size == 0) {
         console_puts("[APM] No YAML data, using default configuration\n");
@@ -677,7 +677,7 @@ bool apm_verify_boot_integrity(void)
     }
 
     /* 检查配置数据 */
-    if (!g_boot_info->config_data || g_boot_info->config_size == 0) {
+    if (!g_boot_info->config.config_data || g_boot_info->config.config_size == 0) {
         console_puts("[APM] No config data\n");
         return false;
     }

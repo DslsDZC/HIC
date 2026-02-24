@@ -82,16 +82,6 @@ typedef struct {
     u32 flags;
 } hic_mem_entry_t;
 
-/* 视频信息 */
-typedef struct {
-    u32 framebuffer_base;
-    u32 framebuffer_size;
-    u32 width;
-    u32 height;
-    u32 pitch;
-    u32 bpp;
-} video_info_t;
-
 /* 前向声明（避免循环依赖） */
 struct hardware_probe_result;
 typedef struct hardware_probe_result hardware_probe_result_t;
@@ -111,24 +101,32 @@ typedef struct {
     // ACPI信息
     void* rsdp;                   // ACPI RSDP指针
     void* xsdp;                   // ACPI XSDP指针 (UEFI)
-    bool acpi_valid;             // ACPI是否有效
     
     // 固件信息
-    firmware_info_t firmware;
+    union {
+        struct {
+            void* system_table;   // UEFI系统表
+            void* image_handle;   // UEFI映像句柄
+        } uefi;
+        struct {
+            void* bios_data_area; // BIOS数据区指针
+            u32 vbe_info;         // VESA信息块
+        } bios;
+    } firmware;
     
     // 内核映像信息
     void* kernel_base;
     u64 kernel_size;
     u64 entry_point;
     
-    /* 命令行 */
+    // 命令行
     char cmdline[256];
     
-    /* 设备树（架构无关） */
+    // 设备树（x86通常为空）
     void* device_tree;
     u64 device_tree_size;
     
-    /* 模块信息 */
+    // 模块信息（用于静态模块加载）
     struct {
         void* base;
         u64 size;
@@ -136,35 +134,54 @@ typedef struct {
     } modules[16];
     u64 module_count;
     
-    /* 引导日志信息 */
+    // 系统信息
     struct {
-        void* log_buffer;       /* 引导日志缓冲区地址 */
-        u64 log_size;           /* 日志大小 */
-        u32 log_entry_count;     /* 日志条目数 */
-        u64 boot_time;           /* 引导开始时间戳 */
-    } boot_log;
+        u32 cpu_count;
+        u32 memory_size_mb;
+        u32 architecture;        // 1=x86_64, 2=ARM64
+        u32 platform_type;       // 1=UEFI, 2=BIOS
+    } system;
     
-    /* 系统信息 */
-    system_info_t system;
-    
-    /* 配置数据（platform.yaml等） */
-    void* config_data;
-    u64 config_size;
-    
-    /* 固件类型 */
-    u8 firmware_type;
+    // 固件类型
+    u8 firmware_type;            // 0=UEFI, 1=BIOS
     u8 reserved[7];
     
-    /* 栈信息 */
+    // 栈信息
     u64 stack_top;
     u64 stack_size;
     
-    /* 视频信息 */
-    video_info_t video;
+    // 视频信息
+    struct {
+        u32 framebuffer_base;
+        u32 framebuffer_size;
+        u32 width;
+        u32 height;
+        u32 pitch;
+        u32 bpp;
+    } video;
     
-    /* 调试信息 */
-    debug_info_t debug;
-    
+    // 调试信息
+    struct {
+        u16 serial_port;         // 串口端口 (如0x3F8)
+        u16 debug_flags;
+        void* log_buffer;        // 日志缓冲区
+        u64 log_size;
+    } debug;
+
+    // 配置数据（从boot.conf传递）
+    struct {
+        void* config_data;       // 配置文件数据指针
+        u64 config_size;         // 配置文件大小
+        u64 config_hash;         // 配置文件哈希（用于验证）
+    } config;
+
+    // 平台配置数据（来自platform.yaml）
+    struct {
+        void* platform_data;     // platform.yaml数据指针
+        u64 platform_size;       // platform.yaml文件大小
+        u64 platform_hash;       // platform.yaml哈希值
+    } platform;
+
 } hic_boot_info_t;
 
 /* 标志位定义 */
@@ -194,7 +211,7 @@ extern boot_state_t g_boot_state;
 /* 外部API声明 */
 
 /**
- * 内核入口点
+ * 
  * 接收Bootloader传递的启动信息
  * 
  * 参数：

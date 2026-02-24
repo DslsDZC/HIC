@@ -20,6 +20,29 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
         print(f"错误: 内核不存在: {kernel_path}")
         return False
     
+    # 如果内核是 ELF 文件，转换为 HIK 格式
+    if kernel_path.endswith('.elf'):
+        print("检测到 ELF 格式内核，转换为 HIK 格式...")
+        hik_path = kernel_path.replace('.elf', '.hic')
+        
+        # 首先创建 .bin 文件
+        bin_path = kernel_path.replace('.elf', '.bin')
+        if not os.path.exists(bin_path):
+            print(f"创建二进制文件: {bin_path}")
+            subprocess.run([
+                'objcopy', '-O', 'binary', kernel_path, bin_path
+            ], check=True)
+        
+        # 使用 create_hik_image.py 转换
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        create_hik_script = os.path.join(script_dir, 'create_hik_image.py')
+        subprocess.run([
+            'python3', create_hik_script, kernel_path, hik_path
+        ], check=True)
+        
+        print(f"✓ HIK 镜像创建成功: {hik_path}")
+        kernel_path = hik_path
+    
     try:
         # 计算需要的块数
         bootloader_size = os.path.getsize(bootloader_path)
@@ -57,8 +80,9 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
         
         # 复制内核
         print("复制内核...")
+        kernel_filename = 'hic-kernel.hic' if kernel_path.endswith('.hic') else 'hic-kernel.bin'
         subprocess.run([
-            'mcopy', '-i', disk_path, kernel_path, '::hic-kernel.bin'
+            'mcopy', '-i', disk_path, kernel_path, f'::{kernel_filename}'
         ], check=True)
         
         print(f"✓ 磁盘镜像创建成功: {disk_path}")

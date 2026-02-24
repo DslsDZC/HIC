@@ -17,8 +17,8 @@ ISO_DIR = $(ROOT_DIR)/iso_output
 ISO_FILE = $(OUTPUT_DIR)/$(PROJECT)-installer.iso
 
 # QEMU配置
-QEMU_MEM = 512M
-QEMU_OVMF_CODE = /usr/share/edk2-ovmf/x64/OVMF_CODE.4m.fd
+QEMU_MEM = 2G
+QEMU_OVMF_CODE = /usr/share/OVMF/x64/OVMF_CODE.4m.fd
 QEMU_OVMF_VARS = /usr/share/edk2-ovmf/x64/OVMF_VARS.4m.fd
 
 # 主要构建目标
@@ -226,6 +226,29 @@ gdb-script:
 	@echo "quit" >> /tmp/hic_debug.gdb
 	@echo "GDB脚本创建完成"
 
+# 快速运行 QEMU
+run:
+	@echo " 启动 QEMU 测试内核 (GUI模式 + 串口输出) "
+	@echo "提示: 串口输出将显示在终端中，GUI 窗口显示图形界面"
+	@qemu-system-x86_64 \
+		-drive if=virtio,file=output/hic-uefi-disk.img,format=raw \
+		-m $(QEMU_MEM) \
+		-drive if=pflash,readonly=on,file=$(QEMU_OVMF_CODE) \
+		-display gtk \
+		-serial file:/tmp/qemu-serial.log \
+		-monitor none &
+
+# 快速运行 QEMU (串口模式)
+run-serial:
+	@echo " 启动 QEMU 测试内核 (串口模式) "
+	@timeout 15 qemu-system-x86_64 \
+		-nographic \
+		-serial mon:stdio \
+		-drive if=virtio,file=output/hic-uefi-disk.img,format=raw \
+		-m $(QEMU_MEM) \
+		-drive if=pflash,readonly=on,file=$(QEMU_OVMF_CODE) \
+		2>&1 | tail -100 || true
+
 # 启动QEMU（后台）
 qemu: update-disk
 	@echo " 启动QEMU（GDB模式） "
@@ -355,6 +378,8 @@ help:
 	@echo "  make iso-test           - 测试ISO镜像"
 	@echo ""
 
+	@echo "  make run                - 快速运行 QEMU 测试内核 (GUI模式)"
+	@echo "  make run-serial         - 快速运行 QEMU 测试内核 (串口模式)"
 	@echo "  make debug              - 完整GDB调试流程"
 	@echo "  make gdb                - 仅启动GDB调试"
 	@echo "  make gdb-script         - 创建GDB脚本"

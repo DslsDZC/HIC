@@ -41,13 +41,13 @@ hic_status_t build_config_load_yaml(const char *filename)
     
     extern boot_state_t g_boot_state;
     
-    if (!g_boot_state.boot_info || g_boot_state.boot_info->config_data == 0) {
+    if (!g_boot_state.boot_info || g_boot_state.boot_info->config.config_data == 0) {
         console_puts("[BUILD] ERROR: No configuration data from bootloader\n");
         return HIC_ERROR_NOT_FOUND;
     }
     
-    const char* yaml_data = (const char*)g_boot_state.boot_info->config_data;
-    size_t yaml_size = g_boot_state.boot_info->config_size;
+    const char* yaml_data = (const char*)g_boot_state.boot_info->config.config_data;
+    size_t yaml_size = g_boot_state.boot_info->config.config_size;
     
     if (yaml_size == 0 || yaml_size > 1024 * 1024) { /* 最大1MB */
         console_puts("[BUILD] ERROR: Invalid configuration size\n");

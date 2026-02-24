@@ -26,4 +26,9 @@ void kernel_start(hic_boot_info_t* boot_info) {
     // 直接转发到实际的内核入口点
     // console_init会在kernel_boot_info_init中调用
     kernel_boot_info_init(boot_info);
+    
+    // 永远不应该到达这里
+    while (1) {
+        __asm__ volatile ("hlt");
+    }
 }
