@@ -1116,6 +1116,11 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         // 手动读取HIC镜像头部字段
         uint64_t entry_point = *((uint64_t*)(raw_bytes + 12));
         uint64_t manual_image_size = *((uint64_t*)(raw_bytes + 20));
+        uint64_t header_size = *((uint64_t*)(raw_bytes + 28));
+        uint64_t segment_count = *((uint64_t*)(raw_bytes + 36));
+        
+        console_printf("[BOOTLOADER] HIC header: entry=0x%lx, size=%lu, header_size=%lu, seg_count=%lu\n",
+                      entry_point, manual_image_size, header_size, segment_count);
         
         console_puts("[BOOTLOADER] HIC image loaded\n");
         
@@ -1123,12 +1128,59 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         uint64_t kernel_offset = 160;  // HIC镜像格式: header(120) + segment_table(40)
         uint64_t kernel_code_size = manual_image_size - kernel_offset;
         
+        console_printf("[BOOTLOADER] kernel_offset=%d, kernel_code_size=%d\n", 
+                      (int)kernel_offset, (int)kernel_code_size);
+        
         // 将内核代码复制到物理地址0x100000
         void *kernel_phys_base = (void*)0x100000;
         void *kernel_code_start = raw_bytes + kernel_offset;
+        
+        console_printf("[BOOTLOADER] raw_bytes=0x%lx\n", (uint64_t)raw_bytes);
+        console_printf("[BOOTLOADER] kernel_code_start=0x%lx\n", (uint64_t)kernel_code_start);
+        
         memcpy(kernel_phys_base, kernel_code_start, kernel_code_size);
         
         console_puts("[BOOTLOADER] Kernel code copied to 0x100000\n");
+        
+        // 调试：检查源数据的前几个字节（在跳转到内核之前）
+        console_puts("[BOOTLOADER] ***NEW CODE*** Checking source kernel data...\n");
+        uint8_t *kernel_code_ptr = (uint8_t*)kernel_code_start;
+        
+        // 调试：输出 raw_bytes 的前几个字节
+        console_puts("[BOOTLOADER] raw_bytes[0]: ");
+        for (int i = 0; i < 8; i++) {
+            uint8_t b = ((uint8_t*)raw_bytes)[i];
+            char high = "0123456789ABCDEF"[(b >> 4) & 0x0F];
+            char low = "0123456789ABCDEF"[b & 0x0F];
+            console_putchar(high);
+            console_putchar(low);
+            console_putchar(' ');
+        }
+        console_putchar('\n');
+        
+        // 调试：输出 raw_bytes + 160 的前几个字节
+        console_puts("[BOOTLOADER] raw_bytes+160: ");
+        for (int i = 0; i < 8; i++) {
+            uint8_t b = ((uint8_t*)raw_bytes)[160 + i];
+            char high = "0123456789ABCDEF"[(b >> 4) & 0x0F];
+            char low = "0123456789ABCDEF"[b & 0x0F];
+            console_putchar(high);
+            console_putchar(low);
+            console_putchar(' ');
+        }
+        console_putchar('\n');
+        
+        // 调试：输出 kernel_code_ptr 的前几个字节
+        console_puts("[BOOTLOADER] kernel_code_ptr: ");
+        for (int i = 0; i < 8; i++) {
+            uint8_t b = kernel_code_ptr[i];
+            char high = "0123456789ABCDEF"[(b >> 4) & 0x0F];
+            char low = "0123456789ABCDEF"[b & 0x0F];
+            console_putchar(high);
+            console_putchar(low);
+            console_putchar(' ');
+        }
+        console_putchar('\n');
         
         // 更新启动信息
         boot_info->kernel_base = kernel_phys_base;
@@ -1277,16 +1329,25 @@ void jump_to_kernel(hic_boot_info_t *boot_info) {
     
     console_puts("[JUMP] All checks passed, jumping to kernel...\n");
 
+    // 调试：输出字符 X，表示准备跳转
+    console_puts("X");
+
+    // 调试：输出跳转地址
+    char jump_str[128];
+    snprintf(jump_str, sizeof(jump_str), "[JUMP] kernel_entry=0x%lx\n", (uint64_t)kernel_entry);
+    console_puts(jump_str);
+
     // 禁用中断
     __asm__ volatile ("cli");
 
-    // 设置栈指针,确保RDI包含boot_info,然后跳转到内核
+    // 设置栈指针,确保16字节对齐,RDI包含boot_info,然后跳转到内核
+    uint64_t aligned_stack = ((uint64_t)stack_top) & 0xFFFFFFFFFFFFFFF0ULL;  // 对齐到16字节
     __asm__ volatile (
-        "mov %1, %%rsp\n"    // 设置栈指针
-        "mov %2, %%rdi\n"    // 设置RDI为boot_info
-        "jmp *%0\n"          // 跳转到内核入口点
+        "mov %0, %%rsp\n"      // 设置栈指针
+        "mov %2, %%rdi\n"      // 设置RDI为boot_info
+        "jmp *%1\n"            // 跳转到内核入口点
         :
-        : "a"(kernel_entry), "r"(stack_top), "r"(boot_info)
+        : "r"(aligned_stack), "a"(kernel_entry), "r"(boot_info)
         : "memory", "rdi"
     );
     

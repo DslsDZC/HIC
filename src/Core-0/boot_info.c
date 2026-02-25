@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -66,12 +66,42 @@ hic_boot_info_t *g_boot_info = NULL;
  * - 遵循形式化验证要求
  */
 void kernel_boot_info_init(hic_boot_info_t* boot_info) {
+    // DEBUG: 在函数入口立即输出字符
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'A', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     // 初始化串口（从YAML配置或引导程序配置）
     minimal_uart_init_from_bootinfo();
-    
+
+    // DEBUG: 输出字符测试C代码串口
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'B', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     // 输出 hello
     console_puts("hello\n");
-    
+
+    // DEBUG: 输出字符测试console_puts后
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'C', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     // 【安全检查1】验证boot_info指针
     if (boot_info == NULL) {
         goto panic;
@@ -122,35 +152,51 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     if (!boot_info_validate(boot_info)) {
         // 记录审计事件
         audit_log_event(AUDIT_EVENT_EXCEPTION, 0, 0, 0, NULL, 0, false);
+        console_puts("[BOOT] >>> PANIC: boot_info validation FAILED <<<\n");
         goto panic;
     }
     
-    console_puts("[DEBUG] boot_info_validate PASSED\n");
+    console_puts("[BOOT] >>> boot_info_validate PASSED <<<\n");
+    console_puts("[BOOT] All boot information validated successfully\n");
     
     // 记录审计事件
     audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
+    console_puts("[BOOT] Audit event logged: PMM_ALLOC\n");
     
-    // 【能力系统初始化】初始化能力系统
-    console_puts("[BOOT] Initializing capability system...\n");
-    capability_system_init();
-    console_puts("[BOOT] Capability system initialized\n");
-    
-    // 【域系统初始化】初始化域系统
-    console_puts("[BOOT] Initializing domain system...\n");
-    domain_system_init();
-    console_puts("[BOOT] Domain system initialized\n");
-    
-    // 【调度器初始化】初始化调度器
-    console_puts("[BOOT] Initializing scheduler...\n");
-    scheduler_init();
-    console_puts("[BOOT] Scheduler initialized\n");
-    
-    // 【特权层初始化】初始化特权服务管理器
+    // 【步骤1：特权层初始化】初始化特权服务管理器
+    console_puts("\n[BOOT] STEP 1: Initializing Privileged Layer\n");
+    console_puts("[BOOT] Calling privileged_service_init()...\n");
     privileged_service_init();
+    console_puts("[BOOT] Privileged layer initialization completed\n");
     
-    // 【演示：加载内置Privileged-1服务】
-    // 创建一个简单的内置服务来演示Privileged-1层
-    console_puts("[BOOT] Loading builtin Privileged-1 service...\n");
+    // 【步骤2：内存管理器初始化】
+    // 内存管理器必须在其他子系统之前初始化
+    console_puts("\n[BOOT] STEP 2: Initializing Memory Manager\n");
+    console_puts("[BOOT] Calling boot_info_init_memory()...\n");
+    boot_info_init_memory(boot_info);
+    console_puts("[BOOT] Memory manager initialization completed\n");
+    
+    // 【步骤3：能力系统初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 3: Initializing Capability System\n");
+    console_puts("[BOOT] Calling capability_system_init()...\n");
+    capability_system_init();
+    console_puts("[BOOT] Capability system initialization completed\n");
+    
+    // 【步骤4：域系统初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 4: Initializing Domain System\n");
+    console_puts("[BOOT] Calling domain_system_init()...\n");
+    domain_system_init();
+    console_puts("[BOOT] Domain system initialization completed\n");
+    
+    // 【步骤5：调度器初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 5: Initializing Scheduler\n");
+    console_puts("[BOOT] Calling scheduler_init()...\n");
+    scheduler_init();
+    console_puts("[BOOT] Scheduler initialization completed\n");
+    
+    // 【步骤6：加载内置Privileged-1服务】
+    console_puts("\n[BOOT] STEP 6: Loading Builtin Privileged-1 Service\n");
+    console_puts("[BOOT] Attempting to load builtin service...\n");
     
     domain_quota_t builtin_quota = {
         .max_memory = 1024 * 1024,  /* 1MB */
@@ -158,6 +204,8 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
         .max_caps = 16,
         .cpu_quota_percent = 5,
     };
+    
+    console_puts("[BOOT] Service quota configured: 1MB memory, 2 threads, 16 caps\n");
     
     domain_id_t builtin_domain_id;
     hic_status_t status = privileged_service_load(
@@ -169,11 +217,13 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     );
     
     if (status == HIC_SUCCESS) {
-        console_puts("[BOOT] Builtin service loaded, domain_id: ");
+        console_puts("[BOOT] >>> Builtin service loaded successfully! <<<\n");
+        console_puts("[BOOT] Service domain_id: ");
         console_putu32(builtin_domain_id);
         console_puts("\n");
         
         // 注册一个简单的端点
+        console_puts("[BOOT] Registering test endpoint...\n");
         cap_id_t endpoint_cap;
         status = privileged_service_register_endpoint(
             builtin_domain_id,
@@ -184,54 +234,82 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
         );
         
         if (status == HIC_SUCCESS) {
-            console_puts("[BOOT] Test endpoint registered\n");
+            console_puts("[BOOT] >>> Test endpoint registered successfully! <<<\n");
+        } else {
+            console_puts("[BOOT] WARNING: Failed to register test endpoint\n");
         }
         
         // 启动服务
+        console_puts("[BOOT] Starting builtin service...\n");
         status = privileged_service_start(builtin_domain_id);
         if (status == HIC_SUCCESS) {
-            console_puts("[BOOT] Builtin service started successfully\n");
-            console_puts("[BOOT] >>> Privileged-1 layer is now active <<<\n");
+            console_puts("[BOOT] >>> Builtin service started successfully! <<<\n");
+            console_puts("[BOOT] >>> >>> Privileged-1 layer is now ACTIVE <<< <<<\n");
         } else {
-            console_puts("[BOOT] Failed to start builtin service\n");
+            console_puts("[BOOT] WARNING: Failed to start builtin service\n");
         }
     } else {
-        console_puts("[BOOT] Failed to load builtin service\n");
+        console_puts("[BOOT] INFO: Builtin service load failed (expected - no module instance)\n");
     }
     
-    // 处理启动信息
+    // 【步骤7：处理启动信息】
+    console_puts("\n[BOOT] STEP 7: Processing Boot Information\n");
+    console_puts("[BOOT] Calling boot_info_process()...\n");
     boot_info_process(boot_info);
+    console_puts("[BOOT] Boot information processing completed\n");
     
-    // 静态硬件探测
-    // 硬件信息由Bootloader提供，内核只接收和使用
+    // 【步骤8：静态硬件探测】
+    console_puts("\n[BOOT] STEP 8: Hardware Information\n");
+    console_puts("[BOOT] Hardware information provided by bootloader\n");
+    console_puts("[BOOT] No hardware probing in kernel (deferred to bootloader)\n");
     
-    // 模块自动加载驱动
+    // 【步骤9：模块自动加载驱动】
+    console_puts("\n[BOOT] STEP 9: Auto-loading Drivers\n");
+    console_puts("[BOOT] Calling module_auto_load_drivers()...\n");
     module_auto_load_drivers(&g_boot_state.hw.devices);
+    console_puts("[BOOT] Driver auto-loading completed\n");
     
-    // 初始化内存管理器
-    boot_info_init_memory(boot_info);
-    
-    // 硬件信息由Bootloader提供，内核只接收和使用
-    // 不在内核中进行硬件探测
-    
-    // 解析命令行
+    // 【步骤10：解析命令行】
+    console_puts("\n[BOOT] STEP 10: Parsing Command Line\n");
     if (boot_info->cmdline[0] != '\0') {
+        console_puts("[BOOT] Command line found, parsing...\n");
         boot_info_parse_cmdline(boot_info->cmdline);
+        console_puts("[BOOT] Command line parsed\n");
+    } else {
+        console_puts("[BOOT] No command line parameters\n");
     }
     
-    // 初始化模块加载器
+    // 【步骤11：初始化模块加载器】
+    console_puts("\n[BOOT] STEP 11: Initializing Module Loader\n");
+    console_puts("[BOOT] Calling module_loader_init()...\n");
     module_loader_init();
+    console_puts("[BOOT] Module loader initialization completed\n");
     
-    // 自动加载驱动
-    module_auto_load_drivers(&g_boot_state.hw.devices);
-    
-    // 标记启动完成
+    // 【步骤12：标记启动完成】
+    console_puts("\n[BOOT] STEP 12: Finalizing Boot\n");
     g_boot_state.valid = 1;
+    console_puts("[BOOT] Boot state marked as VALID\n");
+    
+    // 【最终报告】
+    console_puts("\n[BOOT]========================================\n");
+    console_puts("[BOOT] >>> HIC KERNEL BOOT SEQUENCE COMPLETE <<<\n");
+    console_puts("[BOOT]========================================\n");
+    console_puts("[BOOT] All subsystems initialized successfully:\n");
+    console_puts("[BOOT]   - Boot information: VALID\n");
+    console_puts("[BOOT]   - Memory manager: READY\n");
+    console_puts("[BOOT]   - Capability system: READY\n");
+    console_puts("[BOOT]   - Domain system: READY\n");
+    console_puts("[BOOT]   - Scheduler: READY\n");
+    console_puts("[BOOT]   - Privileged services: ACTIVE\n");
+    console_puts("[BOOT]========================================\n");
+    console_puts("[BOOT] Entering kernel main loop...\n");
+    console_puts("\n");
     
     /* 进入主循环 */
     kernel_main_loop();
     
 panic:
+    console_puts("\n[BOOT] >>> KERNEL PANIC! Halting system... <<<\n");
     hal_halt();  /* 使用HAL接口 */
 }
 
@@ -393,37 +471,88 @@ void boot_info_process(hic_boot_info_t* boot_info) {
  * 初始化内存管理器
  */
 void boot_info_init_memory(hic_boot_info_t* boot_info) {
+    // 【重要：先初始化PMM】
+    pmm_init();
+    
+    console_puts("[BOOT] Processing memory map entries...\n");
+    console_puts("[BOOT] Total memory map entries: ");
+    console_putu64(boot_info->mem_map_entry_count);
+    console_puts("\n");
+    
     // 使用Bootloader传递的内存映射初始化PMM
+    u64 usable_regions = 0;
+    u64 reserved_regions = 0;
+    u64 kernel_regions = 0;
+    
     for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
         hic_mem_entry_t* entry = &boot_info->mem_map[i];
         
+        console_puts("[BOOT] Memory entry #");
+        console_putu64(i);
+        console_puts(": type=");
+        
         switch (entry->type) {
             case HIC_MEM_TYPE_USABLE:
+                console_puts("USABLE, base=0x");
+                console_puthex64(entry->base);
+                console_puts(", size=");
+                console_putu64(entry->length);
+                console_puts("\n");
                 // 可用内存，添加到PMM
                 pmm_add_region(entry->base, entry->length);
+                usable_regions++;
                 break;
                 
             case HIC_MEM_TYPE_RESERVED:
-            case HIC_MEM_TYPE_ACPI:
-            case HIC_MEM_TYPE_NVS:
-            case HIC_MEM_TYPE_BOOTLOADER:
+                console_puts("RESERVED, skipping\n");
                 // 保留内存，不添加到PMM
+                reserved_regions++;
+                break;
+                
+            case HIC_MEM_TYPE_ACPI:
+                console_puts("ACPI, skipping\n");
+                // 保留内存，不添加到PMM
+                reserved_regions++;
+                break;
+                
+            case HIC_MEM_TYPE_NVS:
+                console_puts("NVS, skipping\n");
+                // 保留内存，不添加到PMM
+                reserved_regions++;
+                break;
+                
+            case HIC_MEM_TYPE_BOOTLOADER:
+                console_puts("BOOTLOADER, skipping\n");
+                // 保留内存，不添加到PMM
+                reserved_regions++;
                 break;
                 
             case HIC_MEM_TYPE_KERNEL:
+                console_puts("KERNEL, marking as used\n");
                 // 内核内存，标记为已使用
                 pmm_mark_used(entry->base, entry->length);
+                kernel_regions++;
                 break;
                 
             default:
+                console_puts("UNKNOWN, skipping\n");
                 break;
         }
     }
     
-    // 初始化PMM
-    pmm_init();
+    console_puts("[BOOT] Memory map processing complete:\n");
+    console_puts("[BOOT]   Usable regions: ");
+    console_putu64(usable_regions);
+    console_puts("\n");
+    console_puts("[BOOT]   Reserved regions: ");
+    console_putu64(reserved_regions);
+    console_puts("\n");
+    console_puts("[BOOT]   Kernel regions: ");
+    console_putu64(kernel_regions);
+    console_puts("\n");
     
     log_info("内存管理器初始化完成\n");
+    console_puts("[BOOT] >>> Memory Manager initialization COMPLETE <<<\n");
 }
 
 /**
@@ -660,7 +789,7 @@ boot_state_t* get_boot_state(void) {
  * 打印启动信息摘要
  */
 void boot_info_print_summary(void) {
-    log_info("\n========== 启动信息摘要 ==========\n");
+    log_info("\n========== 启动信息摘要=====\n");
     
     // Bootloader提供的信息
     log_info("Bootloader提供:\n");

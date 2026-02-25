@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: MPL-2.0
  */
@@ -10,6 +10,7 @@
  */
 
 #include "privileged_service.h"
+#include "capability_manager_service.h"
 #include "../Core-0/domain.h"
 #include "../Core-0/capability.h"
 #include "../Core-0/module_loader.h"
@@ -21,6 +22,14 @@
 #include "../Core-0/lib/console.h"
 #include "../Core-0/lib/string.h"
 #include "../Core-0/lib/mem.h"
+
+/* 服务生命周期函数声明（外部链接） */
+extern hic_status_t capability_manager_init(void);
+extern hic_status_t scheduler_service_init(void);
+extern hic_status_t memory_manager_service_init(void);
+extern hic_status_t irq_controller_service_init(void);
+extern hic_status_t syscall_dispatcher_service_init(void);
+extern hic_status_t module_manager_service_init(void);
 
 #define MAX_SERVICES  256
 
@@ -49,10 +58,34 @@ void privileged_service_init(void)
     console_putu32(MAX_SERVICES);
     console_puts("\n");
     
-    /* 【演示：特权层 hello 输出】
-     * 证明 Privileged-1 层已经成功初始化并可以执行代码
-     */
-    console_puts("[PRIV-SVC] Hello from Privileged-1 layer!\n");
+    /* 初始化六个核心服务 */
+    console_puts("[PRIV-SVC] ===== Initializing Core Services =====\n");
+    
+    /* 1. 能力管理器 (priority 0) */
+    console_puts("[PRIV-SVC] [1/6] Initializing capability manager...\n");
+    capability_manager_init();
+    
+    /* 2. 调度器 (priority 1) */
+    console_puts("[PRIV-SVC] [2/6] Initializing scheduler...\n");
+    scheduler_service_init();
+    
+    /* 3. 内存管理器 (priority 2) */
+    console_puts("[PRIV-SVC] [3/6] Initializing memory manager...\n");
+    memory_manager_service_init();
+    
+    /* 4. 中断控制器 (priority 3) */
+    console_puts("[PRIV-SVC] [4/6] Initializing IRQ controller...\n");
+    irq_controller_service_init();
+    
+    /* 5. 系统调用分发器 (priority 4) */
+    console_puts("[PRIV-SVC] [5/6] Initializing syscall dispatcher...\n");
+    syscall_dispatcher_service_init();
+    
+    /* 6. 模块管理器 (priority 5) */
+    console_puts("[PRIV-SVC] [6/6] Initializing module manager...\n");
+    module_manager_service_init();
+    
+    console_puts("[PRIV-SVC] ===== All Core Services Initialized =====\n");
     console_puts("[PRIV-SVC] Privileged services are ready to serve\n");
 }
 

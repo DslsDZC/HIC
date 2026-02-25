@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -57,11 +57,15 @@ kernel_entry:
     # 输出调试信息：'4' 表示跳转到kernel_start
     mov $'4', %al
     call .serial_putchar
-    
+
     # 调用C语言内核入口点
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
-    
+
+    # DEBUG: 输出'5'表示kernel_start返回
+    mov $'5', %al
+    call .serial_putchar
+
     # 如果kernel_start返回，输出错误信息并停止
     cli                   # 禁用中断
 .kernel_panic_loop:

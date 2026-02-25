@@ -196,6 +196,12 @@ OTHER_OBJS = $(OBJ_DIR)/capability.o \
              $(OBJ_DIR)/yaml.o \
              $(OBJ_DIR)/pkcs1.o \
              $(OBJ_DIR)/privileged_service.o \
+             $(OBJ_DIR)/capability_manager_service.o \
+             $(OBJ_DIR)/scheduler_service.o \
+             $(OBJ_DIR)/memory_manager_service.o \
+             $(OBJ_DIR)/irq_controller_service.o \
+             $(OBJ_DIR)/syscall_dispatcher_service.o \
+             $(OBJ_DIR)/module_manager_service.o \
              $(OBJ_DIR)/console.o \
              $(OBJ_DIR)/mem.o \
              $(OBJ_DIR)/string.o \
@@ -277,6 +283,24 @@ $(OBJ_DIR)/pkcs1.o: ../src/Core-0/pkcs1.c | $(OBJ_DIR)
 
 # Privileged-1
 $(OBJ_DIR)/privileged_service.o: ../src/Privileged-1/privileged_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/capability_manager_service.o: ../src/Privileged-1/capability_manager_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/scheduler_service.o: ../src/Privileged-1/scheduler_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/memory_manager_service.o: ../src/Privileged-1/memory_manager_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/irq_controller_service.o: ../src/Privileged-1/irq_controller_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/syscall_dispatcher_service.o: ../src/Privileged-1/syscall_dispatcher_service.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
+
+$(OBJ_DIR)/module_manager_service.o: ../src/Privileged-1/module_manager_service.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
 
 # 库

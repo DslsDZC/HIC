@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
