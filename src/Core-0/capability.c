@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -58,7 +58,14 @@ void capability_system_init(void) {
 
 /* 初始化域密钥（使用伪随机数） */
 void cap_init_domain_key(domain_id_t domain) {
+    console_puts("[CAP] Initializing domain key for domain ");
+    console_putu64(domain);
+    console_puts("...\n");
+    
     if (domain >= HIC_DOMAIN_MAX) {
+        console_puts("[CAP] ERROR: Invalid domain ID (>= ");
+        console_putu32(HIC_DOMAIN_MAX);
+        console_puts(")\n");
         return;
     }
     
@@ -69,9 +76,14 @@ void cap_init_domain_key(domain_id_t domain) {
     g_domain_keys[domain].seed = (u32)(ts ^ (domain * 0x9E3779B9));
     g_domain_keys[domain].multiplier = 0x9E3779B9 + domain;
     
-    console_puts("[CAP] Domain key initialized: ");
-    console_putu64(domain);
+    console_puts("[CAP] Domain key initialized: seed=0x");
+    console_puthex64((u64)g_domain_keys[domain].seed);
+    console_puts(", mult=0x");
+    console_puthex64(g_domain_keys[domain].multiplier);
     console_puts("\n");
+    console_puts("[CAP] >>> Domain ");
+    console_putu64(domain);
+    console_puts(" key is now ACTIVE <<<\n");
 }
 
 /* ==================== 能力创建 ==================== */

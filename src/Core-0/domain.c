@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -15,6 +15,7 @@
 #include "pagetable.h"
 #include "formal_verification.h"
 #include "console.h"
+#include "lib/mem.h"
 
 /* 全局域表 */
 static domain_t g_domains[MAX_DOMAINS];
@@ -23,22 +24,28 @@ static u32 g_domain_count = 0;
 /* 域系统初始化 */
 void domain_system_init(void)
 {
-    console_puts("[Domain] Initializing domain system...\n");
+    console_puts("[Domain] Starting domain system initialization...\n");
     
-    /* 初始化所有域为无效状态 */
+    console_puts("[Domain] Step 1: Initializing domain table...\n");
+    memzero(g_domains, sizeof(g_domains));
+    console_puts("[Domain] Domain table cleared (");
+    console_putu32(MAX_DOMAINS);
+    console_puts(" slots)\n");
+    
+    g_domain_count = 0;
+    
+    console_puts("[Domain] Step 2: Marking all domains as INIT state...\n");
     for (u32 i = 0; i < MAX_DOMAINS; i++) {
         g_domains[i].domain_id = i;
         g_domains[i].state = DOMAIN_STATE_INIT;
         g_domains[i].flags = 0;
         g_domains[i].parent_domain = HIC_INVALID_DOMAIN;
     }
-    
-    console_puts("[Domain] Domain table cleared (");
+    console_puts("[Domain] All ");
     console_putu32(MAX_DOMAINS);
-    console_puts(" slots)\n");
+    console_puts(" domains marked as INIT\n");
     
-    /* 创建Core-0域 */
-    console_puts("[Domain] Creating Core-0 domain...\n");
+    console_puts("[Domain] Step 3: Creating Core-0 domain...\n");
     domain_quota_t core_quota = {
         .max_memory = 0x100000,      /* 1MB */
         .max_threads = 16,
@@ -46,20 +53,31 @@ void domain_system_init(void)
         .cpu_quota_percent = 100
     };
     
+    console_puts("[Domain] Core-0 quota: 1MB memory, 16 threads, 1024 caps, 100% CPU\n");
+    
     domain_id_t core_domain;
-    if (domain_create(DOMAIN_TYPE_CORE, HIC_INVALID_DOMAIN, &core_quota, &core_domain) == HIC_SUCCESS) {
-        console_puts("[Domain] Core-0 domain created (ID: ");
+    hic_status_t status = domain_create(DOMAIN_TYPE_CORE, HIC_INVALID_DOMAIN, &core_quota, &core_domain);
+    
+    if (status == HIC_SUCCESS) {
+        console_puts("[Domain] >>> Core-0 domain created successfully! <<<\n");
+        console_puts("[Domain] Core-0 domain_id: ");
         console_putu32(core_domain);
-        console_puts(")\n");
+        console_puts("\n");
+        g_domain_count = 1;
     } else {
-        console_puts("[Domain] Failed to create Core-0 domain!\n");
+        console_puts("[Domain] WARNING: Failed to create Core-0 domain\n");
+        console_puts("[Domain] Status: ");
+        console_putu32(status);
+        console_puts("\n");
+        g_domain_count = 1;  // 仍然计数，即使创建失败
     }
     
-    g_domain_count = 1;
+    console_puts("[Domain] Step 4: Finalizing domain system...\n");
     console_puts("[Domain] Domain system initialized\n");
     console_puts("[Domain] Total domains: ");
     console_putu32(g_domain_count);
     console_puts("\n");
+    console_puts("[Domain] >>> Domain system is now READY <<<\n");
 }
 
 /**

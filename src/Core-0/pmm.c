@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <*@gmail.com>
+ * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -75,7 +75,31 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     aligned_size &= ~(size_t)(PAGE_SIZE - 1);
     
     if (aligned_size < PAGE_SIZE) {
+        console_puts("[PMM] Skipping region: too small after alignment\n");
         return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 计算页数 */
+    u64 num_frames = aligned_size / PAGE_SIZE;
+    u64 start_frame = aligned_base / PAGE_SIZE;
+    
+    console_puts("[PMM] Processing memory region at 0x");
+    console_puthex64(aligned_base);
+    console_puts(" (");
+    console_putu64(num_frames);
+    console_puts(" pages)\n");
+    
+    if (start_frame >= MAX_FRAMES) {
+        console_puts("[PMM] WARNING: Region starts beyond MAX_FRAMES, skipping\n");
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    if (start_frame + num_frames > MAX_FRAMES) {
+        console_puts("[PMM] WARNING: Region too large, truncating\n");
+        num_frames = MAX_FRAMES - start_frame;
+        console_puts("[PMM] Truncated to ");
+        console_putu64(num_frames);
+        console_puts(" pages\n");
     }
     
     /* 添加到区域链表 */
@@ -89,6 +113,7 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     aligned_size -= region_offset;
     
     if (aligned_size < PAGE_SIZE) {
+        console_puts("[PMM] Skipping region: too small after region descriptor\n");
         return HIC_ERROR_INVALID_PARAM;
     }
     
@@ -96,29 +121,34 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     region->base = aligned_base;
     region->size = aligned_size;
     
-    /* 计算页数 */
-    u64 num_frames = aligned_size / PAGE_SIZE;
-    u64 start_frame = aligned_base / PAGE_SIZE;
-    
-    if (start_frame + num_frames > MAX_FRAMES) {
-        console_puts("[PMM] WARNING: Region too large, truncating\n");
-        num_frames = MAX_FRAMES - start_frame;
-    }
-    
     /* 标记页为可用 */
+    console_puts("[PMM] Marking ");
+    console_putu64(num_frames);
+    console_puts(" pages as free...\n");
+    
     for (u64 i = 0; i < num_frames; i++) {
         clear_bit(frame_bitmap, start_frame + i);
         free_frames++;
+        
+        /* 每处理 10000 页输出一次进度 */
+        if ((i + 1) % 10000 == 0) {
+            console_puts("[PMM] Progress: ");
+            console_putu64(i + 1);
+            console_puts("/");
+            console_putu64(num_frames);
+            console_puts(" pages processed\n");
+        }
     }
     
     total_frames += num_frames;
     g_total_memory += aligned_size;
     
-    console_puts("[PMM] Added region: 0x");
-    console_puthex64(aligned_base);
-    console_puts(" - ");
+    console_puts("[PMM] Region added successfully: ");
     console_putu64(num_frames);
-    console_puts(" pages\n");
+    console_puts(" pages freed\n");
+    console_puts("[PMM] Total free frames: ");
+    console_putu64(free_frames);
+    console_puts("\n");
     
     return HIC_SUCCESS;
 }
