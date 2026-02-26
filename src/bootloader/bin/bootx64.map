@@ -171,7 +171,7 @@ LOAD obj/uefi_platform_yaml.o
  .rdata         0x000000018000b3f0       0x40 obj/uefi_console.o
  *fill*         0x000000018000b430       0x10 
  .rdata         0x000000018000b440    0x1f980 obj/uefi_embedded_kernel_loader.o
-                0x000000018002ac90                bin_hic_kernel_hic_len
+                0x000000018002ac88                bin_hic_kernel_hic_len
  .rdata         0x000000018002adc0      0x220 obj/uefi_fat32.o
  .rdata         0x000000018002afe0     0x1700 obj/uefi_platform_yaml.o
  *(SORT_BY_NAME(.rdata$*))
