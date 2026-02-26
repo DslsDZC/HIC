@@ -31,7 +31,7 @@ BIN_DIR    = bin
 BUILD_TARGET ?= uefi
 
 # 源文件
-UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c $(SRC_DIR)/embedded_kernel_loader.c $(SRC_DIR)/fat32.c $(SRC_DIR)/platform_embedded.c $(PLATFORM_C)
+UEFI_CORE_SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/bootlog.c $(SRC_DIR)/stdlib.c $(SRC_DIR)/string.c $(SRC_DIR)/console.c $(SRC_DIR)/efi_guids.c $(SRC_DIR)/embedded_kernel_loader.c $(SRC_DIR)/fat32.c $(SRC_DIR)/platform_embedded.c $(SRC_DIR)/hardware_probe.c $(PLATFORM_C)
 # UEFI_CRYPTO_SRCS = $(wildcard $(SRC_DIR)/crypto/*.c)  # 暂时禁用
 UEFI_LIB_SRCS  = $(wildcard $(LIB_DIR)/*.c)
 UEFI_SRCS      = $(UEFI_CORE_SRCS) $(UEFI_LIB_SRCS)

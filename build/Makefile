@@ -1,417 +1,250 @@
-# HIC 内核 Makefile（架构无关版本）
+# HIC 内核 Makefile（规范版本）
+# 支持自动扫描源文件、清晰的分层构建
 
+# ==================== 工具链配置 ====================
 CC = gcc
 LD = ld
+AR = ar
+OBJCOPY = objcopy
+STRIP = strip
 
-# ==================== Sparse语义检查支持 ====================
-# 使用方式：
-# make C=1          # 对修改的文件运行Sparse检查
-# make C=2          # 对所有文件运行Sparse检查
-# CF=              # 指定Sparse参数（默认：-Wbitwise -Wcontext -Wdecl）
-ifeq ("$(origin C)", "command line")
-  ifeq ("$(C)", "1")
-    CHECK := sparse
-    CHECK_OPTS := -Wbitwise -Wcontext -Wdecl -Wcast-truncate -Wone-bit-signed-bitfield -Wtransparent-union
-  else
-    ifeq ("$(C)", "2")
-      CHECK := sparse
-      CHECK_OPTS := -Wbitwise -Wcontext -Wdecl -Wcast-truncate -Wone-bit-signed-bitfield -Wtransparent-union
-    else
-      CHECK := 
-    endif
-  endif
-else
-  CHECK := 
-endif
+# ==================== 目录结构 ====================
+ROOT_DIR = $(shell pwd)/..
+SRC_DIR = $(ROOT_DIR)/src
+CORE0_DIR = $(SRC_DIR)/Core-0
+PRIVILEGED1_DIR = $(SRC_DIR)/Privileged-1
+BOOTLOADER_DIR = $(SRC_DIR)/bootloader
 
-# 如果指定了CF参数，覆盖默认选项
-ifdef CF
-  CHECK_OPTS := $(CF)
-endif
+BUILD_DIR = $(ROOT_DIR)/build
+OBJ_DIR = $(BUILD_DIR)/obj
+BIN_DIR = $(BUILD_DIR)/bin
+OUTPUT_DIR = $(ROOT_DIR)/output
 
-# Sparse检查命令
-CHECK_CMD = $(CHECK) $(CHECK_OPTS)
-
-# ==================== Cppcheck静态分析支持 ====================
-# 使用方式：
-# make CPPCHECK=1    # 运行Cppcheck静态分析
-# make cppcheck      # 运行完整的Cppcheck检查
-# CPPCHECK_RULES=   # 指定自定义规则文件（默认：../scripts/cppcheck_rules.xml）
-ifeq ($(CPPCHECK),1)
-  RUN_CPPCHECK := 1
-else
-  RUN_CPPCHECK := 
-endif
-
-# Cppcheck命令
-CPPCHECK ?= cppcheck
-CPPCHECK_OPTS := --enable=all --inconclusive --std=c23 --suppress=missingIncludeSystem \
-                 --suppress=unusedFunction --suppress=uninitStructMember \
-                 --template="{file}:{line}: {severity} ({id}): {message}"
-
-# 自定义规则文件（可选）
-CPPCHECK_RULES ?= ../scripts/cppcheck_rules.xml
-
-# Cppcheck检查命令（带自定义规则）
-CPPCHECK_CMD_RULES = $(CPPCHECK) $(CPPCHECK_OPTS) --rule-file=$(CPPCHECK_RULES)
-
-# Cppcheck检查命令（不带自定义规则）
-CPPCHECK_CMD = $(CPPCHECK) $(CPPCHECK_OPTS)
-
-# ==================== Clang Static Analyzer支持 ====================
-# Clang Static Analyzer使用方式：
-# make clang-analyzer    # 运行Clang Static Analyzer
-CLANG_ANALYZER ?= scan-build
-CLANG_ANALYZER_OPTS ?= -analyze-headers --use-cc=clang --use-c++=clang++
-
-# Clang Static Analyzer检查命令
-CLANG_ANALYZER_CMD = $(CLANG_ANALYZER) $(CLANG_ANALYZER_OPTS) -o $(OBJ_DIR)/clang-analyzer
-
-# 包含构建配置
--include ../build_config.mk
+# ==================== 构建配置 ====================
+include $(ROOT_DIR)/build_config.mk
 
 # 基础编译标志
 CFLAGS = -ffreestanding -nostdlib -fno-stack-protector -fno-builtin \
          -m64 -mno-red-zone -mcmodel=large -mno-mmx -mno-sse -mno-sse2 \
-         -fno-pic -fno-pie -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 \
+         -fno-pic -fno-pie -Wall -Wextra -Wpedantic \
          -Wconversion -Werror \
          -Wno-unused-function -Wno-unused-variable -O2
 
-# 架构配置选项
+# 架构配置
 ifeq ($(CONFIG_MMU),0)
     CFLAGS += -DCONFIG_MMU=0 -DNOMMU
 else
     CFLAGS += -DCONFIG_MMU=1
 endif
 
-ifeq ($(CONFIG_MPU),1)
-    CFLAGS += -DCONFIG_MPU=1
+# 调试/优化标志
+ifeq ($(CONFIG_DEBUG),1)
+    CFLAGS += -g -DDEBUG
 else
-    CFLAGS += -DCONFIG_MPU=0
+    CFLAGS += -DNDEBUG
 endif
 
-ifeq ($(CONFIG_PHYSICAL_MAPPING),1)
-    CFLAGS += -DCONFIG_PHYSICAL_MAPPING=1
-else
-    CFLAGS += -DCONFIG_PHYSICAL_MAPPING=0
-endif
+# 链接标志
+LDFLAGS = -nostdlib -m elf_x86_64 -T $(LD_SCRIPT)
 
-LDFLAGS = -nostdlib -m elf_x86_64
+# ==================== 源文件自动扫描 ====================
 
-OBJ_DIR = obj
-BIN_DIR = bin
-LD_SCRIPT = kernel.ld
+# Core-0 核心文件（必须包含）
+CORE0_CORE_SRCS = $(wildcard $(CORE0_DIR)/kernel_start.c \
+                               $(CORE0_DIR)/hal.c \
+                               $(CORE0_DIR)/chal.c \
+                               $(CORE0_DIR)/pmm.c \
+                               $(CORE0_DIR)/globals.c \
+                               $(CORE0_DIR)/boot_info.c \
+                               $(CORE0_DIR)/exception.c \
+                               $(CORE0_DIR)/irq.c \
+                               $(CORE0_DIR)/pagetable.c)
 
-.PHONY: all clean sparse-check cppcheck clang-analyzer static-analysis
+# Core-0 其他模块（自动扫描）
+CORE0_SRCS = $(wildcard $(CORE0_DIR)/*.c)
+CORE0_LIB_SRCS = $(wildcard $(CORE0_DIR)/lib/*.c)
+CORE0_ARCH_SRCS = $(wildcard $(CORE0_DIR)/arch/x86_64/*.c)
+CORE0_ARCH_ASMS = $(wildcard $(CORE0_DIR)/arch/x86_64/*.S)
 
+# Privileged-1 服务（自动扫描）
+PRIVILEGED1_SRCS = $(wildcard $(PRIVILEGED1_DIR)/*.c)
+
+# 转换为目标文件
+CORE0_OBJS = $(patsubst $(CORE0_DIR)/%.c,$(OBJ_DIR)/core0/%.o,$(CORE0_SRCS))
+CORE0_LIB_OBJS = $(patsubst $(CORE0_DIR)/lib/%.c,$(OBJ_DIR)/core0/lib/%.o,$(CORE0_LIB_SRCS))
+CORE0_ARCH_OBJS = $(patsubst $(CORE0_DIR)/arch/x86_64/%.c,$(OBJ_DIR)/core0/arch/%.o,$(CORE0_ARCH_SRCS))
+CORE0_ARCH_ASM_OBJS = $(patsubst $(CORE0_DIR)/arch/x86_64/%.S,$(OBJ_DIR)/core0/arch/%_asm.o,$(CORE0_ARCH_ASMS))
+
+PRIVILEGED1_OBJS = $(patsubst $(PRIVILEGED1_DIR)/%.c,$(OBJ_DIR)/privileged1/%.o,$(PRIVILEGED1_SRCS))
+
+# 所有目标文件
+ALL_OBJS = $(CORE0_OBJS) $(CORE0_LIB_OBJS) $(CORE0_ARCH_OBJS) $(CORE0_ARCH_ASM_OBJS) $(PRIVILEGED1_OBJS)
+
+# ==================== 头文件路径 ====================
+INCLUDES = -I$(CORE0_DIR) \
+           -I$(CORE0_DIR)/include \
+           -I$(CORE0_DIR)/lib \
+           -I$(CORE0_DIR)/arch/x86_64 \
+           -I$(PRIVILEGED1_DIR) \
+           -I$(PRIVILEGED1_DIR)/include
+
+# ==================== 链接脚本 ====================
+LD_SCRIPT = $(CORE0_DIR)/arch/x86_64/linker.ld
+
+# ==================== 构建目标 ====================
+.PHONY: all clean kernel bootloader install help
+.PHONY: static-analysis sparse-check cppcheck clang-analyzer
+
+# 默认目标
 all: $(BIN_DIR)/hic-kernel.elf
 
-# Sparse检查目标
+# 内核目标
+kernel: $(BIN_DIR)/hic-kernel.elf
+
+# 引导程序
+bootloader:
+	@echo "构建引导程序..."
+	@cd $(BOOTLOADER_DIR) && $(MAKE) all
+	@echo "引导程序构建完成"
+
+# 安装
+install: kernel bootloader
+	@echo "安装构建产物..."
+	@mkdir -p $(OUTPUT_DIR)
+	@cp $(BIN_DIR)/hic-kernel.elf $(OUTPUT_DIR)/
+	@cp $(BOOTLOADER_DIR)/bin/bootx64.efi $(OUTPUT_DIR)/ 2>/dev/null || true
+	@cp $(BOOTLOADER_DIR)/bin/bios.bin $(OUTPUT_DIR)/ 2>/dev/null || true
+	@echo "安装完成"
+
+# 清理
+clean:
+	@echo "清理构建文件..."
+	@rm -rf $(OBJ_DIR) $(BIN_DIR)
+	@echo "清理完成"
+
+# ==================== 链接规则 ====================
+$(BIN_DIR)/hic-kernel.elf: $(ALL_OBJS) $(LD_SCRIPT) | $(BIN_DIR)
+	@echo "链接内核..."
+	@$(LD) $(LDFLAGS) $(ALL_OBJS) -o $@
+	@echo "内核链接完成: $@"
+
+# ==================== 编译规则 ====================
+
+# Core-0 C文件编译
+$(OBJ_DIR)/core0/%.o: $(CORE0_DIR)/%.c | $(OBJ_DIR)/core0
+	@echo "编译 Core-0: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Core-0 库文件编译
+$(OBJ_DIR)/core0/lib/%.o: $(CORE0_DIR)/lib/%.c | $(OBJ_DIR)/core0/lib
+	@echo "编译 Core-0 库: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Core-0 架构特定C文件编译
+$(OBJ_DIR)/core0/arch/%.o: $(CORE0_DIR)/arch/x86_64/%.c | $(OBJ_DIR)/core0/arch
+	@echo "编译 Core-0 架构: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Core-0 架构特定汇编文件编译
+$(OBJ_DIR)/core0/arch/%_asm.o: $(CORE0_DIR)/arch/x86_64/%.S | $(OBJ_DIR)/core0/arch
+	@echo "汇编 Core-0 架构: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Privileged-1 C文件编译
+$(OBJ_DIR)/privileged1/%.o: $(PRIVILEGED1_DIR)/%.c | $(OBJ_DIR)/privileged1
+	@echo "编译 Privileged-1: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# ==================== 目录创建 ====================
+$(OBJ_DIR):
+	@mkdir -p $@
+
+$(OBJ_DIR)/core0:
+	@mkdir -p $@
+
+$(OBJ_DIR)/core0/lib:
+	@mkdir -p $@
+
+$(OBJ_DIR)/core0/arch:
+	@mkdir -p $@
+
+$(OBJ_DIR)/privileged1:
+	@mkdir -p $@
+
+$(BIN_DIR):
+	@mkdir -p $@
+
+# ==================== 静态分析 ====================
+.PHONY: sparse-check cppcheck clang-analyzer
+
+# Sparse 语义检查
 sparse-check:
-	@echo "Running Sparse semantic check..."
-	$(MAKE) C=2 clean all
-	@echo "Sparse check completed."
+	@echo "运行 Sparse 语义检查..."
+	@$(MAKE) clean
+	@$(MAKE) CHECK=sparse C=2 all
+	@echo "Sparse 检查完成"
 
-# Cppcheck检查目标
+# Cppcheck 静态分析
 cppcheck:
-	@echo "Running Cppcheck static analysis..."
+	@echo "运行 Cppcheck 静态分析..."
 	@mkdir -p $(OBJ_DIR)/cppcheck
-	@echo "Checking Core-0 files..."
-	$(CPPCHECK_CMD) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 \
-		../src/Core-0/*.c 2>&1 | tee $(OBJ_DIR)/cppcheck/core0.txt
-	@echo "Checking Privileged-1 files..."
-	$(CPPCHECK_CMD) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 \
-		../src/Privileged-1/*.c 2>&1 | tee $(OBJ_DIR)/cppcheck/p1.txt
-	@echo "Checking library files..."
-	$(CPPCHECK_CMD) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 \
-		../src/Core-0/lib/*.c 2>&1 | tee $(OBJ_DIR)/cppcheck/lib.txt
-	@echo "Cppcheck check completed. Results saved to $(OBJ_DIR)/cppcheck/"
+	@cppcheck --enable=all --std=c23 --suppress=missingIncludeSystem \
+	         -I$(CORE0_DIR) -I$(CORE0_DIR)/include -I$(CORE0_DIR)/lib \
+	         $(CORE0_SRCS) $(CORE0_LIB_SRCS) 2>&1 | tee $(OBJ_DIR)/cppcheck/core0.txt
+	@echo "Cppcheck 检查完成"
 
-# Clang Static Analyzer检查目标
+# Clang Static Analyzer
 clang-analyzer:
-	@echo "Running Clang Static Analyzer..."
+	@echo "运行 Clang Static Analyzer..."
 	@mkdir -p $(OBJ_DIR)/clang-analyzer
 	@$(MAKE) clean
-	$(CLANG_ANALYZER_CMD) $(MAKE) all
-	@echo "Clang Static Analyzer check completed. Results saved to $(OBJ_DIR)/clang-analyzer/"
+	@scan-build -o $(OBJ_DIR)/clang-analyzer $(MAKE) all
+	@echo "Clang Static Analyzer 检查完成"
 
-# 静态分析（运行所有检查）
+# 所有静态分析
 static-analysis: sparse-check cppcheck clang-analyzer
-	@echo "All static analysis checks completed."
+	@echo "所有静态分析检查完成"
 
-# 通用编译规则（支持Sparse检查）
-$(OBJ_DIR)/%.o: ../src/Core-0/%.c | $(OBJ_DIR)
-	@echo "Compiling $<..."
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-	@if [ -n "$(CHECK)" ]; then \
-		echo "Running Sparse on $<..."; \
-		$(CHECK_CMD) -D__CHECKER__ $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 $<; \
-	fi
-
-$(OBJ_DIR)/%.o: ../src/Privileged-1/%.c | $(OBJ_DIR)
-	@echo "Compiling $<..."
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-	@if [ -n "$(CHECK)" ]; then \
-		echo "Running Sparse on $<..."; \
-		$(CHECK_CMD) -D__CHECKER__ $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 $<; \
-	fi
-
-$(OBJ_DIR)/%.o: ../src/Core-0/lib/%.c | $(OBJ_DIR)
-	@echo "Compiling $<..."
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
-	@if [ -n "$(CHECK)" ]; then \
-		echo "Running Sparse on $<..."; \
-		$(CHECK_CMD) -D__CHECKER__ $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 $<; \
-	fi
-
-$(OBJ_DIR) $(BIN_DIR):
-	mkdir -p $@
-
-# Core-0核心文件（架构无关）
-CORE_OBJS = $(OBJ_DIR)/kernel_start.o \
-            $(OBJ_DIR)/hal.o \
-            $(OBJ_DIR)/hal_impl_simple.o \
-            $(OBJ_DIR)/pmm.o \
-            $(OBJ_DIR)/globals.o \
-            $(OBJ_DIR)/boot_info.o \
-            $(OBJ_DIR)/exception.o \
-            $(OBJ_DIR)/irq.o \
-            $(OBJ_DIR)/pagetable.o
-
-# 其他模块
-OTHER_OBJS = $(OBJ_DIR)/capability.o \
-             $(OBJ_DIR)/domain.o \
-             $(OBJ_DIR)/domain_switch.o \
-             $(OBJ_DIR)/scheduler.o \
-             $(OBJ_DIR)/thread.o \
-             $(OBJ_DIR)/syscall.o \
-             $(OBJ_DIR)/audit.o \
-             $(OBJ_DIR)/formal_verification.o \
-             $(OBJ_DIR)/performance.o \
-             $(OBJ_DIR)/hardware_probe.o \
-             $(OBJ_DIR)/module_loader.o \
-             $(OBJ_DIR)/monitor.o \
-             $(OBJ_DIR)/build_config.o \
-             $(OBJ_DIR)/runtime_config.o \
-             $(OBJ_DIR)/yaml.o \
-             $(OBJ_DIR)/pkcs1.o \
-             $(OBJ_DIR)/privileged_service.o \
-             $(OBJ_DIR)/capability_manager_service.o \
-             $(OBJ_DIR)/scheduler_service.o \
-             $(OBJ_DIR)/memory_manager_service.o \
-             $(OBJ_DIR)/irq_controller_service.o \
-             $(OBJ_DIR)/syscall_dispatcher_service.o \
-             $(OBJ_DIR)/module_manager_service.o \
-             $(OBJ_DIR)/console.o \
-             $(OBJ_DIR)/mem.o \
-             $(OBJ_DIR)/string.o \
-             $(OBJ_DIR)/nommu.o \
-             $(OBJ_DIR)/minimal_uart.o \
-             $(OBJ_DIR)/apm.o
-
-# 架构特定汇编文件
-ALL_OBJS = $(OBJ_DIR)/entry.o $(CORE_OBJS) $(OTHER_OBJS)
-
-# 架构特定汇编文件
-$(OBJ_DIR)/entry.o: ../src/Core-0/arch/x86_64/entry.S | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# 无MMU架构支持
-$(OBJ_DIR)/nommu.o: ../src/Core-0/nommu.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# 极简串口驱动
-$(OBJ_DIR)/minimal_uart.o: ../src/Core-0/minimal_uart.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# APM 系统
-$(OBJ_DIR)/apm.o: ../src/Core-0/apm.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# Core-0 C文件
-$(OBJ_DIR)/kernel_start.o: ../src/Core-0/kernel_start.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/hal.o: ../src/Core-0/hal.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/pmm.o: ../src/Core-0/pmm.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/globals.o: ../src/Core-0/globals.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/boot_info.o: ../src/Core-0/boot_info.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/exception.o: ../src/Core-0/exception.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/irq.o: ../src/Core-0/irq.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/pagetable.o: ../src/Core-0/pagetable.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/hal_impl_simple.o: ../src/Core-0/arch/x86_64/hal_impl_simple.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# 其他C文件
-$(OBJ_DIR)/capability.o: ../src/Core-0/capability.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/domain.o: ../src/Core-0/domain.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/domain_switch.o: ../src/Core-0/domain_switch.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/scheduler.o: ../src/Core-0/scheduler.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/thread.o: ../src/Core-0/thread.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-
-
-$(OBJ_DIR)/pkcs1.o: ../src/Core-0/pkcs1.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# Privileged-1
-$(OBJ_DIR)/privileged_service.o: ../src/Privileged-1/privileged_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/capability_manager_service.o: ../src/Privileged-1/capability_manager_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/scheduler_service.o: ../src/Privileged-1/scheduler_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/memory_manager_service.o: ../src/Privileged-1/memory_manager_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/irq_controller_service.o: ../src/Privileged-1/irq_controller_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/syscall_dispatcher_service.o: ../src/Privileged-1/syscall_dispatcher_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/module_manager_service.o: ../src/Privileged-1/module_manager_service.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Core-0/arch/x86_64 -I../src/Privileged-1 -c $< -o $@
-
-# 库
-$(OBJ_DIR)/console.o: ../src/Core-0/lib/console.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/mem.o: ../src/Core-0/lib/mem.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
-
-$(OBJ_DIR)/string.o: ../src/Core-0/lib/string.c | $(OBJ_DIR)
-	$(CC) $(CFLAGS) -I../src/Core-0 -I../src/Core-0/include -I../src/Core-0/lib -I../src/Privileged-1 -c $< -o $@
-
-# 链接
-$(BIN_DIR)/hic-kernel.elf: $(ALL_OBJS) $(LD_SCRIPT) | $(BIN_DIR)
-	$(LD) $(LDFLAGS) -T $(LD_SCRIPT) -e kernel_entry --allow-multiple-definition $(ALL_OBJS) -o $@
-	@echo "内核链接完成"
-	@echo "运行内存区域重叠检查..."
-	@python3 ../scripts/check_memory_overlap.py ../iso_output/platform.yaml $(BIN_DIR)/hic-kernel.elf
-	@if [ $$? -ne 0 ]; then \
-		echo "错误: 内存区域检查失败，构建终止"; \
-		exit 1; \
-	fi
-
-clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
-
-# 显示Sparse使用帮助
-help-sparse:
-	@echo "Sparse语义检查使用指南:"
-	@echo "  make C=1              # 对修改的文件运行Sparse检查"
-	@echo "  make C=2              # 对所有文件运行Sparse检查"
-	@echo "  make sparse-check     # 运行完整的Sparse检查（等同于C=2）"
-	@echo "  make CF='-Wbitwise' C=1 # 自定义Sparse参数"
+# ==================== 帮助信息 ====================
+help:
+	@echo "HIC 内核构建系统"
 	@echo ""
-	@echo "地址空间标记（在types.h中定义）:"
-	@echo "  __kernel      - Core-0内核空间（address_space(0)）"
-	@echo "  __capability - 能力系统对象空间（address_space(1)）"
-	@echo "  __p1          - Privileged-1服务内存空间（address_space(2)）"
-	@echo "  __p3          - Application-3用户空间（address_space(3)）"
-	@echo "  __io          - I/O端口/MMIO空间（address_space(4)）"
+	@echo "使用方法:"
+	@echo "  make                  - 构建内核（默认）"
+	@echo "  make kernel           - 仅构建内核"
+	@echo "  make bootloader       - 仅构建引导程序"
+	@echo "  make install          - 构建并安装"
+	@echo "  make clean            - 清理构建文件"
 	@echo ""
-	@echo "示例用法（在代码中）:"
-	@echo "  #ifdef __CHECKER__"
-	@echo "      __capability cap_entry_t *cap;"
-	@echo "  #else"
-	@echo "      cap_entry_t *cap;"
-	@echo "  #endif"
+	@echo "静态分析:"
+	@echo "  make sparse-check     - Sparse 语义检查"
+	@echo "  make cppcheck         - Cppcheck 静态分析"
+	@echo "  make clang-analyzer   - Clang Static Analyzer"
+	@echo "  make static-analysis  - 运行所有静态分析"
 	@echo ""
-	@echo "或直接使用标记（正常编译时自动消失）:"
-	@echo "  __capability cap_entry_t *cap;"
+	@echo "配置选项（在 build_config.mk 中设置）:"
+	@echo "  CONFIG_DEBUG=0/1      - 调试支持"
+	@echo "  CONFIG_MMU=0/1        - MMU 支持"
+	@echo "  CONFIG_PCI=0/1        - PCI 支持"
+	@echo "  CONFIG_ACPI=0/1       - ACPI 支持"
+	@echo ""
+	@echo "示例:"
+	@echo "  make clean && make kernel              # 完整构建"
+	@echo "  make CONFIG_DEBUG=1 kernel              # 调试版本"
+	@echo "  make clean && make static-analysis      # 静态分析"
 
-# 显示Cppcheck使用帮助
-help-cppcheck:
-	@echo "Cppcheck静态分析使用指南:"
-	@echo "  make cppcheck         # 运行Cppcheck静态分析"
-	@echo "  make static-analysis  # 运行所有静态分析（Sparse + Cppcheck + Clang）"
-	@echo "  CPPCHECK_RULES=path/to/rules.xml make cppcheck # 使用自定义规则"
-	@echo ""
-	@echo "自定义规则文件: $(CPPCHECK_RULES)"
-	@echo "检查结果保存在: $(OBJ_DIR)/cppcheck/"
-	@echo ""
-	@echo "能力系统检查规则:"
-	@echo "  - 未验证能力就访问资源"
-	@echo "  - 能力撤销后继续使用"
-	@echo "  - 跨域指针误用"
-	@echo "  - 内存泄漏检查"
+# ==================== 依赖关系 ====================
+-include $(ALL_OBJS:.o=.d)
 
-# 显示Clang Static Analyzer使用帮助
-help-clang:
-	@echo "Clang Static Analyzer使用指南:"
-	@echo "  make clang-analyzer  # 运行Clang Static Analyzer"
-	@echo "  make static-analysis # 运行所有静态分析（Sparse + Cppcheck + Clang）"
-	@echo ""
-	@echo "检查结果保存在: $(OBJ_DIR)/clang-analyzer/"
-	@echo "查看结果: 用浏览器打开 $(OBJ_DIR)/clang-analyzer/index.html"
-	@echo ""
-	@echo "检测能力:"
-	@echo "  - 空指针解引用"
-	@echo "  - 内存泄漏"
-	@echo "  - 未初始化变量使用"
-	@echo "  - 死代码检测"
-	@echo "  - 缓冲区溢出"
+# 自动生成依赖文件
+$(OBJ_DIR)/core0/%.d: $(CORE0_DIR)/%.c | $(OBJ_DIR)/core0
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(OBJ_DIR)/core0/$*.o $< > $@
 
-# 显示所有帮助
-help: help-sparse help-cppcheck help-clang
-	@echo ""
-	@echo "快速开始:"
-	@echo "  make static-analysis  # 运行完整的静态分析"
-	@echo "  make C=2              # 对所有文件运行Sparse检查"
-	@echo "  make sparse-check     # 运行完整的Sparse检查（等同于C=2）"
-	@echo "  make CF='-Wbitwise' C=1 # 自定义Sparse参数"
-	@echo "  make cppcheck         # 运行Cppcheck静态分析"
-	@echo "  make clang-analyzer   # 运行Clang Static Analyzer"
-	@echo ""
-	@echo "地址空间标记（在types.h中定义）:"
-	@echo "  __kernel      - Core-0内核空间（address_space(0)）"
-	@echo "  __capability - 能力系统对象空间（address_space(1)）"
-	@echo "  __p1          - Privileged-1服务内存空间（address_space(2)）"
-	@echo "  __p3          - Application-3用户空间（address_space(3)）"
-	@echo "  __io          - I/O端口/MMIO空间（address_space(4)）"
-	@echo ""
-	@echo "示例用法（在代码中）:"
-	@echo "  #ifdef __CHECKER__"
-	@echo "      __capability cap_entry_t *cap;"
-	@echo "  #else"
-	@echo "      cap_entry_t *cap;"
-	@echo "  #endif"
-	@echo ""
-	@echo "或直接使用标记（正常编译时自动消失）:"
-	@echo "  __capability cap_entry_t *cap;"
-	@echo ""
-	@echo "未安装的工具（可选）:"
-	@echo "  - STANSE: http://www.fi.muni.cz/~xsvenda/stanse.html"
-	@echo "  - IKOS: https://github.com/NASA-SW-VnV/ikos"
+$(OBJ_DIR)/core0/lib/%.d: $(CORE0_DIR)/lib/%.c | $(OBJ_DIR)/core0/lib
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(OBJ_DIR)/core0/lib/$*.o $< > $@
+
+$(OBJ_DIR)/core0/arch/%.d: $(CORE0_DIR)/arch/x86_64/%.c | $(OBJ_DIR)/core0/arch
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(OBJ_DIR)/core0/arch/$*.o $< > $@
+
+$(OBJ_DIR)/privileged1/%.d: $(PRIVILEGED1_DIR)/%.c | $(OBJ_DIR)/privileged1
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(OBJ_DIR)/privileged1/$*.o $< > $@

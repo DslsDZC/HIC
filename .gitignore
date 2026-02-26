@@ -1,5 +1,7 @@
 # HIC 项目 .gitignore
 
+.cache/
+AGENTS.md
 # 构建输出
 build/
 output/

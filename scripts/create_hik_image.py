@@ -45,15 +45,14 @@ def create_hic_image(elf_path, output_path):
     struct.pack_into('<Q', header, 60, 0)
     struct.pack_into('<Q', header, 68, 0)
     
-    # 段表 (48字节, 1个段项)
-    segment_table = bytearray(48)
+    # 段表 (40字节, 1个段项)
+    segment_table = bytearray(40)
     struct.pack_into('<I', segment_table, 0, 1)
     struct.pack_into('<I', segment_table, 4, 0)
     struct.pack_into('<Q', segment_table, 8, 160)
     struct.pack_into('<Q', segment_table, 16, 0x100000)
     struct.pack_into('<Q', segment_table, 24, len(binary_code))
     struct.pack_into('<Q', segment_table, 32, len(binary_code))
-    struct.pack_into('<Q', segment_table, 40, 0x1000)
     
     with open(output_path, 'wb') as f:
         f.write(header)

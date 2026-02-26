@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -79,5 +79,7 @@ extern void idt_load(idt_ptr_t *idt_ptr);
 /* 外部中断处理 */
 extern void isr_common_stub(void);
 extern void irq_common_stub(void);
+extern void isr_fast_stub(void);
+extern void isr_128(void);
 
 #endif /* HIC_ARCH_X86_64_IDT_H */

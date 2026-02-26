@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -99,6 +99,14 @@ static void init_default_config(void)
     /* 模块配置默认值 */
     g_runtime_config.enable_module_loading = false;
     g_runtime_config.max_modules = 32;
+    
+    /* 安全配置默认值 */
+    strcpy(g_runtime_config.default_password, "admin123");
+    g_runtime_config.password_required = true;
+    g_runtime_config.password_min_length = 8;
+    g_runtime_config.password_require_upper = true;
+    g_runtime_config.password_require_lower = true;
+    g_runtime_config.password_require_digit = true;
     
     /* 配置元数据 */
     g_runtime_config.config_source = CONFIG_SOURCE_DEFAULT;

@@ -45,15 +45,25 @@ kernel:
 	@cd $(BUILD_DIR) && $(MAKE) all
 	@echo "内核构建完成"
 
-# 生成HIC镜像
+# 生成HIC镜像（HIK格式）
 image: kernel
-	@echo "生成HIC镜像"
-	@cd $(BUILD_DIR) && gcc -O2 create_hic_image.c -o create_hic_image
-	@cd $(BUILD_DIR) && ./create_hic_image bin/hic-kernel.elf bin/hic-kernel.hic
-	@echo "HIC镜像生成完成"
+	@echo "生成HIC镜像（HIK格式）"
+	@objcopy -O binary $(BUILD_DIR)/bin/hic-kernel.elf $(BUILD_DIR)/bin/hic-kernel.bin
+	@python3 scripts/create_hik_image.py $(BUILD_DIR)/bin/hic-kernel.elf $(BUILD_DIR)/bin/hic-kernel.hic
+	@echo "HIC镜像生成完成: $(BUILD_DIR)/bin/hic-kernel.hic"
+
+# 创建磁盘镜像（IMG）
+img: bootloader kernel
+	@echo "创建磁盘镜像（IMG）"
+	@mkdir -p $(OUTPUT_DIR)
+	@python3 scripts/create_efi_disk_no_root.py \
+		--bootloader $(BOOTLOADER_DIR)/bin/bootx64.efi \
+		--kernel $(BUILD_DIR)/bin/hic-kernel.elf \
+		--output $(OUTPUT_DIR)/hic-uefi-disk.img
+	@echo "磁盘镜像创建完成: $(OUTPUT_DIR)/hic-uefi-disk.img"
 
 # 更新磁盘镜像
-update-disk: image bootloader
+update-disk: img
 	@echo "更新磁盘镜像"
 	@sudo umount /tmp/hic_mnt 2>/dev/null || true
 	@sudo losetup -f output/hic-uefi-disk.img /dev/loop0 2>/dev/null || true
@@ -352,6 +362,7 @@ help:
 	@echo "  make bootloader         - 仅构建引导程序"
 	@echo "  make kernel             - 仅构建内核"
 	@echo "  make image              - 生成HIC镜像"
+	@echo "  make img                - 创建磁盘镜像（IMG）"
 	@echo "  make update-disk        - 更新磁盘镜像"
 	@echo "  make clean              - 清理所有构建文件"
 	@echo "  make install            - 安装构建产物到output目录"

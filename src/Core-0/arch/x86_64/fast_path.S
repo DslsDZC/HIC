@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -21,8 +21,11 @@ isr_fast_stub:
     pushq %rdi           /* RDI: 参数 */
     pushq %rbp           /* RBP: 栈指针 */
     
-    /* 调用中断处理函数 */
-    call irq_handler_fast
+    /* 从栈中获取IRQ向量号 */
+    movq 8(%rsp), %rdi  /* 栈上第9个qword是向量号 */
+    
+    /* 调用中断分发函数 */
+    call irq_dispatch
     
     /* 恢复寄存器 */
     popq %rbp

@@ -1,0 +1,46 @@
+# HIC服务模块元数据文件
+
+[service]
+name = crypto_service
+display_name = 密码学服务
+version = 1.0.0
+api_version = 1.0
+uuid = b2c3d4e5-f6a7-8901-bcde-f12345678901
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供密码学操作服务
+long = 密码学服务提供哈希计算、RSA签名验证等密码学功能。支持SHA-384哈希、PKCS#1 v2.1 RSASSA-PSS签名验证等算法。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 1048576
+max_threads = 8
+max_capabilities = 128
+cpu_quota_percent = 10
+
+[endpoints]
+sha384_hash = 1.0:crypto_sha384
+rsa_verify_pss = 1.0:crypto_rsa_verify_pss
+rsa_verify_v1_5 = 1.0:crypto_rsa_verify_v1_5
+mgf1 = 1.0:crypto_mgf1
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = true
+
+[build]
+static = false
+priority = 2
+autostart = true

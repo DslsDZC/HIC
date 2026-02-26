@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -179,6 +179,14 @@ typedef struct runtime_config {
     /* 模块配置 */
     bool enable_module_loading;   /* 启用模块加载 */
     u32 max_modules;              /* 最大模块数 */
+    
+    /* 安全配置 */
+    char default_password[128];   /* 默认管理员密码 */
+    bool password_required;       /* 是否需要密码验证 */
+    u32 password_min_length;      /* 密码最小长度 */
+    bool password_require_upper;  /* 密码要求大写字母 */
+    bool password_require_lower;  /* 密码要求小写字母 */
+    bool password_require_digit;  /* 密码要求数字 */
     
     /* 自定义配置项 */
     config_item_t custom_items[32];

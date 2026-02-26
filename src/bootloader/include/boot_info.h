@@ -21,11 +21,11 @@
 
 // 内存映射条目
 typedef struct {
-    uint64_t base;
+    uint64_t base_address;
     uint64_t length;
     uint32_t type;
-    uint32_t flags;
-} hic_mem_entry_t;
+    uint32_t attributes;
+} memory_map_entry_t;
 
 // HIC引导信息结构
 typedef struct {
@@ -34,7 +34,7 @@ typedef struct {
     uint64_t flags;                    // 特性标志位
     
     // 内存信息
-    hic_mem_entry_t *mem_map;
+    memory_map_entry_t *mem_map;
     uint64_t mem_map_size;
     uint64_t mem_map_desc_size;
     uint64_t mem_map_entry_count;
@@ -122,6 +122,13 @@ typedef struct {
         uint64_t platform_size;         // platform.yaml文件大小
         uint64_t platform_hash;         // platform.yaml哈希值
     } platform;
+
+    // 硬件探测结果（按照文档规范，硬件探测在引导层完成）
+    struct {
+        void *hw_data;                  // 硬件探测数据指针
+        uint64_t hw_size;               // 硬件探测数据大小
+        uint64_t hw_hash;               // 硬件探测哈希值
+    } hardware;
 
 } hic_boot_info_t;
 
