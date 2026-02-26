@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -51,7 +51,7 @@ void idt_set_gate(uint8_t vector, uint64_t handler, uint16_t selector,
     idt[vector].ist         = 0;
     idt[vector].type_attr   = type | (dpl << 5) | 0x80;  /* Present */
     idt[vector].offset_middle = (handler >> 16) & 0xFFFF;
-    idt[vector].offset_high = (handler >> 32) & 0xFFFFFFFF;
+    idt[vector].offset_high = (uint32_t)((handler >> 32) & 0xFFFFFFFF);
     idt[vector].reserved    = 0;
 }
 
@@ -113,10 +113,16 @@ void idt_init(void)
     idt_set_gate(IDT_VECTOR_SYSCALL, (uint64_t)isr_128, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL3);
     
+    /* 设置IRQ处理程序（使用快速路径） */
+    for (u32 i = 32; i < 48; i++) {
+        idt_set_gate((uint8_t)i, (uint64_t)isr_fast_stub, (uint8_t)(GDT_KERNEL_CS << 3),
+                     IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    }
+    
     /* 加载IDT */
     idt_load(&idt_ptr);
     
-    console_puts("[IDT] IDT initialized\n");
+    console_puts("[IDT] IDT initialized (fast path for IRQs)\n");
 }
 
 /* 中断处理函数 */

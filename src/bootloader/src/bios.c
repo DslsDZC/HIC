@@ -417,10 +417,10 @@ static void bios_get_memory_map(hic_boot_info_t *boot_info)
     // 使用BIOS INT 0x15, EAX=0xE820获取内存映射
     
     struct bios_memory_map_entry {
-        uint64_t base;
+        uint64_t base_address;
         uint64_t length;
         uint32_t type;
-        uint32_t acpi_attrs;
+        uint32_t attributes;
     } __attribute__((packed));
     
     bios_memory_map_entry_t *bios_map = 
@@ -469,15 +469,15 @@ static void bios_get_memory_map(hic_boot_info_t *boot_info)
     } while (1);
     
     // 转换为HIC格式
-    hic_mem_entry_t *hic_map = (hic_mem_entry_t *)0x8000;
+    memory_map_entry_t *hic_map = (memory_map_entry_t *)0x8000;
     
     uint64_t total_memory = 0;
     uint64_t usable_memory = 0;
     
     for (uint32_t i = 0; i < entry_count; i++) {
-        hic_map[i].base = bios_map[i].base;
+        hic_map[i].base_address = bios_map[i].base;
         hic_map[i].length = bios_map[i].length;
-        hic_map[i].flags = 0;
+        hic_map[i].attributes = 0;
         
         // 转换类型
         switch (bios_map[i].type) {
@@ -505,16 +505,15 @@ static void bios_get_memory_map(hic_boot_info_t *boot_info)
         total_memory += bios_map[i].length;
         
         log_info("  [%2u] 0x%016llx - 0x%016llx (%10lu KB) type=%u\n",
-                i, bios_map[i].base, 
-                bios_map[i].base + bios_map[i].length - 1,
-                bios_map[i].length / 1024,
+                i, bios_map[i].base_address,
+                        bios_map[i].base_address + bios_map[i].length - 1,                bios_map[i].length / 1024,
                 bios_map[i].type);
     }
     
     boot_info->mem_map = hic_map;
     boot_info->mem_map_entry_count = entry_count;
-    boot_info->mem_map_size = entry_count * sizeof(hic_mem_entry_t);
-    boot_info->mem_map_desc_size = sizeof(hic_mem_entry_t);
+    boot_info->mem_map_size = entry_count * sizeof(memory_map_entry_t);
+    boot_info->mem_map_desc_size = sizeof(memory_map_entry_t);
     
     log_info("Found %lu memory map entries\n", entry_count);
     log_info("Total memory: %lu MB, Usable: %lu MB\n",

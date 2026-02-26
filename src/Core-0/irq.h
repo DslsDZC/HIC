@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -33,6 +33,7 @@ typedef struct irq_route_entry {
     volatile u64         handler_address;
     volatile cap_id_t    endpoint_cap;
     volatile u8          initialized;
+    volatile u32         flags;  /* IRQ_FLAG_EDGE/LEVEL/SHARED */
 } irq_route_entry_t;
 
 /* 中断路由表（外部定义） */

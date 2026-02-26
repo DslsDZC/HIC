@@ -13,6 +13,7 @@
 #include "efi.h"
 #include "boot_info.h"
 #include "kernel_image.h"
+#include "hardware_probe.h"
 #include "console.h"
 #include "string.h"
 // #include "crypto.h"  // 暂时禁用
@@ -851,6 +852,13 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 
     // 获取内存映射
     get_memory_map(boot_info);
+    
+    // 执行硬件探测（按照文档规范）
+    // 硬件探测应该在引导层完成，然后通过 boot_info 传递给内核
+    // 包含：CPU信息、内存拓扑、PCI设备、中断控制器
+    console_puts("[BOOTLOADER] Starting hardware probe...\n");
+    hardware_probe_init(boot_info);
+    console_puts("[BOOTLOADER] Hardware probe completed\n");
 
     return boot_info;
 }
@@ -864,7 +872,7 @@ EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
     UINTN map_size, map_key, desc_size;
     UINT32 desc_version;
     EFI_MEMORY_DESCRIPTOR *map;
-    hic_mem_entry_t *hic_map;
+    memory_map_entry_t *hic_map;
     UINTN entry_count;
     
     console_puts("[BOOTLOADER] Getting memory map...\n");
@@ -930,7 +938,7 @@ EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
     // 转换为HIC格式
     entry_count = map_size / desc_size;
     console_printf("[BOOTLOADER] Memory map entry count: %d\n", (int)entry_count);
-    hic_map = allocate_pool(entry_count * sizeof(hic_mem_entry_t));
+    hic_map = allocate_pool(entry_count * sizeof(memory_map_entry_t));
     if (!hic_map) {
         free_pool(map);
         return EFI_OUT_OF_RESOURCES;
@@ -938,9 +946,9 @@ EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
     
     EFI_MEMORY_DESCRIPTOR *desc = map;
     for (UINTN i = 0; i < entry_count; i++) {
-        hic_map[i].base = desc->physical_start;
+        hic_map[i].base_address = desc->physical_start;
         hic_map[i].length = desc->number_of_pages * 4096;
-        hic_map[i].flags = 0;
+        hic_map[i].attributes = 0;
         
         // 转换内存类型
         switch (desc->type) {
@@ -971,7 +979,7 @@ EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
     
     boot_info->mem_map = hic_map;
     boot_info->mem_map_size = map_size;
-    boot_info->mem_map_desc_size = sizeof(hic_mem_entry_t);
+    boot_info->mem_map_desc_size = sizeof(memory_map_entry_t);
     boot_info->mem_map_entry_count = entry_count;
     
     console_printf("[BOOTLOADER] Memory map set: base=0x%p, entry_count=%d\n", 

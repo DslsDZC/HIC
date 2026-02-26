@@ -5,7 +5,7 @@
 #include "boot_info.h"
 
 // HIC内核映像魔数
-#define HIC_IMG_MAGIC  "HIC_IMG"
+#define HIC_IMG_MAGIC  "HIC_IMG\0"
 
 // 架构ID
 #define HIC_ARCH_X86_64   1
@@ -25,7 +25,7 @@ typedef struct {
     uint64_t config_table_size;     // 配置表大小
     uint64_t signature_offset;      // 签名偏移
     uint64_t signature_size;        // 签名大小
-    uint8_t  reserved[64];          // 预留
+    uint8_t  reserved[44];          // 预留
 } hic_image_header_t;
 
 // 段类型
@@ -48,7 +48,6 @@ typedef struct {
     uint64_t memory_offset;        // 内存中的偏移
     uint64_t file_size;            // 文件大小
     uint64_t memory_size;          // 内存大小
-    uint64_t alignment;            // 对齐要求
 } hic_segment_entry_t;
 
 // 签名算法

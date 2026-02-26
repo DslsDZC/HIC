@@ -1,0 +1,47 @@
+# HIC服务模块元数据文件
+
+[service]
+name = config_service
+display_name = 配置管理服务
+version = 1.0.0
+api_version = 1.0
+uuid = d4e5f6a7-b8c9-0123-def0-234567890123
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供YAML配置解析和管理功能
+long = 配置管理服务负责解析和管理系统配置文件，支持YAML格式。读取默认密码、系统限制、安全设置等配置。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 1048576
+max_threads = 4
+max_capabilities = 64
+cpu_quota_percent = 5
+
+[endpoints]
+yaml_parse = 1.0:config_yaml_parse
+yaml_get_string = 1.0:config_yaml_get_string
+yaml_get_u64 = 1.0:config_yaml_get_u64
+yaml_get_bool = 1.0:config_yaml_get_bool
+get_default_password = 1.0:config_get_default_password
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = true
+
+[build]
+static = false
+priority = 4
+autostart = true

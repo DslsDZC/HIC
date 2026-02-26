@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -20,13 +20,40 @@
 #include "build_config.h"
 #include "yaml.h"
 #include "boot_info.h"
-#include "minimal_uart.h"
+#include "console.h"
 #include "pmm.h"
 #include "irq.h"
 #include "lib/console.h"
 #include "lib/mem.h"
 #include "lib/string.h"
 #include "formal_verification.h"
+
+/* UART配置结构体（临时定义） */
+typedef enum {
+    UART_DATA_BITS_5 = 5,
+    UART_DATA_BITS_6 = 6,
+    UART_DATA_BITS_7 = 7,
+    UART_DATA_BITS_8 = 8
+} uart_data_bits_t;
+
+typedef enum {
+    UART_PARITY_NONE = 0,
+    UART_PARITY_ODD = 1,
+    UART_PARITY_EVEN = 2
+} uart_parity_t;
+
+typedef enum {
+    UART_STOP_BITS_1 = 1,
+    UART_STOP_BITS_2 = 2
+} uart_stop_bits_t;
+
+typedef struct uart_config {
+    phys_addr_t base_addr;
+    u32 baud_rate;
+    uart_data_bits_t data_bits;
+    uart_parity_t parity;
+    uart_stop_bits_t stop_bits;
+} uart_config_t;
 
 /* 串口配置 */
 typedef struct apm_uart_config {
@@ -80,6 +107,13 @@ typedef enum apm_state {
     APM_STATE_RUNNING,         /* 运行中 */
     APM_STATE_ERROR,           /* 错误 */
 } apm_state_t;
+
+/* APM 模式枚举 */
+typedef enum apm_mode {
+    APM_MODE_AUTO = 0,          /* 自动模式 */
+    APM_MODE_MANUAL,           /* 手动模式 */
+    APM_MODE_CONFIG,           /* 配置模式 */
+} apm_mode_t;
 
 /* APM 配置结构 */
 typedef struct apm_config {
@@ -255,7 +289,7 @@ void apm_print_config(void)
 {
     console_puts("[APM] ===== APM Configuration =====\n");
     console_puts("[APM] Mode: ");
-    console_putu32(g_apm_config.mode);
+    console_putu32((u32)g_apm_config.mode);
     console_puts("\n");
     console_puts("[APM] Version: ");
     console_putu64(g_apm_config.config_version);
@@ -466,14 +500,16 @@ hic_status_t apm_init_all_uarts(void)
         apm_uart_config_t *config = &g_apm_config.uart[i];
         
         /* 使用配置初始化串口 */
-        uart_config_t uart_cfg;
-        uart_cfg.base_addr = config->base_addr;
-        uart_cfg.baud_rate = config->baud_rate;
-        uart_cfg.data_bits = (uart_data_bits_t)config->data_bits;
-        uart_cfg.parity = (uart_parity_t)config->parity;
-        uart_cfg.stop_bits = (uart_stop_bits_t)config->stop_bits;
+        /* uart_config_t uart_cfg; */
+        /* uart_cfg.base_addr = config->base_addr; */
+        /* uart_cfg.baud_rate = config->baud_rate; */
+        /* uart_cfg.data_bits = (uart_data_bits_t)config->data_bits; */
+        /* uart_cfg.parity = (uart_parity_t)config->parity; */
+        /* uart_cfg.stop_bits = (uart_stop_bits_t)config->stop_bits; */
 
-        minimal_uart_init_with_config(&uart_cfg);
+        /* TODO: UART初始化将在console模块中实现 */
+        /* minimal_uart_init_with_config(&uart_cfg); */
+        console_puts("[APM] UART initialization pending\n");
 
         /* 串口初始化成功 */
         g_apm_config.stats.initialized_resources++;

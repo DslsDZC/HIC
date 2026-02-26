@@ -1,0 +1,51 @@
+# HIC服务模块元数据文件
+
+[service]
+name = module_manager_service
+display_name = 模块管理服务
+version = 1.0.0
+api_version = 1.0
+uuid = c3d4e5f6-a7b8-9012-cdef-123456789012
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 负责模块的动态加载、卸载和管理
+long = 模块管理服务提供.hicmod模块的动态加载、卸载、依赖解析、签名验证等功能。所有模块操作都需要密码验证。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+password_manager_service = 1.0:1.0:2.0
+crypto_service = 1.0:1.0:2.0
+
+[resources]
+max_memory = 2097152
+max_threads = 8
+max_capabilities = 256
+cpu_quota_percent = 15
+
+[endpoints]
+module_load = 1.0:module_load
+module_unload = 1.0:module_unload
+module_start = 1.0:module_start
+module_stop = 1.0:module_stop
+module_list = 1.0:module_list
+module_info = 1.0:module_info
+
+[permissions]
+domain_create = true
+capability_create = true
+memory_alloc = true
+
+[security]
+critical = true
+privileged = true
+signature_required = true
+
+[build]
+static = false
+priority = 3
+autostart = true

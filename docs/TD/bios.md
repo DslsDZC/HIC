@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
 
 SPDX-License-Identifier: CC-BY-4.0
 -->
@@ -137,7 +137,27 @@ struct memory_map_entry {
 
 ## 五、内核映像格式
 
-### 5.1 文件头结构
+### 5.1 整体结构
+```
++------------------+
+| HIC 文件头       | 120 字节 (0x00-0x77)
++------------------+
+| 段表             | 48 字节 × 段数量
++------------------+
+| 段数据           | 可变大小
+|  - 代码段        |
+|  - 数据段        |
+|  - 只读数据段    |
+|  - BSS段(无数据) |
+|  - 配置段        |
++------------------+
+| 配置表           | 可变大小 (可选)
++------------------+
+| 签名数据         | 可变大小 (可选)
++------------------+
+```
+
+### 5.2 文件头结构
 ```
 偏移量   大小    描述
 0x00     8      魔数 "HIC_IMG" (以\0结尾)
@@ -174,17 +194,58 @@ typedef struct {
 } hic_image_header_t;
 ```
 
-### 5.2 段表项
+**注意：**
+- `segment_table_offset` 通常为 120（紧跟文件头）
+- `segment_count` 段表项数（每个段表项 40 字节）
+- `entry_point` 是相对于内核加载基地址的偏移
+
+### 5.3 段表项
 ```c
-struct segment_entry {
-    uint32_t type;      // 1=代码, 2=数据, 3=只读数据, 4=BSS
-    uint32_t flags;     // 加载标志
-    uint64_t file_offset;
-    uint64_t memory_offset;
-    uint64_t file_size;
-    uint64_t memory_size;
-    uint64_t alignment;
-};
+typedef struct {
+    uint32_t type;                 // 段类型 (1=代码, 2=数据, 3=只读数据, 4=BSS, 5=配置)
+    uint32_t flags;                // 段标志 (位0=可读, 位1=可写, 位2=可执行)
+    uint64_t file_offset;          // 文件中的偏移
+    uint64_t memory_offset;        // 内存中的偏移
+    uint64_t file_size;            // 文件大小
+    uint64_t memory_size;          // 内存大小
+} hic_segment_entry_t;
+```
+
+**段表项大小：40字节 (4+4+8×4)**
+
+**段类型定义：**
+```c
+#define HIC_SEGMENT_TYPE_CODE    1   // 代码段
+#define HIC_SEGMENT_TYPE_DATA    2   // 数据段
+#define HIC_SEGMENT_TYPE_RODATA  3   // 只读数据段
+#define HIC_SEGMENT_TYPE_BSS     4   // BSS段（零初始化）
+#define HIC_SEGMENT_TYPE_CONFIG  5   // 配置段
+```
+
+**段标志定义：**
+```c
+#define HIC_SEGMENT_FLAG_READABLE    (1 << 0)  // 可读
+#define HIC_SEGMENT_FLAG_WRITABLE    (1 << 1)  // 可写
+#define HIC_SEGMENT_FLAG_EXECUTABLE  (1 << 2)  // 可执行
+```
+
+### 5.4 简化格式（内核）
+
+对于简单的内核（如当前实现），可以使用简化格式：
+- 段表项数：1
+- 段表偏移：120
+- 段类型：1 (CODE)
+- 段标志：0x7 (可读+可写+可执行)
+- 文件偏移：160 (120 + 40)
+- 内存偏移：0x100000 (内核加载地址)
+- 文件大小 = 内存大小
+
+**示例布局：**
+```
+偏移     大小      内容
+0x00     120      HIC 文件头
+0x78     40       段表 (1个段)
+0xA0     N        内核代码
 ```
 
 ## 六、安全启动实现

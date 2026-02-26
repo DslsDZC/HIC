@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -116,6 +116,7 @@ typedef struct build_config {
     
     u32 build_mode;
 #define BUILD_MODE_STATIC  0
+#define BUILD_MODE_DYNAMIC 1
     
     /* 硬件信息 */
     cpu_info_t          cpu_info;

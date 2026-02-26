@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -129,6 +129,5 @@ void tss_set_stack(uint64_t rsp)
     tss.ist[4] = 0;
     tss.ist[5] = 0;
     tss.ist[6] = 0;
-    tss.ist[7] = 0;
     (void)rsp;
 }

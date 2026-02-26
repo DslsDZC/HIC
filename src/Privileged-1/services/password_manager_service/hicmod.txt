@@ -1,0 +1,59 @@
+# HIC服务模块元数据文件
+# 格式：INI风格
+
+[service]
+# 服务基本信息
+name = password_manager_service
+display_name = 密码管理服务
+version = 1.0.0
+api_version = 1.0
+uuid = a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+[author]
+# 作者信息
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+# 服务描述
+short = 提供安全的密码管理和验证功能
+long = 密码管理服务负责系统密码的存储、验证和管理。支持密码哈希存储、密码策略验证、密码更新等功能。该服务是模块安装、卸载等高级操作的安全基础。
+
+[dependencies]
+# 服务依赖
+# 格式：service_name:min_version:max_version
+core_api = 1.0:1.0:2.0
+
+[resources]
+# 资源需求
+max_memory = 524288           # 最大内存（字节）
+max_threads = 4              # 最大线程数
+max_capabilities = 64        # 最大能力数
+cpu_quota_percent = 5        # CPU配额（百分比）
+
+[endpoints]
+# 服务端点
+# 格式：endpoint_name:version:entry_point
+verify_password = 1.0:password_verify
+set_password = 1.0:password_set
+change_password = 1.0:password_change
+check_password_strength = 1.0:password_check_strength
+
+[permissions]
+# 所需权限
+# 格式：permission_name:required
+domain_create = false
+capability_create = false
+
+[security]
+# 安全设置
+critical = true              # 是否为关键服务
+privileged = true            # 是否为特权服务
+signature_required = true    # 是否需要签名验证
+
+[build]
+# 编译配置
+static = false               # 是否静态编译（false=动态加载）
+priority = 1                 # 启动优先级（越小越优先）
+autostart = true             # 是否自动启动

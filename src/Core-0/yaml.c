@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -596,6 +596,49 @@ hic_status_t yaml_load_system_limits(const char* yaml_data, size_t size)
     /* 解析security节点 */
     yaml_node_t* security_node = yaml_find_node(root, "security");
     if (security_node && security_node->type == YAML_TYPE_MAPPING) {
+        /* 解析password节点 */
+        yaml_node_t* password_node = yaml_find_node(security_node, "password");
+        if (password_node && password_node->type == YAML_TYPE_MAPPING) {
+            /* 解析default_password */
+            yaml_node_t* pwd_subnode = yaml_find_node(password_node, "default");
+            if (pwd_subnode && pwd_subnode->value) {
+                u32 len = (u32)strlen(pwd_subnode->value);
+                if (len < sizeof(g_runtime_config.default_password)) {
+                    strcpy(g_runtime_config.default_password, pwd_subnode->value);
+                }
+            }
+            
+            /* 解析required */
+            pwd_subnode = yaml_find_node(password_node, "required");
+            if (pwd_subnode) {
+                g_runtime_config.password_required = yaml_get_bool(pwd_subnode, true);
+            }
+            
+            /* 解析min_length */
+            pwd_subnode = yaml_find_node(password_node, "min_length");
+            if (pwd_subnode) {
+                g_runtime_config.password_min_length = (u32)yaml_get_u64(pwd_subnode, 8);
+            }
+            
+            /* 解析require_uppercase */
+            pwd_subnode = yaml_find_node(password_node, "require_uppercase");
+            if (pwd_subnode) {
+                g_runtime_config.password_require_upper = yaml_get_bool(pwd_subnode, true);
+            }
+            
+            /* 解析require_lowercase */
+            pwd_subnode = yaml_find_node(password_node, "require_lowercase");
+            if (pwd_subnode) {
+                g_runtime_config.password_require_lower = yaml_get_bool(pwd_subnode, true);
+            }
+            
+            /* 解析require_digit */
+            pwd_subnode = yaml_find_node(password_node, "require_digit");
+            if (pwd_subnode) {
+                g_runtime_config.password_require_digit = yaml_get_bool(pwd_subnode, true);
+            }
+        }
+        
         /* 解析capability节点 */
         yaml_node_t* cap_node = yaml_find_node(security_node, "capability");
         if (cap_node && cap_node->type == YAML_TYPE_MAPPING) {

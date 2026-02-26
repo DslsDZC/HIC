@@ -37,208 +37,220 @@ LOAD obj/uefi_efi_guids.o
 LOAD obj/uefi_embedded_kernel_loader.o
 LOAD obj/uefi_fat32.o
 LOAD obj/uefi_platform_embedded.o
+LOAD obj/uefi_hardware_probe.o
 LOAD obj/uefi_platform_yaml.o
                 0x00000000000002a0                . = SIZEOF_HEADERS
                 0x0000000000001000                . = ALIGN (__section_alignment__)
 
-.text           0x0000000180001000     0x6e00
+.text           0x0000000180001000     0x7600
  *(SORT_NONE(.init))
  *(.text)
- .text          0x0000000180001000     0x3220 obj/uefi_main.o
+ .text          0x0000000180001000     0x3240 obj/uefi_main.o
                 0x0000000180001000                load_file_fat32
                 0x0000000180001571                UefiMain
                 0x00000001800019d5                load_platform_config
                 0x0000000180001b9c                parse_platform_config
                 0x0000000180001cda                load_kernel_image
                 0x0000000180002a1c                prepare_boot_info
-                0x0000000180002d02                get_memory_map
-                0x0000000180003183                find_acpi_tables
-                0x00000001800032ab                load_kernel_segments
-                0x0000000180003c54                exit_boot_services
-                0x0000000180003d76                jump_to_kernel
- .text          0x0000000180004220      0x250 obj/uefi_bootlog.o
-                0x0000000180004269                bootlog_init
-                0x0000000180004299                bootlog_event
-                0x0000000180004392                bootlog_error
-                0x00000001800043ed                bootlog_info
-                0x0000000180004448                bootlog_get_buffer
-                0x0000000180004455                bootlog_get_index
-                0x0000000180004461                bootlog_get_start_time
- .text          0x0000000180004470      0x2a0 obj/uefi_stdlib.o
-                0x00000001800044f4                crc32
-                0x0000000180004568                malloc
-                0x00000001800045d6                free
-                0x000000018000460c                calloc
-                0x000000018000465e                realloc
-                0x00000001800046b7                atoi
- .text          0x0000000180004710     0x1600 obj/uefi_string.o
-                0x0000000180004710                memcpy
-                0x000000018000476a                memset
-                0x00000001800047af                memcmp
-                0x0000000180004823                strlen
-                0x0000000180004857                strcmp
-                0x00000001800048a6                strstr
-                0x0000000180004967                strncmp
-                0x00000001800049d4                strcpy
-                0x0000000180004a17                strcat
-                0x0000000180004a6c                wcslen
-                0x0000000180004aa1                wcscmp
-                0x0000000180004af2                wcscpy
-                0x0000000180004b29                utf16_to_utf8
-                0x0000000180004cbb                utf8_to_utf16
-                0x0000000180004ea1                isdigit
-                0x0000000180004ec2                isxdigit
-                0x0000000180004efb                isspace
-                0x0000000180004f34                toupper
-                0x0000000180004f54                tolower
-                0x0000000180004f74                strtoull
-                0x00000001800050bb                strtoll
-                0x000000018000514d                snprintf
-                0x0000000180005a3f                sscanf
- .text          0x0000000180005d10     0x1210 obj/uefi_console.o
-                0x0000000180005d10                console_init
-                0x0000000180005d92                console_putchar
-                0x0000000180005db7                console_puts
-                0x0000000180005ddb                console_printf
-                0x000000018000622b                console_set_color
-                0x000000018000624e                console_clear
-                0x0000000180006294                console_set_cursor
-                0x000000018000631a                console_get_cursor
-                0x000000018000634f                log_set_level
-                0x0000000180006469                log_error
-                0x00000001800064ae                log_warn
-                0x00000001800064f3                log_info
-                0x0000000180006538                log_debug
-                0x000000018000657d                log_trace
-                0x00000001800065c2                serial_init
-                0x000000018000668a                serial_putchar
-                0x00000001800066ce                serial_puts
-                0x000000018000670e                serial_printf
- .text          0x0000000180006f20        0x0 obj/uefi_efi_guids.o
- .text          0x0000000180006f20       0xd0 obj/uefi_embedded_kernel_loader.o
-                0x0000000180006f20                load_kernel_image_embedded
- .text          0x0000000180006ff0      0xde0 obj/uefi_fat32.o
-                0x0000000180007340                fat32_init
-                0x0000000180007448                fat32_is_valid
-                0x0000000180007b16                fat32_open_file
-                0x0000000180007bdb                fat32_read_file
-                0x0000000180007d8c                fat32_free_buffer
- .text          0x0000000180007dd0        0x0 obj/uefi_platform_embedded.o
- .text          0x0000000180007dd0       0x20 obj/uefi_platform_yaml.o
-                0x0000000180007dd0                get_embedded_platform_config
-                0x0000000180007ddd                get_embedded_platform_config_size
+                0x0000000180002d2c                get_memory_map
+                0x00000001800031ad                find_acpi_tables
+                0x00000001800032d5                load_kernel_segments
+                0x0000000180003c7e                exit_boot_services
+                0x0000000180003da0                jump_to_kernel
+ .text          0x0000000180004240      0x250 obj/uefi_bootlog.o
+                0x0000000180004289                bootlog_init
+                0x00000001800042b9                bootlog_event
+                0x00000001800043b2                bootlog_error
+                0x000000018000440d                bootlog_info
+                0x0000000180004468                bootlog_get_buffer
+                0x0000000180004475                bootlog_get_index
+                0x0000000180004481                bootlog_get_start_time
+ .text          0x0000000180004490      0x2a0 obj/uefi_stdlib.o
+                0x0000000180004514                crc32
+                0x0000000180004588                malloc
+                0x00000001800045f6                free
+                0x000000018000462c                calloc
+                0x000000018000467e                realloc
+                0x00000001800046d7                atoi
+ .text          0x0000000180004730     0x1600 obj/uefi_string.o
+                0x0000000180004730                memcpy
+                0x000000018000478a                memset
+                0x00000001800047cf                memcmp
+                0x0000000180004843                strlen
+                0x0000000180004877                strcmp
+                0x00000001800048c6                strstr
+                0x0000000180004987                strncmp
+                0x00000001800049f4                strcpy
+                0x0000000180004a37                strcat
+                0x0000000180004a8c                wcslen
+                0x0000000180004ac1                wcscmp
+                0x0000000180004b12                wcscpy
+                0x0000000180004b49                utf16_to_utf8
+                0x0000000180004cdb                utf8_to_utf16
+                0x0000000180004ec1                isdigit
+                0x0000000180004ee2                isxdigit
+                0x0000000180004f1b                isspace
+                0x0000000180004f54                toupper
+                0x0000000180004f74                tolower
+                0x0000000180004f94                strtoull
+                0x00000001800050db                strtoll
+                0x000000018000516d                snprintf
+                0x0000000180005a5f                sscanf
+ .text          0x0000000180005d30     0x1210 obj/uefi_console.o
+                0x0000000180005d30                console_init
+                0x0000000180005db2                console_putchar
+                0x0000000180005dd7                console_puts
+                0x0000000180005dfb                console_printf
+                0x000000018000624b                console_set_color
+                0x000000018000626e                console_clear
+                0x00000001800062b4                console_set_cursor
+                0x000000018000633a                console_get_cursor
+                0x000000018000636f                log_set_level
+                0x0000000180006489                log_error
+                0x00000001800064ce                log_warn
+                0x0000000180006513                log_info
+                0x0000000180006558                log_debug
+                0x000000018000659d                log_trace
+                0x00000001800065e2                serial_init
+                0x00000001800066aa                serial_putchar
+                0x00000001800066ee                serial_puts
+                0x000000018000672e                serial_printf
+ .text          0x0000000180006f40        0x0 obj/uefi_efi_guids.o
+ .text          0x0000000180006f40       0xd0 obj/uefi_embedded_kernel_loader.o
+                0x0000000180006f40                load_kernel_image_embedded
+ .text          0x0000000180007010      0xde0 obj/uefi_fat32.o
+                0x0000000180007360                fat32_init
+                0x0000000180007468                fat32_is_valid
+                0x0000000180007b36                fat32_open_file
+                0x0000000180007bfb                fat32_read_file
+                0x0000000180007dac                fat32_free_buffer
+ .text          0x0000000180007df0        0x0 obj/uefi_platform_embedded.o
+ .text          0x0000000180007df0      0x790 obj/uefi_hardware_probe.o
+                0x0000000180007e77                hardware_probe_init
+                0x0000000180007ed2                probe_cpu
+                0x0000000180008262                probe_memory_topology
+                0x000000018000836d                probe_pci_devices
+                0x00000001800083c2                probe_interrupt_controller
+                0x00000001800084f4                hardware_probe_all
+ .text          0x0000000180008580       0x20 obj/uefi_platform_yaml.o
+                0x0000000180008580                get_embedded_platform_config
+                0x000000018000858d                get_embedded_platform_config_size
  *(SORT_BY_NAME(.text$*))
  *(.text.*)
  *(.gnu.linkonce.t.*)
  *(.glue_7t)
  *(.glue_7)
-                0x0000000180007df0                . = ALIGN (0x8)
+                0x00000001800085a0                . = ALIGN (0x8)
  *(SORT_NONE(.fini))
  *(.gcc_exc)
                 [!provide]                        PROVIDE (etext = .)
  *(.gcc_except_table)
 
-.data           0x0000000180008000      0x200
-                0x0000000180008000                __data_start__ = .
+.data           0x0000000180009000      0x200
+                0x0000000180009000                __data_start__ = .
  *(.data)
- .data          0x0000000180008000       0x80 obj/uefi_main.o
- .data          0x0000000180008080        0x0 obj/uefi_bootlog.o
- .data          0x0000000180008080        0x0 obj/uefi_stdlib.o
- .data          0x0000000180008080        0x0 obj/uefi_string.o
- .data          0x0000000180008080       0x10 obj/uefi_console.o
- .data          0x0000000180008090       0x60 obj/uefi_efi_guids.o
-                0x0000000180008090                gEfiLoadedImageProtocolGuid
-                0x00000001800080a0                gEfiSimpleFileSystemProtocolGuid
-                0x00000001800080b0                gEfiBlockIoProtocolGuid
-                0x00000001800080c0                gEfiFileInfoGuid
-                0x00000001800080d0                gEfiAcpi20TableGuid
-                0x00000001800080e0                gEfiAcpiTableGuid
- .data          0x00000001800080f0        0x0 obj/uefi_embedded_kernel_loader.o
- .data          0x00000001800080f0        0x0 obj/uefi_fat32.o
- .data          0x00000001800080f0        0x0 obj/uefi_platform_embedded.o
- .data          0x00000001800080f0        0x0 obj/uefi_platform_yaml.o
+ .data          0x0000000180009000       0x80 obj/uefi_main.o
+ .data          0x0000000180009080        0x0 obj/uefi_bootlog.o
+ .data          0x0000000180009080        0x0 obj/uefi_stdlib.o
+ .data          0x0000000180009080        0x0 obj/uefi_string.o
+ .data          0x0000000180009080       0x10 obj/uefi_console.o
+ .data          0x0000000180009090       0x60 obj/uefi_efi_guids.o
+                0x0000000180009090                gEfiLoadedImageProtocolGuid
+                0x00000001800090a0                gEfiSimpleFileSystemProtocolGuid
+                0x00000001800090b0                gEfiBlockIoProtocolGuid
+                0x00000001800090c0                gEfiFileInfoGuid
+                0x00000001800090d0                gEfiAcpi20TableGuid
+                0x00000001800090e0                gEfiAcpiTableGuid
+ .data          0x00000001800090f0        0x0 obj/uefi_embedded_kernel_loader.o
+ .data          0x00000001800090f0        0x0 obj/uefi_fat32.o
+ .data          0x00000001800090f0        0x0 obj/uefi_platform_embedded.o
+ .data          0x00000001800090f0        0x0 obj/uefi_hardware_probe.o
+ .data          0x00000001800090f0        0x0 obj/uefi_platform_yaml.o
  *(.data2)
  *(SORT_BY_NAME(.data$*))
  *(.jcr)
-                0x00000001800080f0                __data_end__ = .
+                0x00000001800090f0                __data_end__ = .
  *(.data_cygwin_nocopy)
 
-.rdata          0x0000000180009000    0x23a00
+.rdata          0x000000018000a000    0x23c00
  *(.rdata)
- .rdata         0x0000000180009000     0x2380 obj/uefi_main.o
- .rdata         0x000000018000b380       0x50 obj/uefi_bootlog.o
- .rdata         0x000000018000b3d0       0x20 obj/uefi_string.o
- .rdata         0x000000018000b3f0       0x40 obj/uefi_console.o
- *fill*         0x000000018000b430       0x10 
- .rdata         0x000000018000b440    0x1f980 obj/uefi_embedded_kernel_loader.o
-                0x000000018002ac88                bin_hic_kernel_hic_len
- .rdata         0x000000018002adc0      0x220 obj/uefi_fat32.o
- .rdata         0x000000018002afe0     0x1700 obj/uefi_platform_yaml.o
+ .rdata         0x000000018000a000     0x23e0 obj/uefi_main.o
+ .rdata         0x000000018000c3e0       0x50 obj/uefi_bootlog.o
+ .rdata         0x000000018000c430       0x20 obj/uefi_string.o
+ .rdata         0x000000018000c450       0x40 obj/uefi_console.o
+ *fill*         0x000000018000c490       0x10 
+ .rdata         0x000000018000c4a0    0x1f980 obj/uefi_embedded_kernel_loader.o
+                0x000000018002bce8                bin_hic_kernel_hic_len
+ .rdata         0x000000018002be20      0x220 obj/uefi_fat32.o
+ .rdata         0x000000018002c040      0x2b0 obj/uefi_hardware_probe.o
+ *fill*         0x000000018002c2f0       0x10 
+ .rdata         0x000000018002c300     0x1700 obj/uefi_platform_yaml.o
  *(SORT_BY_NAME(.rdata$*))
- .rdata$zzz     0x000000018002c6e0       0x20 obj/uefi_main.o
- .rdata$zzz     0x000000018002c700       0x20 obj/uefi_bootlog.o
- .rdata$zzz     0x000000018002c720       0x20 obj/uefi_stdlib.o
- .rdata$zzz     0x000000018002c740       0x20 obj/uefi_string.o
- .rdata$zzz     0x000000018002c760       0x20 obj/uefi_console.o
- .rdata$zzz     0x000000018002c780       0x20 obj/uefi_efi_guids.o
- .rdata$zzz     0x000000018002c7a0       0x20 obj/uefi_embedded_kernel_loader.o
- .rdata$zzz     0x000000018002c7c0       0x20 obj/uefi_fat32.o
- .rdata$zzz     0x000000018002c7e0       0x20 obj/uefi_platform_embedded.o
- .rdata$zzz     0x000000018002c800       0x20 obj/uefi_platform_yaml.o
-                0x000000018002c820                . = ALIGN (0x4)
-                0x000000018002c820                __rt_psrelocs_start = .
+ .rdata$zzz     0x000000018002da00       0x20 obj/uefi_main.o
+ .rdata$zzz     0x000000018002da20       0x20 obj/uefi_bootlog.o
+ .rdata$zzz     0x000000018002da40       0x20 obj/uefi_stdlib.o
+ .rdata$zzz     0x000000018002da60       0x20 obj/uefi_string.o
+ .rdata$zzz     0x000000018002da80       0x20 obj/uefi_console.o
+ .rdata$zzz     0x000000018002daa0       0x20 obj/uefi_efi_guids.o
+ .rdata$zzz     0x000000018002dac0       0x20 obj/uefi_embedded_kernel_loader.o
+ .rdata$zzz     0x000000018002dae0       0x20 obj/uefi_fat32.o
+ .rdata$zzz     0x000000018002db00       0x20 obj/uefi_platform_embedded.o
+ .rdata$zzz     0x000000018002db20       0x20 obj/uefi_hardware_probe.o
+ .rdata$zzz     0x000000018002db40       0x20 obj/uefi_platform_yaml.o
+                0x000000018002db60                . = ALIGN (0x4)
+                0x000000018002db60                __rt_psrelocs_start = .
  *(.rdata_runtime_pseudo_reloc)
-                0x000000018002c820                __rt_psrelocs_end = .
-                0x000000018002c820                . = ALIGN (0x8)
-                0x000000018002c820                __DELAY_IMPORT_DIRECTORY_start__ = .
+                0x000000018002db60                __rt_psrelocs_end = .
+                0x000000018002db60                . = ALIGN (0x8)
+                0x000000018002db60                __DELAY_IMPORT_DIRECTORY_start__ = .
  SORT_BY_NAME(*)(.didat$2)
  SORT_BY_NAME(*)(.didat$3)
-                0x000000018002c820                __DELAY_IMPORT_DIRECTORY_end__ = .
-                0x000000018002c820                . = (. + (__DELAY_IMPORT_DIRECTORY_end__ - __DELAY_IMPORT_DIRECTORY_start__)?0x20:0x0)
-                0x000000018002c820                . = ALIGN (0x8)
+                0x000000018002db60                __DELAY_IMPORT_DIRECTORY_end__ = .
+                0x000000018002db60                . = (. + (__DELAY_IMPORT_DIRECTORY_end__ - __DELAY_IMPORT_DIRECTORY_start__)?0x20:0x0)
+                0x000000018002db60                . = ALIGN (0x8)
  SORT_BY_NAME(*)(.didat$4)
  SORT_BY_NAME(*)(.didat$6)
  SORT_BY_NAME(*)(.didat$7)
-                0x000000018002c820                . = ALIGN (0x8)
-                0x000000018002c820                ___CTOR_LIST__ = .
-                0x000000018002c820                __CTOR_LIST__ = .
-                0x000000018002c820        0x4 LONG 0xffffffffffffffff
-                0x000000018002c824        0x4 LONG 0xffffffffffffffff
+                0x000000018002db60                . = ALIGN (0x8)
+                0x000000018002db60                ___CTOR_LIST__ = .
+                0x000000018002db60                __CTOR_LIST__ = .
+                0x000000018002db60        0x4 LONG 0xffffffffffffffff
+                0x000000018002db64        0x4 LONG 0xffffffffffffffff
  *(.ctors)
  *(.ctor)
  *(SORT_BY_NAME(.ctors.*))
-                0x000000018002c828        0x4 LONG 0x0
-                0x000000018002c82c        0x4 LONG 0x0
-                0x000000018002c830                ___DTOR_LIST__ = .
-                0x000000018002c830                __DTOR_LIST__ = .
-                0x000000018002c830        0x4 LONG 0xffffffffffffffff
-                0x000000018002c834        0x4 LONG 0xffffffffffffffff
+                0x000000018002db68        0x4 LONG 0x0
+                0x000000018002db6c        0x4 LONG 0x0
+                0x000000018002db70                ___DTOR_LIST__ = .
+                0x000000018002db70                __DTOR_LIST__ = .
+                0x000000018002db70        0x4 LONG 0xffffffffffffffff
+                0x000000018002db74        0x4 LONG 0xffffffffffffffff
  *(.dtors)
  *(.dtor)
  *(SORT_BY_NAME(.dtors.*))
-                0x000000018002c838        0x4 LONG 0x0
-                0x000000018002c83c        0x4 LONG 0x0
-                0x000000018002c840                ___crt_xc_start__ = .
+                0x000000018002db78        0x4 LONG 0x0
+                0x000000018002db7c        0x4 LONG 0x0
+                0x000000018002db80                ___crt_xc_start__ = .
  *(SORT_BY_NAME(.CRT$XC*))
-                0x000000018002c840                ___crt_xc_end__ = .
-                0x000000018002c840                ___crt_xi_start__ = .
+                0x000000018002db80                ___crt_xc_end__ = .
+                0x000000018002db80                ___crt_xi_start__ = .
  *(SORT_BY_NAME(.CRT$XI*))
-                0x000000018002c840                ___crt_xi_end__ = .
-                0x000000018002c840                ___crt_xl_start__ = .
+                0x000000018002db80                ___crt_xi_end__ = .
+                0x000000018002db80                ___crt_xl_start__ = .
  *(SORT_BY_NAME(.CRT$XL*))
-                0x000000018002c840                ___crt_xp_start__ = .
+                0x000000018002db80                ___crt_xp_start__ = .
  *(SORT_BY_NAME(.CRT$XP*))
-                0x000000018002c840                ___crt_xp_end__ = .
-                0x000000018002c840                ___crt_xt_start__ = .
+                0x000000018002db80                ___crt_xp_end__ = .
+                0x000000018002db80                ___crt_xt_start__ = .
  *(SORT_BY_NAME(.CRT$XT*))
-                0x000000018002c840                ___crt_xt_end__ = .
-                0x000000018002c840                ___crt_xd_start__ = .
+                0x000000018002db80                ___crt_xt_end__ = .
+                0x000000018002db80                ___crt_xd_start__ = .
  *(SORT_BY_NAME(.CRT$XD*))
-                0x000000018002c840                ___crt_xd_end__ = .
-                0x000000018002c820                ___RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
-                0x000000018002c820                __RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
-                0x000000018002c820                ___RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
-                0x000000018002c820                __RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+                0x000000018002db80                ___crt_xd_end__ = .
+                0x000000018002db60                ___RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x000000018002db60                __RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x000000018002db60                ___RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+                0x000000018002db60                __RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
 
 .eh_frame
  *(.eh_frame*)
@@ -249,27 +261,28 @@ LOAD obj/uefi_platform_yaml.o
 .xdata
  *(.xdata*)
 
-.bss            0x000000018002d000     0x11a0
-                0x000000018002d000                __bss_start__ = .
+.bss            0x000000018002e000     0x11a0
+                0x000000018002e000                __bss_start__ = .
  *(.bss)
- .bss           0x000000018002d000       0x40 obj/uefi_main.o
-                0x000000018002d000                gST
-                0x000000018002d008                gBS
- .bss           0x000000018002d040      0xc20 obj/uefi_bootlog.o
- .bss           0x000000018002dc60      0x420 obj/uefi_stdlib.o
- .bss           0x000000018002e080        0x0 obj/uefi_string.o
- .bss           0x000000018002e080      0x120 obj/uefi_console.o
- .bss           0x000000018002e1a0        0x0 obj/uefi_efi_guids.o
- .bss           0x000000018002e1a0        0x0 obj/uefi_embedded_kernel_loader.o
- .bss           0x000000018002e1a0        0x0 obj/uefi_fat32.o
- .bss           0x000000018002e1a0        0x0 obj/uefi_platform_embedded.o
- .bss           0x000000018002e1a0        0x0 obj/uefi_platform_yaml.o
+ .bss           0x000000018002e000       0x40 obj/uefi_main.o
+                0x000000018002e000                gST
+                0x000000018002e008                gBS
+ .bss           0x000000018002e040      0xc20 obj/uefi_bootlog.o
+ .bss           0x000000018002ec60      0x420 obj/uefi_stdlib.o
+ .bss           0x000000018002f080        0x0 obj/uefi_string.o
+ .bss           0x000000018002f080      0x120 obj/uefi_console.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_efi_guids.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_embedded_kernel_loader.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_fat32.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_platform_embedded.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_hardware_probe.o
+ .bss           0x000000018002f1a0        0x0 obj/uefi_platform_yaml.o
  *(COMMON)
-                0x000000018002e1a0                __bss_end__ = .
+                0x000000018002f1a0                __bss_end__ = .
 
-.edata          0x000000018002f000      0x800
+.edata          0x0000000180030000      0xa00
  *(.edata)
- .edata         0x000000018002f000      0x7bd dll stuff
+ .edata         0x0000000180030000      0x86d dll stuff
 
 /DISCARD/
  *(.debug$S)
@@ -280,47 +293,47 @@ LOAD obj/uefi_platform_yaml.o
  *(.gnu.lto_*)
  *(.gnu_object_only)
 
-.idata          0x0000000180030000      0x200
+.idata          0x0000000180031000      0x200
  SORT_BY_NAME(*)(.idata$2)
  SORT_BY_NAME(*)(.idata$3)
-                0x0000000180030000        0x4 LONG 0x0
-                0x0000000180030004        0x4 LONG 0x0
-                0x0000000180030008        0x4 LONG 0x0
-                0x000000018003000c        0x4 LONG 0x0
-                0x0000000180030010        0x4 LONG 0x0
-                0x0000000180030018                . = ALIGN (0x8)
- *fill*         0x0000000180030014        0x4 
+                0x0000000180031000        0x4 LONG 0x0
+                0x0000000180031004        0x4 LONG 0x0
+                0x0000000180031008        0x4 LONG 0x0
+                0x000000018003100c        0x4 LONG 0x0
+                0x0000000180031010        0x4 LONG 0x0
+                0x0000000180031018                . = ALIGN (0x8)
+ *fill*         0x0000000180031014        0x4 
  SORT_BY_NAME(*)(.idata$4)
-                0x0000000180030018                __IAT_start__ = .
+                0x0000000180031018                __IAT_start__ = .
  SORT_BY_NAME(*)(.idata$5)
-                0x0000000180030018                __IAT_end__ = .
+                0x0000000180031018                __IAT_end__ = .
  SORT_BY_NAME(*)(.idata$6)
  SORT_BY_NAME(*)(.idata$7)
 
 .didat
  SORT_BY_NAME(*)(.didat$5)
 
-.tls            0x0000000180031000        0x0
-                0x0000000180031000                ___tls_start__ = .
+.tls            0x0000000180032000        0x0
+                0x0000000180032000                ___tls_start__ = .
  *(.tls$AAA)
  *(.tls)
  *(.tls$)
  *(SORT_BY_NAME(.tls$*))
  *(.tls$ZZZ)
-                0x0000000180031000                ___tls_end__ = .
+                0x0000000180032000                ___tls_end__ = .
 
-.endjunk        0x0000000180031000        0x0
+.endjunk        0x0000000180032000        0x0
                 [!provide]                        PROVIDE (end = .)
                 [!provide]                        PROVIDE (_end = .)
-                0x0000000180031000                __end__ = .
+                0x0000000180032000                __end__ = .
 
 .rsrc
  *(.rsrc)
  *(.rsrc$*)
 
-.reloc          0x0000000180031000        0x0
+.reloc          0x0000000180032000        0x0
  *(.reloc)
- .reloc         0x0000000180031000        0x0 dll stuff
+ .reloc         0x0000000180032000        0x0 dll stuff
 
 .stab
  *(.stab)

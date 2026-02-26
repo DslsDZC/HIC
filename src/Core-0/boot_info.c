@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -11,7 +11,6 @@
 
 #include "boot_info.h"
 #include "console.h"
-#include "minimal_uart.h"
 #include "pmm.h"
 #include "string.h"
 #include "hardware_probe.h"
@@ -20,7 +19,7 @@
 #include "capability.h"
 #include "domain.h"
 #include "thread.h"
-#include "../Privileged-1/privileged_service.h"
+
 #include <stdarg.h>
 #include <stddef.h>
 
@@ -77,7 +76,8 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     );
 
     // 初始化串口（从YAML配置或引导程序配置）
-    minimal_uart_init_from_bootinfo();
+    /* minimal_uart_init_from_bootinfo(); */
+    console_puts("[BOOT] UART initialization pending\n");
 
     // DEBUG: 输出字符测试C代码串口
     __asm__ volatile(
@@ -163,97 +163,33 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
     console_puts("[BOOT] Audit event logged: PMM_ALLOC\n");
     
-    // 【步骤1：特权层初始化】初始化特权服务管理器
-    console_puts("\n[BOOT] STEP 1: Initializing Privileged Layer\n");
-    console_puts("[BOOT] Calling privileged_service_init()...\n");
-    privileged_service_init();
-    console_puts("[BOOT] Privileged layer initialization completed\n");
-    
-    // 【步骤2：内存管理器初始化】
+    // 【步骤1：内存管理器初始化】
     // 内存管理器必须在其他子系统之前初始化
-    console_puts("\n[BOOT] STEP 2: Initializing Memory Manager\n");
+    console_puts("\n[BOOT] STEP 1: Initializing Memory Manager\n");
     console_puts("[BOOT] Calling boot_info_init_memory()...\n");
     boot_info_init_memory(boot_info);
     console_puts("[BOOT] Memory manager initialization completed\n");
     
-    // 【步骤3：能力系统初始化】（需要内存）
-    console_puts("\n[BOOT] STEP 3: Initializing Capability System\n");
+    // 【步骤2：能力系统初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 2: Initializing Capability System\n");
     console_puts("[BOOT] Calling capability_system_init()...\n");
     capability_system_init();
     console_puts("[BOOT] Capability system initialization completed\n");
     
-    // 【步骤4：域系统初始化】（需要内存）
-    console_puts("\n[BOOT] STEP 4: Initializing Domain System\n");
+    // 【步骤3：域系统初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 3: Initializing Domain System\n");
     console_puts("[BOOT] Calling domain_system_init()...\n");
     domain_system_init();
     console_puts("[BOOT] Domain system initialization completed\n");
     
-    // 【步骤5：调度器初始化】（需要内存）
-    console_puts("\n[BOOT] STEP 5: Initializing Scheduler\n");
+    // 【步骤4：调度器初始化】（需要内存）
+    console_puts("\n[BOOT] STEP 4: Initializing Scheduler\n");
     console_puts("[BOOT] Calling scheduler_init()...\n");
     scheduler_init();
     console_puts("[BOOT] Scheduler initialization completed\n");
     
-    // 【步骤6：加载内置Privileged-1服务】
-    console_puts("\n[BOOT] STEP 6: Loading Builtin Privileged-1 Service\n");
-    console_puts("[BOOT] Attempting to load builtin service...\n");
-    
-    domain_quota_t builtin_quota = {
-        .max_memory = 1024 * 1024,  /* 1MB */
-        .max_threads = 2,
-        .max_caps = 16,
-        .cpu_quota_percent = 5,
-    };
-    
-    console_puts("[BOOT] Service quota configured: 1MB memory, 2 threads, 16 caps\n");
-    
-    domain_id_t builtin_domain_id;
-    hic_status_t status = privileged_service_load(
-        1,  /* 模块实例ID（模拟） */
-        "builtin_test_service",
-        SERVICE_TYPE_CUSTOM,
-        &builtin_quota,
-        &builtin_domain_id
-    );
-    
-    if (status == HIC_SUCCESS) {
-        console_puts("[BOOT] >>> Builtin service loaded successfully! <<<\n");
-        console_puts("[BOOT] Service domain_id: ");
-        console_putu32(builtin_domain_id);
-        console_puts("\n");
-        
-        // 注册一个简单的端点
-        console_puts("[BOOT] Registering test endpoint...\n");
-        cap_id_t endpoint_cap;
-        status = privileged_service_register_endpoint(
-            builtin_domain_id,
-            "test_endpoint",
-            0,  /* 处理函数地址（模拟） */
-            0x3000,  /* 系统调用号 */
-            &endpoint_cap
-        );
-        
-        if (status == HIC_SUCCESS) {
-            console_puts("[BOOT] >>> Test endpoint registered successfully! <<<\n");
-        } else {
-            console_puts("[BOOT] WARNING: Failed to register test endpoint\n");
-        }
-        
-        // 启动服务
-        console_puts("[BOOT] Starting builtin service...\n");
-        status = privileged_service_start(builtin_domain_id);
-        if (status == HIC_SUCCESS) {
-            console_puts("[BOOT] >>> Builtin service started successfully! <<<\n");
-            console_puts("[BOOT] >>> >>> Privileged-1 layer is now ACTIVE <<< <<<\n");
-        } else {
-            console_puts("[BOOT] WARNING: Failed to start builtin service\n");
-        }
-    } else {
-        console_puts("[BOOT] INFO: Builtin service load failed (expected - no module instance)\n");
-    }
-    
-    // 【步骤7：处理启动信息】
-    console_puts("\n[BOOT] STEP 7: Processing Boot Information\n");
+    // 【步骤5：处理启动信息】
+    console_puts("\n[BOOT] STEP 5: Processing Boot Information\n");
     console_puts("[BOOT] Calling boot_info_process()...\n");
     boot_info_process(boot_info);
     console_puts("[BOOT] Boot information processing completed\n");

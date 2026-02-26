@@ -313,8 +313,8 @@ log_trace("Trace message\n");
 
 ## 联系方式
 
-- 作者：*
-- 邮箱：*@gmail.com
+- 作者：DslsDZC
+- 邮箱：dsls.dzc@gmail.com
 - 项目：https://github.com/*/HIC
 
 ## 参考文献

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 * <dsls.dzc@gmail.com>
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
@@ -79,7 +79,8 @@ hic_status_t build_config_parse_and_validate(void)
     }
     
     /* 验证构建模式 */
-    if (g_build_config.build_mode != BUILD_MODE_STATIC) {
+    if (g_build_config.build_mode != BUILD_MODE_STATIC &&
+        g_build_config.build_mode != BUILD_MODE_DYNAMIC) {
         console_puts("[BUILD] ERROR: Invalid build mode\n");
         return HIC_ERROR_INVALID_PARAM;
     }
