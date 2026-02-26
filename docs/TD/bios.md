@@ -140,18 +140,38 @@ struct memory_map_entry {
 ### 5.1 文件头结构
 ```
 偏移量   大小    描述
-0x00     4      魔数 "HIC_IMG"
-0x04     2      架构ID (1=x86_64)
-0x06     2      版本 (主版本.次版本)
-0x08     8      入口点偏移
-0x10     8      映像总大小
-0x18     8      段表偏移
-0x20     8      段表项数
-0x28     8      配置表偏移
-0x30     8      配置表大小
-0x38     8      签名偏移
-0x40     8      签名大小
-0x48     64     预留
+0x00     8      魔数 "HIC_IMG" (以\0结尾)
+0x08     2      架构ID (1=x86_64, 2=ARM64, 3=RISC-V64)
+0x0A     2      版本 (主版本 << 8 | 次版本)
+0x0C     8      入口点偏移
+0x14     8      映像总大小
+0x1C     8      段表偏移
+0x24     8      段表项数
+0x2C     8      配置表偏移
+0x34     8      配置表大小
+0x3C     8      签名偏移
+0x44     8      签名大小
+0x4C     64     预留
+```
+
+**头部总大小：120字节**
+
+**C结构体定义：**
+```c
+typedef struct {
+    char     magic[8];              // "HIC_IMG"
+    uint16_t arch_id;               // 架构ID
+    uint16_t version;               // 版本号
+    uint64_t entry_point;           // 入口点偏移
+    uint64_t image_size;            // 映像总大小
+    uint64_t segment_table_offset;  // 段表偏移
+    uint64_t segment_count;         // 段表项数
+    uint64_t config_table_offset;   // 配置表偏移
+    uint64_t config_table_size;     // 配置表大小
+    uint64_t signature_offset;      // 签名偏移
+    uint64_t signature_size;        // 签名大小
+    uint8_t  reserved[64];          // 预留
+} hic_image_header_t;
 ```
 
 ### 5.2 段表项
