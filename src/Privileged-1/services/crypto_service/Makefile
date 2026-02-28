@@ -11,7 +11,7 @@ CFLAGS += -I$(ROOT_DIR)/src/Core-0/include
 CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 
-OBJS := $(OBJ_DIR)/service.o
+OBJS := $(OBJ_DIR)/crypto_service.service.o
 
 TARGET := $(OBJ_DIR)/$(SERVICE_NAME).o
 MOD_TARGET := $(MOD_DIR)/$(SERVICE_NAME).hicmod
@@ -31,7 +31,7 @@ $(TARGET): $(OBJS)
 	@echo "Building $(SERVICE_NAME)..."
 	$(CC) $(LDFLAGS) -r $^ -o $@
 
-$(OBJ_DIR)/service.o: service.c
+$(OBJ_DIR)/crypto_service.service.o: service.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
