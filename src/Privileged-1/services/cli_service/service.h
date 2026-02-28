@@ -7,18 +7,8 @@
 #ifndef CLI_SERVICE_H
 #define CLI_SERVICE_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
-/* 基础类型定义 */
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef int8_t   s8;
-typedef int16_t  s16;
-typedef int32_t  s32;
-typedef int64_t  s64;
+#include <common.h>
+#include <module_types.h>
 
 /* 命令缓冲区大小 */
 #define CMD_BUFFER_SIZE 256
@@ -45,5 +35,14 @@ void cmd_echo(const char *args);
 void cmd_version(const char *args);
 void cmd_mem(const char *args);
 void cmd_clear(const char *args);
+
+/* 模块管理命令 */
+void cmd_modload(const char *args);
+void cmd_modunload(const char *args);
+void cmd_modlist(const char *args);
+void cmd_modinfo(const char *args);
+void cmd_modverify(const char *args);
+void cmd_modrestart(const char *args);
+void cmd_modupdate(const char *args);
 
 #endif /* CLI_SERVICE_H */

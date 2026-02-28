@@ -76,10 +76,10 @@ typedef struct {
 
 /* 内存映射条目 */
 typedef struct {
-    u64 base;
+    u64 base_address;
     u64 length;
     u32 type;
-    u32 flags;
+    u32 attributes;
 } hic_mem_entry_t;
 
 /* 前向声明（避免循环依赖） */

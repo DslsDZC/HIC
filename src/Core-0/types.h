@@ -41,6 +41,10 @@ typedef int64_t  ssize_t;
 typedef uint64_t uintptr_t;
 typedef int64_t  intptr_t;
 
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
+
 typedef uintptr_t phys_addr_t;  /* 物理地址 */
 typedef uintptr_t virt_addr_t;  /* 虚拟地址 */
 

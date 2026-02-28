@@ -250,7 +250,7 @@ void detect_memory_topology(memory_topology_t* topo) {
         }
         
         mem_region_t* region = &topo->regions[topo->region_count];
-        region->base = entry->base;
+        region->base = entry->base_address;
         region->size = entry->length;
         
         // 统计
@@ -259,7 +259,7 @@ void detect_memory_topology(memory_topology_t* topo) {
         }
         
         // 计算总物理内存（最大地址 + 区域大小）
-        u64 region_end = entry->base + entry->length;
+        u64 region_end = entry->base_address + entry->length;
         if (region_end > topo->total_physical) {
             topo->total_physical = region_end;
         }

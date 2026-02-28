@@ -2,25 +2,32 @@
 
 CC := gcc
 CFLAGS := -Wall -Wextra -O2 -fPIC -ffreestanding -nostdlib
+CFLAGS += -fno-stack-protector -fno-builtin -fno-exceptions
 CFLAGS += -I$(CURDIR)/../Core-0/include
 CFLAGS += -I$(CURDIR)/include
+CFLAGS += -I$(CURDIR)  # 添加当前目录，以便包含 common.h
 
 # 自动扫描所有服务（包含 service.c 和 hicmod.txt 的目录）
-CORE_SERVICES := $(shell find services -mindepth 1 -maxdepth 1 -type d ! -name "*.skip" ! -name "*.bak" -exec sh -c 'test -f "$$1/service.c" && test -f "$$1/hicmod.txt" && echo "$$1"' _ {} \; | xargs -n1 basename)
+CORE_SERVICES := $(shell find services -mindepth 1 -maxdepth 1 -type d -exec sh -c 'test -f "$$1/service.c" && test -f "$$1/hicmod.txt" && echo "$$1"' _ {} \; | xargs -n1 basename)
 
 # 所有服务
 ALL_SERVICES := $(CORE_SERVICES)
 
-# 目标文件
-SERVICE_OBJS := $(addsuffix .o, $(CORE_SERVICES))
+# 构建输出目录
+BUILD_DIR := $(CURDIR)/../../build/privileged-1
+OBJ_DIR := $(BUILD_DIR)/obj
+MOD_DIR := $(BUILD_DIR)/modules
+
+# 目标文件（放在build目录）
+SERVICE_OBJS := $(addprefix $(OBJ_DIR)/, $(addsuffix .o, $(CORE_SERVICES)))
 
 # 输出
-TARGET := privileged_services.o
-MOD_TARGETS := $(addsuffix .hicmod, $(ALL_SERVICES))
+TARGET := $(BUILD_DIR)/privileged_services.o
+MOD_TARGETS := $(addprefix $(MOD_DIR)/, $(addsuffix .hicmod, $(ALL_SERVICES)))
 
 # 模块输出目录
-MODULE_OUTPUT_DIR := $(CURDIR)/mod
-STATIC_MODULES_DIR := $(CURDIR)/static_mod
+MODULE_OUTPUT_DIR := $(MOD_DIR)
+STATIC_MODULES_DIR := $(BUILD_DIR)/static_mod
 
 .PHONY: all clean services modules static_modules help install
 
@@ -37,6 +44,7 @@ endif
 # 编译核心服务
 services: $(SERVICE_OBJS)
 	@echo "Linking core services..."
+	@mkdir -p $(BUILD_DIR)
 	$(CC) $(LDFLAGS) -r $^ -o $(TARGET)
 	@echo "Core services built:"
 	@for service in $(CORE_SERVICES); do \
@@ -44,25 +52,25 @@ services: $(SERVICE_OBJS)
 	done
 
 # 编译单个服务
-%.o: services/%/service.c
+$(OBJ_DIR)/%.o: services/%/service.c
 	@echo "Building $@..."
-	$(MAKE) -C services/$*
-	$(CC) $(LDFLAGS) -r services/$*/service.o -o $@
+	@mkdir -p $(OBJ_DIR)
+	$(MAKE) -C services/$* OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR)
 
 # 生成动态模块
 modules:
 	@echo "Creating dynamic service modules..."
-	@mkdir -p $(MODULE_OUTPUT_DIR)
+	@mkdir -p $(MOD_DIR)
 	for service in $(CORE_SERVICES); do \
 		if [ -d "services/$$service" ]; then \
-			$(MAKE) -C services/$$service module; \
+			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR); \
 			if [ -f "services/$$service/$$service.hicmod" ]; then \
-				cp "services/$$service/$$service.hicmod" $(MODULE_OUTPUT_DIR)/; \
+				cp "services/$$service/$$service.hicmod" $(MOD_DIR)/; \
 				echo "  Created: $$service.hicmod"; \
 			fi; \
 		fi; \
 	done
-	@echo "All dynamic modules created in $(MODULE_OUTPUT_DIR)!"
+	@echo "All dynamic modules created in $(MOD_DIR)!"
 
 # 生成静态模块（嵌入内核）
 static_modules: $(MOD_TARGETS)
@@ -70,7 +78,7 @@ static_modules: $(MOD_TARGETS)
 	@mkdir -p $(STATIC_MODULES_DIR)
 	for service in $(CORE_SERVICES); do \
 		if [ -d "services/$$service" ]; then \
-			$(MAKE) -C services/$$service module; \
+			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR); \
 			if [ -f "services/$$service/$$service.hicmod" ]; then \
 				cp "services/$$service/$$service.hicmod" $(STATIC_MODULES_DIR)/; \
 				echo "  Embedded: $$service.hicmod"; \
@@ -82,13 +90,7 @@ static_modules: $(MOD_TARGETS)
 # 安装模块到输出目录
 install:
 	@echo "Installing modules..."
-ifeq ($(CONFIG_MODULE_STATIC),1)
-	@echo "Static modules are embedded in kernel, no installation needed"
-else
-	@mkdir -p $(CURDIR)/../output/modules
-	@cp $(MODULE_OUTPUT_DIR)/*.hicmod $(CURDIR)/../output/modules/ 2>/dev/null || true
-	@echo "Dynamic modules installed to output/modules/"
-endif
+	@echo "Modules are available in: $(MODULE_OUTPUT_DIR)"
 
 # 清理
 clean:
@@ -98,8 +100,8 @@ clean:
 			$(MAKE) -C services/$$service clean; \
 		fi; \
 	done
-	rm -f $(SERVICE_OBJS) $(TARGET) $(MOD_TARGETS)
-	rm -rf $(MODULE_OUTPUT_DIR) $(STATIC_MODULES_DIR)
+	rm -rf $(BUILD_DIR)
+	rm -f *.o
 	@echo "Clean complete"
 
 # 帮助信息

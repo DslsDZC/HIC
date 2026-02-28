@@ -176,13 +176,32 @@ void console_printf(const char *fmt, ...)
                     fmt++;
                     if (*fmt == 'l') {
                         fmt++;
-                        uint64_t value = va_arg(args, uint64_t);
-                        uint64_to_str(value, buffer, 16);
-                        console_puts(buffer);
+                        // %llx 或 %llu
+                        if (*fmt == 'x') {
+                            fmt++;
+                            uint64_t value = va_arg(args, uint64_t);
+                            uint64_to_str(value, buffer, 16);
+                            console_puts(buffer);
+                        } else if (*fmt == 'u') {
+                            fmt++;
+                            uint64_t value = va_arg(args, uint64_t);
+                            uint64_to_str(value, buffer, 10);
+                            console_puts(buffer);
+                        } else {
+                            // %ll 不完整，当作 %lu 处理
+                            unsigned long value = va_arg(args, unsigned long);
+                            uint_to_str(value, buffer, 10);
+                            console_puts(buffer);
+                        }
                     } else if (*fmt == 'x') {
                         fmt++;
                         uint64_t value = va_arg(args, uint64_t);
                         uint64_to_str(value, buffer, 16);
+                        console_puts(buffer);
+                    } else if (*fmt == 'u') {
+                        fmt++;
+                        uint64_t value = va_arg(args, uint64_t);
+                        uint64_to_str(value, buffer, 10);
                         console_puts(buffer);
                     } else {
                         long value = va_arg(args, long);

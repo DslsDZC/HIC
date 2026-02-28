@@ -28,7 +28,8 @@ CFLAGS = -ffreestanding -nostdlib -fno-stack-protector -fno-builtin \
          -m64 -mno-red-zone -mcmodel=large -mno-mmx -mno-sse -mno-sse2 \
          -fno-pic -fno-pie -Wall -Wextra -Wpedantic \
          -Wconversion -Werror \
-         -Wno-unused-function -Wno-unused-variable -O2
+         -Wno-unused-function -Wno-unused-variable -O0 \
+         -fno-optimize-sibling-calls
 
 # 架构配置
 ifeq ($(CONFIG_MMU),0)
@@ -125,7 +126,7 @@ clean:
 # ==================== 链接规则 ====================
 $(BIN_DIR)/hic-kernel.elf: $(ALL_OBJS) $(LD_SCRIPT) | $(BIN_DIR)
 	@echo "链接内核..."
-	@$(LD) $(LDFLAGS) $(ALL_OBJS) -o $@
+	@$(LD) $(LDFLAGS) --start-group $(ALL_OBJS) --end-group -o $@
 	@echo "内核链接完成: $@"
 
 # ==================== 编译规则 ====================

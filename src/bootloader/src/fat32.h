@@ -44,11 +44,11 @@ struct _EFI_BLOCK_IO_PROTOCOL {
         EFI_LBA LastBlock;
     } Media;
     
-    // Function pointers
-    EFI_STATUS (*Reset)(struct _EFI_BLOCK_IO_PROTOCOL *This, BOOLEAN ExtendedVerification);
-    EFI_STATUS (*ReadBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This, UINT32 MediaId, EFI_LBA LBA, UINTN BufferSize, VOID *Buffer);
-    EFI_STATUS (*WriteBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This, UINT32 MediaId, EFI_LBA LBA, UINTN BufferSize, VOID *Buffer);
-    EFI_STATUS (*FlushBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This);
+    // Function pointers with EFIAPI calling convention
+    EFI_STATUS (EFIAPI *Reset)(struct _EFI_BLOCK_IO_PROTOCOL *This, BOOLEAN ExtendedVerification);
+    EFI_STATUS (EFIAPI *ReadBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This, UINT32 MediaId, EFI_LBA LBA, UINTN BufferSize, VOID *Buffer);
+    EFI_STATUS (EFIAPI *WriteBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This, UINT32 MediaId, EFI_LBA LBA, UINTN BufferSize, VOID *Buffer);
+    EFI_STATUS (EFIAPI *FlushBlocks)(struct _EFI_BLOCK_IO_PROTOCOL *This);
 };
 
 /* FAT32 BPB (BIOS Parameter Block) 结构 */

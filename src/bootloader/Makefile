@@ -1,6 +1,10 @@
 # HIC Bootloader Makefile
 # 支持UEFI和BIOS两种引导方式
 
+# 项目根目录（相对于此Makefile）
+ROOT_DIR = ../..
+KERNEL_HIC = $(ROOT_DIR)/build/bin/hic-kernel.hic
+
 # 编译器和工具
 UEFI_CC      = x86_64-w64-mingw32-gcc
 UEFI_LD      = x86_64-w64-mingw32-ld
@@ -19,6 +23,9 @@ VERSION = 1.0.0
 # Platform配置文件
 PLATFORM_YAML = platform.yaml
 PLATFORM_C = src/platform_yaml.c
+
+# 嵌入内核文件
+EMBEDDED_KERNEL_H = src/embedded_kernel.h
 
 # 目录
 SRC_DIR    = src
@@ -105,12 +112,28 @@ $(PLATFORM_C): $(PLATFORM_YAML)
 	@echo "  return sizeof(platform_yaml_data);" >> $@
 	@echo "}" >> $@
 
+# 生成embedded_kernel.h（从内核HIK文件转换为C数组）
+$(EMBEDDED_KERNEL_H): $(KERNEL_HIC)
+	@echo "Generating embedded_kernel.h from $(KERNEL_HIC)..."
+	@echo "/* Auto-generated from build/bin/hic-kernel.hic */" > $@
+	@echo "#include <stdint.h>" >> $@
+	@echo "" >> $@
+	@echo "static const unsigned char bin_hic_kernel_hic[] = {" >> $@
+	@xxd -i $< | grep -E "^\s+0x" >> $@
+	@echo "};" >> $@
+	@echo "" >> $@
+	@echo "static const unsigned int bin_hic_kernel_hic_len = sizeof(bin_hic_kernel_hic);" >> $@
+
 # 创建目录
 $(OBJ_DIR) $(BIN_DIR):
 	mkdir -p $@
 
 # UEFI编译规则
 $(OBJ_DIR)/uefi_%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+	$(UEFI_CC) $(UEFI_CFLAGS) -c $< -o $@
+
+# embedded_kernel_loader.o 依赖 embedded_kernel.h
+$(OBJ_DIR)/uefi_embedded_kernel_loader.o: $(SRC_DIR)/embedded_kernel_loader.c $(EMBEDDED_KERNEL_H) | $(OBJ_DIR)
 	$(UEFI_CC) $(UEFI_CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/uefi_%.o: $(LIB_DIR)/%.c | $(OBJ_DIR)

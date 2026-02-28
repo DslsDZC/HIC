@@ -763,8 +763,6 @@ EFI_STATUS load_kernel_image(void **kernel_data, uint64_t *kernel_size)
  */
 hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 {
-    console_puts("=== PREPARE_BOOT_INFO START V2.0 ===\n");
-    
     hic_boot_info_t *boot_info;
     
     // 分配启动信息结构
@@ -859,6 +857,11 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     console_puts("[BOOTLOADER] Starting hardware probe...\n");
     hardware_probe_init(boot_info);
     console_puts("[BOOTLOADER] Hardware probe completed\n");
+
+    // 静态服务由内核映像自带，不需要从磁盘加载
+    // 内核会从 .static_modules 段中找到所有静态服务
+    boot_info->module_count = 0;
+    console_puts("[BOOTLOADER] Static services embedded in kernel image\n");
 
     return boot_info;
 }
@@ -1451,6 +1454,3 @@ static void utf8_to_utf16(const char *utf8, CHAR16 *utf16, UINTN max_len)
     }
     utf16[i] = 0;
 }
-
-
-

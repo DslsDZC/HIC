@@ -1,0 +1,47 @@
+# HIC服务模块元数据文件
+
+[service]
+name = fat32_service
+display_name = FAT32文件系统服务
+version = 1.0.0
+api_version = 1.0
+uuid = 2b3c4d5e-6f70-8192-a3b4-c5d6e7f8a9b0
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供FAT32文件系统访问服务
+long = FAT32文件系统服务提供对FAT32格式存储设备的读写访问功能。支持文件读取、目录遍历等基本文件系统操作。作为初始静态模块加载，用于后续从磁盘加载其他服务模块。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 65536
+max_threads = 1
+max_capabilities = 32
+cpu_quota_percent = 5
+
+[endpoints]
+fat32_init_device = 1.0:fat32_init_device
+fat32_read_file = 1.0:fat32_read_file
+fat32_write_file = 1.0:fat32_write_file
+fat32_list_dir = 1.0:fat32_list_dir
+fat32_get_file_size = 1.0:fat32_get_file_size
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = false
+priority = 1
+autostart = true

@@ -23,7 +23,6 @@ void audit_system_init(void)
 {
     memzero(&g_audit_buffer, sizeof(audit_buffer_t));
     g_audit_buffer.initialized = false;
-    
     console_puts("[AUDIT] Audit system initialized (buffer not yet allocated)\n");
 }
 

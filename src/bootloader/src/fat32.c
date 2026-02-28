@@ -21,31 +21,21 @@ extern EFI_BOOT_SERVICES *gBS;
 /**
  * 读取单个扇区
  */
-/**
- * 读取单个扇区
- */
-/**
- * 读取单个扇区
- */
-/**
- * 读取单个扇区
- */
-/**
- * 读取单个扇区
- */
 static EFI_STATUS read_sector(fat32_fs_t *fs, uint32_t lba, uint8_t *buffer)
 {
-    if (!fs || !fs->block_io || !buffer) {
+    EFI_STATUS status;
+    EFI_BLOCK_IO_PROTOCOL *block_io = fs->block_io;
+    
+    if (!block_io || !buffer) {
         return EFI_INVALID_PARAMETER;
     }
     
-    EFI_STATUS status = fs->block_io->ReadBlocks(
-        fs->block_io,
-        fs->block_io->Media.MediaId,
-        lba,
-        512,
-        (void *)buffer
-    );
+    // 使用UEFI标准接口读取
+    status = block_io->ReadBlocks(block_io,
+                                  block_io->Media.MediaId,
+                                  lba,
+                                  512,  // BufferSize
+                                  (VOID*)buffer);
     
     return status;
 }
@@ -132,13 +122,26 @@ static EFI_STATUS parse_bpb(fat32_fs_t *fs)
  */
 __attribute__((unused)) EFI_STATUS fat32_init(fat32_fs_t *fs, EFI_BLOCK_IO_PROTOCOL *block_io)
 {
+    console_puts("[FAT32] init: start\n");
+    
     if (!fs || !block_io) {
+        console_puts("[FAT32] init: invalid parameters\n");
         return EFI_INVALID_PARAMETER;
     }
     
-    // 初始化上下文
-    memset(fs, 0, sizeof(fat32_fs_t));
+    console_puts("[FAT32] init: memset start\n");
+    
+    // 初始化上下文 - 使用简单的循环代替 memset
+    uint8_t *ptr = (uint8_t *)fs;
+    for (size_t i = 0; i < sizeof(fat32_fs_t); i++) {
+        ptr[i] = 0;
+    }
+    
+    console_puts("[FAT32] init: memset done\n");
+    
     fs->block_io = block_io;
+    
+    console_puts("[FAT32] init: reading boot sector\n");
     
     // 读取引导扇区（LBA 0）
     EFI_STATUS status = read_sector(fs, 0, fs->sector_buffer);
@@ -146,6 +149,8 @@ __attribute__((unused)) EFI_STATUS fat32_init(fat32_fs_t *fs, EFI_BLOCK_IO_PROTO
         console_puts("[FAT32] Failed to read boot sector\n");
         return status;
     }
+    
+    console_puts("[FAT32] init: boot sector read\n");
     
     // 解析BPB
     status = parse_bpb(fs);
