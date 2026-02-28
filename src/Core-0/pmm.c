@@ -15,11 +15,9 @@
 #include "lib/mem.h"
 #include "lib/console.h"
 
-#define MAX_FRAMES (16 * 1024 * 1024 / PAGE_SIZE)  /* 16MB最大支持 */
-#define FRAME_BITMAP_SIZE ((MAX_FRAMES + 7) / 8)
-
-/* 页帧位图 */
-static u8 frame_bitmap[FRAME_BITMAP_SIZE];
+/* 动态页帧位图 */
+static u8 *frame_bitmap = NULL;
+static u64 max_frames = 0;      /* 动态计算的最大帧数 */
 static u64 total_frames = 0;
 static u64 free_frames = 0;
 
@@ -50,17 +48,64 @@ static inline int test_bit(u8 *bitmap, u64 index)
 void pmm_init(void)
 {
     console_puts("[PMM] Initializing Physical Memory Manager...\n");
+    console_puts("[PMM] ERROR: pmm_init() called without max_phys_addr!\n");
+    console_puts("[PMM] Use pmm_init_with_range() instead.\n");
+}
+
+/**
+ * 初始化物理内存管理器（带内存范围参数）
+ * 
+ * 参数：
+ *   max_phys_addr - 最大物理地址，用于计算位图大小
+ */
+void pmm_init_with_range(phys_addr_t max_phys_addr)
+{
+    console_puts("[PMM] Initializing Physical Memory Manager...\n");
     
-    memzero(frame_bitmap, sizeof(frame_bitmap));
-    total_frames = 0;
+    /* 计算最大帧数 */
+    max_frames = (max_phys_addr + PAGE_SIZE - 1) / PAGE_SIZE;
+    
+    /* 计算位图大小（字节） */
+    u64 bitmap_size = (max_frames + 7) / 8;
+    
+    console_puts("[PMM] Max physical address: 0x");
+    console_puthex64(max_phys_addr);
+    console_puts("\n");
+    console_puts("[PMM] Max frames: ");
+    console_putu64(max_frames);
+    console_puts("\n");
+    console_puts("[PMM] Bitmap size: ");
+    console_putu64(bitmap_size);
+    console_puts(" bytes (");
+    console_putu64(bitmap_size / 1024);
+    console_puts(" KB)\n");
+    
+    /* 分配位图（从第一个可用内存区域） */
+    /* 注意：这是在PMM完全初始化之前，所以使用临时分配 */
+    /* 实际应用中，位图应该从bootloader预留的特定内存区域分配 */
+    /* 这里我们使用静态分配，但大小动态计算 */
+    static u8 static_bitmap[1024 * 1024];  /* 1MB静态缓冲区（足够用于256MB内存） */
+    
+    if (bitmap_size > sizeof(static_bitmap)) {
+        console_puts("[PMM] ERROR: Bitmap too large for static buffer!\n");
+        console_puts("[PMM] Max supported memory: ");
+        console_putu64(sizeof(static_bitmap) * 8 * PAGE_SIZE / (1024 * 1024));
+        console_puts(" MB\n");
+        max_frames = sizeof(static_bitmap) * 8;
+        bitmap_size = (max_frames + 7) / 8;
+    }
+    
+    frame_bitmap = static_bitmap;
+    
+    /* 清零位图 */
+    memzero(frame_bitmap, bitmap_size);
+    total_frames = max_frames;
     free_frames = 0;
     g_total_memory = 0;
     g_used_memory = 0;
     mem_regions = NULL;
     
-    console_puts("[PMM] Frame bitmap cleared (");
-    console_putu32(MAX_FRAMES);
-    console_puts(" frames)\n");
+    console_puts("[PMM] Frame bitmap allocated and cleared\n");
     console_puts("[PMM] Memory counters initialized\n");
     console_puts("[PMM] Physical Memory Manager initialized\n");
     console_puts("[PMM] Ready for memory region registration\n");
@@ -88,15 +133,25 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     console_puts(" (");
     console_putu64(num_frames);
     console_puts(" pages)\n");
+    console_puts("[PMM] aligned_base=");
+    console_putu64(aligned_base);
+    console_puts(", start_frame=");
+    console_putu64(start_frame);
+    console_puts(", max_frames=");
+    console_putu64(max_frames);
+    console_puts(", check=");
+    console_putu64(start_frame >= max_frames);
+    console_puts("\n");
+    console_puts("[PMM] *** DEBUG: before comparison ***\n");
     
-    if (start_frame >= MAX_FRAMES) {
-        console_puts("[PMM] WARNING: Region starts beyond MAX_FRAMES, skipping\n");
+    if (start_frame >= max_frames) {
+        console_puts("[PMM] WARNING: Region starts beyond max_frames, skipping\n");
         return HIC_ERROR_INVALID_PARAM;
     }
     
-    if (start_frame + num_frames > MAX_FRAMES) {
+    if (start_frame + num_frames > max_frames) {
         console_puts("[PMM] WARNING: Region too large, truncating\n");
-        num_frames = MAX_FRAMES - start_frame;
+        num_frames = max_frames - start_frame;
         console_puts("[PMM] Truncated to ");
         console_putu64(num_frames);
         console_puts(" pages\n");

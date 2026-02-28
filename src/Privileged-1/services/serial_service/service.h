@@ -7,8 +7,7 @@
 #ifndef SERIAL_SERVICE_H
 #define SERIAL_SERVICE_H
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <common.h>
 
 /* 基础类型定义 */
 typedef uint8_t  u8;

@@ -5,7 +5,7 @@ name = serial_service
 display_name = 串口服务
 version = 1.0.0
 api_version = 1.0
-uuid = a1b2c3d4-e5f6-7890-abcd-ef1234567890
+uuid = 1a2b3c4d-5e6f-7890-abcd-ef1234567890
 
 [author]
 name = DslsDZC
@@ -13,22 +13,23 @@ email = dsls.dzc@gmail.com
 license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
 
 [description]
-short = 提供串口输入输出服务
-long = 串口服务从串口读取数据，提供缓冲区功能，并输出到VGA显示。用于捕获内核输出并提供给其他服务使用。
+short = 提供串口通信服务
+long = 串口服务提供基于x86架构的串口输入输出功能，支持波特率配置和缓冲区管理。用于内核调试和系统日志输出。
 
 [dependencies]
 core_api = 1.0:1.0:2.0
+libc_service = 1.0:1.0:1.0
 
 [resources]
-max_memory = 65536
-max_threads = 2
+max_memory = 16384
+max_threads = 1
 max_capabilities = 16
-cpu_quota_percent = 5
+cpu_quota_percent = 3
 
 [endpoints]
-serial_poll = 1.0:serial_poll
-serial_read = 1.0:serial_read_buffer
-serial_clear = 1.0:serial_clear_buffer
+serial_putchar = 1.0:serial_putchar
+serial_puts = 1.0:serial_puts
+serial_getchar = 1.0:serial_getchar
 
 [permissions]
 domain_create = false
@@ -41,5 +42,5 @@ signature_required = false
 
 [build]
 static = false
-priority = 5
+priority = 3
 autostart = true

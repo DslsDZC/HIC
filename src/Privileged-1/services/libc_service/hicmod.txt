@@ -1,0 +1,50 @@
+# HIC服务模块元数据文件
+
+[service]
+name = libc_service
+display_name = 标准C库服务
+version = 1.0.0
+api_version = 1.0
+uuid = 00000000-0000-0000-0000-000000000001
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供标准C库基础服务
+long = 标准C库服务为所有其他Privileged-1服务提供完整的标准C库函数，包括字符串操作、内存管理、输入输出、字符处理等。这是系统的基础服务，必须在所有其他服务之前加载。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 65536
+max_threads = 2
+max_capabilities = 64
+cpu_quota_percent = 10
+
+[endpoints]
+libc_strlen = 1.0:strlen
+libc_strcmp = 1.0:strcmp
+libc_strcpy = 1.0:strcpy
+libc_memset = 1.0:memset
+libc_memcpy = 1.0:memcpy
+libc_printf = 1.0:printf
+libc_malloc = 1.0:malloc
+libc_free = 1.0:free
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = true
+
+[build]
+static = true
+priority = 1
+autostart = true

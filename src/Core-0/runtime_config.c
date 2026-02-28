@@ -97,7 +97,7 @@ static void init_default_config(void)
     g_runtime_config.enable_irq_fairness = true;
     
     /* 模块配置默认值 */
-    g_runtime_config.enable_module_loading = false;
+    g_runtime_config.enable_module_loading = true;
     g_runtime_config.max_modules = 32;
     
     /* 安全配置默认值 */

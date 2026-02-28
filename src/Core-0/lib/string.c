@@ -11,6 +11,7 @@
 #include "string.h"
 #include "mem.h"
 #include "../types.h"
+#include <stdint.h>
 
 /* 字符串长度 */
 size_t strlen(const char *str)

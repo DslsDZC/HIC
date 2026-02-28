@@ -6,6 +6,15 @@
 #ifndef HIC_BOOTLOADER_EFI_H
 #define HIC_BOOTLOADER_EFI_H
 
+// UEFI调用约定（Microsoft x64 ABI）
+#ifdef _MSC_VER
+    #define EFIAPI __stdcall
+#elif defined(__GNUC__) || defined(__clang__)
+    #define EFIAPI __attribute__((ms_abi))
+#else
+    #define EFIAPI
+#endif
+
 // 基础类型
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
@@ -135,11 +144,7 @@ typedef struct _EFI_SYSTEM_TABLE EFI_SYSTEM_TABLE;
 
 typedef struct _EFI_BOOT_SERVICES EFI_BOOT_SERVICES;
 
-typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;
-
-
-
-// 加载映像协议 (UEFI 2.0规范)
+typedef struct _EFI_FILE_PROTOCOL EFI_FILE_PROTOCOL;// 加载映像协议 (UEFI 2.0规范)
 
 typedef struct {
 
@@ -187,120 +192,34 @@ typedef struct {
 
 } EFI_LOADED_IMAGE_PROTOCOL;
 
-
-
 // 简单文本输出协议 (UEFI 2.11规范)
-
-
-
 typedef struct {
-
-
-
     INT32 max_mode;
-
-
-
     INT32 mode;
-
-
-
     INT32 attribute;
-
-
-
     INT32 cursor_column;
-
-
-
     INT32 cursor_row;
-
-
-
     BOOLEAN cursor_visible;
-
-
-
 } SIMPLE_TEXT_OUTPUT_MODE;
 
-
-
-
-
-
-
 typedef struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL {
-
-
-
     EFI_STATUS (*Reset)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN extended_verification);
-
-
-
     EFI_STATUS (*OutputString)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
-
-
-
     EFI_STATUS (*TestString)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, CHAR16 *string);
-
-
-
     EFI_STATUS (*QueryMode)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode, UINTN *columns, UINTN *rows);
-
-
-
     EFI_STATUS (*SetMode)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN mode);
-
-
-
     EFI_STATUS (*SetAttribute)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN attribute);
-
-
-
     EFI_STATUS (*ClearScreen)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this);
-
-
-
     EFI_STATUS (*SetCursorPosition)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, UINTN column, UINTN row);
-
-
-
     EFI_STATUS (*EnableCursor)(struct _EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *this, BOOLEAN visible);
-
-
-
     SIMPLE_TEXT_OUTPUT_MODE *mode;
-
-
-
 } EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL;
 
-
-
-
-
-
-
 // 简单文本输入协议 (UEFI 2.11规范)
-
-
-
 typedef struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL {
-
-
-
     EFI_STATUS (*Reset)(struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, BOOLEAN extended_verification);
-
-
-
     EFI_STATUS (*ReadKeyStroke)(struct _EFI_SIMPLE_TEXT_INPUT_PROTOCOL *this, void *key);
-
-
-
     void *wait_for_key;
-
-
-
 } EFI_SIMPLE_TEXT_INPUT_PROTOCOL;
 
 // LocateHandle搜索类型

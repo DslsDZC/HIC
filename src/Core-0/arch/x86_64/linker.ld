@@ -24,6 +24,7 @@ SECTIONS
     . = KERNEL_BASE;
 
     .text ALIGN(4K) : AT(ADDR(.text)) {
+        *(.text.start)  /* 确保 _start 在最前面 */
         *(.multiboot)
         *(.text)
         *(.text.*)
@@ -68,6 +69,13 @@ SECTIONS
 
     /* 内核结束 */
     _kernel_end = .;
+
+    /* 静态服务模块段 */
+    .static_modules ALIGN(4K) : AT(ADDR(.static_modules)) {
+        __static_modules_start = .;
+        KEEP(*(.static_module_fat32))
+        __static_modules_end = .;
+    }
 
     /* 丢弃调试信息 */
     /DISCARD/ : {

@@ -7,7 +7,7 @@
 # HIC内核入口点（x86_64）
 # Bootloader跳转到这个入口点
 
-.section .text.kernel_entry
+.section .text.start
 .global _start
 .global kernel_entry
 

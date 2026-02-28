@@ -19,6 +19,7 @@
 #include "capability.h"
 #include "domain.h"
 #include "thread.h"
+#include "static_module.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -65,43 +66,16 @@ hic_boot_info_t *g_boot_info = NULL;
  * - 遵循形式化验证要求
  */
 void kernel_boot_info_init(hic_boot_info_t* boot_info) {
-    // DEBUG: 在函数入口立即输出字符
+    // DEBUG: 输出字符测试是否能到达这里
     __asm__ volatile(
         "mov $0x3F8, %%dx\n"
-        "mov $'A', %%al\n"
+        "mov $'Z', %%al\n"
         "outb %%al, %%dx\n"
         :
         :
         : "dx", "al"
     );
-
-    // 初始化串口（从YAML配置或引导程序配置）
-    /* minimal_uart_init_from_bootinfo(); */
-    console_puts("[BOOT] UART initialization pending\n");
-
-    // DEBUG: 输出字符测试C代码串口
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'B', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
-    // 输出 hello
-    console_puts("hello\n");
-
-    // DEBUG: 输出字符测试console_puts后
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'C', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
+    
     // 【安全检查1】验证boot_info指针
     if (boot_info == NULL) {
         goto panic;
@@ -122,7 +96,7 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     
     // 【第一优先级】初始化审计日志系统
     audit_system_init();
-    
+
     // 分配审计日志缓冲区（从可用内存的末尾开始）
     if (boot_info && boot_info->mem_map && boot_info->mem_map_entry_count > 0) {
         // 查找最大可用内存区域
@@ -132,8 +106,7 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
         for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
             hic_mem_entry_t* entry = &boot_info->mem_map[i];
             if (entry->type == HIC_MEM_TYPE_USABLE && entry->length > audit_buffer_size) {
-                audit_buffer_base = entry->base + entry->length - 0x10000;  // 从末尾64KB
-                audit_buffer_size = 0x10000;
+                    audit_buffer_base = entry->base_address + entry->length - 0x10000;  // 从末尾64KB                audit_buffer_size = 0x10000;
                 break;
             }
         }
@@ -221,8 +194,35 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     module_loader_init();
     console_puts("[BOOT] Module loader initialization completed\n");
     
-    // 【步骤12：标记启动完成】
-    console_puts("\n[BOOT] STEP 12: Finalizing Boot\n");
+/* [步骤12：启动初始模块（FAT32驱动）] */
+    console_puts("\n[BOOT] STEP 12: Starting Initial Modules\n");
+    if (boot_info->module_count > 0 && boot_info->modules[0].base != 0) {
+        console_puts("[BOOT] Loading initial module from boot info...\n");
+        u64 instance_id;
+        hic_status_t status = (hic_status_t)module_load_from_memory(boot_info->modules[0].base,
+                                                     (u32)boot_info->modules[0].size, &instance_id);
+        if (status == HIC_SUCCESS) {
+            console_puts("[BOOT] Initial module loaded successfully (instance_id=");
+            console_puthex64(instance_id);
+            console_puts(")\n");
+        } else {
+            console_puts("[BOOT] Failed to load initial module\n");
+        }
+    } else {
+        console_puts("[BOOT] No initial modules in boot info\n");
+    }
+    console_puts("[BOOT] Initial module loading completed\n");
+    
+    // 【步骤13：加载静态模块】
+    console_puts("\n[BOOT] STEP 13: Loading Static Modules\n");
+    console_puts("[BOOT] Calling static_module_system_init()...\n");
+    static_module_system_init();
+    console_puts("[BOOT] Calling static_module_load_all()...\n");
+    static_module_load_all();
+    console_puts("[BOOT] Static modules loading completed\n");
+    
+    // 【步骤14：标记启动完成】
+    console_puts("\n[BOOT] STEP 14: Finalizing Boot\n");
     g_boot_state.valid = 1;
     console_puts("[BOOT] Boot state marked as VALID\n");
     
@@ -407,8 +407,25 @@ void boot_info_process(hic_boot_info_t* boot_info) {
  * 初始化内存管理器
  */
 void boot_info_init_memory(hic_boot_info_t* boot_info) {
+    console_puts("[DEBUG] boot_info_init_memory() called\n");
+    
+    /* 第一步：计算最大物理地址 */
+    phys_addr_t max_phys_addr = 0;
+    
+    for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
+        hic_mem_entry_t* entry = &boot_info->mem_map[i];
+        phys_addr_t region_end = entry->base_address + entry->length;
+        if (region_end > max_phys_addr) {
+            max_phys_addr = region_end;
+        }
+    }
+    
+    console_puts("[BOOT] Calculated max physical address: 0x");
+    console_puthex64(max_phys_addr);
+    console_puts("\n");
+    
     // 【重要：先初始化PMM】
-    pmm_init();
+    pmm_init_with_range(max_phys_addr);
     
     console_puts("[BOOT] Processing memory map entries...\n");
     console_puts("[BOOT] Total memory map entries: ");
@@ -429,13 +446,13 @@ void boot_info_init_memory(hic_boot_info_t* boot_info) {
         
         switch (entry->type) {
             case HIC_MEM_TYPE_USABLE:
-                console_puts("USABLE, base=0x");
-                console_puthex64(entry->base);
+                console_puts("USABLE, base=");
+                console_puthex64(entry->base_address);
                 console_puts(", size=");
                 console_putu64(entry->length);
                 console_puts("\n");
                 // 可用内存，添加到PMM
-                pmm_add_region(entry->base, entry->length);
+                pmm_add_region(entry->base_address, entry->length);
                 usable_regions++;
                 break;
                 
@@ -466,7 +483,7 @@ void boot_info_init_memory(hic_boot_info_t* boot_info) {
             case HIC_MEM_TYPE_KERNEL:
                 console_puts("KERNEL, marking as used\n");
                 // 内核内存，标记为已使用
-                pmm_mark_used(entry->base, entry->length);
+                pmm_mark_used(entry->base_address, entry->length);
                 kernel_regions++;
                 break;
                 

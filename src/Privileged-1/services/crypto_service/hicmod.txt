@@ -2,10 +2,10 @@
 
 [service]
 name = crypto_service
-display_name = 密码学服务
+display_name = 加密服务
 version = 1.0.0
 api_version = 1.0
-uuid = b2c3d4e5-f6a7-8901-bcde-f12345678901
+uuid = 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
 
 [author]
 name = DslsDZC
@@ -13,23 +13,24 @@ email = dsls.dzc@gmail.com
 license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
 
 [description]
-short = 提供密码学操作服务
-long = 密码学服务提供哈希计算、RSA签名验证等密码学功能。支持SHA-384哈希、PKCS#1 v2.1 RSASSA-PSS签名验证等算法。
+short = 提供加密和哈希服务
+long = 加密服务提供基础的加密算法和哈希函数，包括SHA-256、AES等。用于数据加密、签名验证和安全通信。
 
 [dependencies]
+libc_service = 1.0:1.0:1.0
 core_api = 1.0:1.0:2.0
 
 [resources]
-max_memory = 1048576
-max_threads = 8
-max_capabilities = 128
-cpu_quota_percent = 10
+max_memory = 32768
+max_threads = 2
+max_capabilities = 24
+cpu_quota_percent = 8
 
 [endpoints]
-sha384_hash = 1.0:crypto_sha384
-rsa_verify_pss = 1.0:crypto_rsa_verify_pss
-rsa_verify_v1_5 = 1.0:crypto_rsa_verify_v1_5
-mgf1 = 1.0:crypto_mgf1
+crypto_hash = 1.0:crypto_hash
+crypto_encrypt = 1.0:crypto_encrypt
+crypto_decrypt = 1.0:crypto_decrypt
+crypto_verify = 1.0:crypto_verify
 
 [permissions]
 domain_create = false
@@ -42,5 +43,5 @@ signature_required = true
 
 [build]
 static = false
-priority = 2
+priority = 6
 autostart = true

@@ -32,10 +32,10 @@ start:
 	@python3 scripts/quick_start.py
 
 # 构建引导程序
-bootloader:
+bootloader: image
 	@echo "构建引导程序"
-	@cd $(BOOTLOADER_DIR) && $(MAKE) clean
-	@cd $(BOOTLOADER_DIR) && $(MAKE) all
+	cd $(BOOTLOADER_DIR) && $(MAKE) clean
+	cd $(BOOTLOADER_DIR) && $(MAKE) all
 	@echo "引导程序构建完成"
 
 # 构建内核
@@ -72,14 +72,25 @@ image: kernel privileged-services
 	@python3 scripts/create_hik_image.py $(BUILD_DIR)/bin/hic-kernel.elf $(BUILD_DIR)/bin/hic-kernel.hic
 	@echo "HIC镜像生成完成: $(BUILD_DIR)/bin/hic-kernel.hic"
 
-# 创建磁盘镜像（IMG）
-img: bootloader kernel privileged-services
-	@echo "创建磁盘镜像（IMG）"
+# 创建磁盘镜像（IMG）- 自动嵌入所有模块
+img: bootloader kernel privileged-services privileged-modules
+	@echo "创建磁盘镜像（IMG）并嵌入模块"
 	@mkdir -p $(OUTPUT_DIR)
 	@python3 scripts/create_efi_disk_no_root.py \
 		--bootloader $(BOOTLOADER_DIR)/bin/bootx64.efi \
 		--kernel $(BUILD_DIR)/bin/hic-kernel.elf \
 		--output $(OUTPUT_DIR)/hic-uefi-disk.img
+	@echo "嵌入所有模块到磁盘镜像..."
+	@echo "创建modules目录..."
+	@mdir -i $(OUTPUT_DIR)/hic-uefi-disk.img ::modules 2>/dev/null || mmd -i $(OUTPUT_DIR)/hic-uefi-disk.img ::modules
+	@for mod in $(BUILD_DIR)/privileged-1/modules/*.hicmod; do \
+		if [ -f "$$mod" ]; then \
+			echo "  嵌入: $$(basename $$mod)"; \
+			mcopy -i $(OUTPUT_DIR)/hic-uefi-disk.img "$$mod" ::modules/; \
+		fi; \
+	done
+	@echo "已嵌入的模块:"
+	@mdir -i $(OUTPUT_DIR)/hic-uefi-disk.img ::modules
 	@echo "磁盘镜像创建完成: $(OUTPUT_DIR)/hic-uefi-disk.img"
 
 # 更新磁盘镜像
@@ -258,10 +269,11 @@ gdb-script:
 
 # 快速运行 QEMU
 run:
+	@pkill qemu-system-x86_64 2>/dev/null || true
 	@echo " 启动 QEMU 测试内核 (GUI模式 + 串口输出) "
 	@echo "提示: 串口输出将显示在终端中，GUI 窗口显示图形界面"
 	@qemu-system-x86_64 \
-		-drive if=virtio,file=output/hic-uefi-disk.img,format=raw \
+		-drive if=virtio,file=output/hic-uefi-disk.img,format=raw,cache=none \
 		-m $(QEMU_MEM) \
 		-drive if=pflash,readonly=on,file=$(QEMU_OVMF_CODE) \
 		-display gtk \
@@ -270,6 +282,7 @@ run:
 
 # 快速运行 QEMU (串口模式)
 run-serial:
+	@pkill qemu-system-x86_64 2>/dev/null || true
 	@echo " 启动 QEMU 测试内核 (串口模式) "
 	@timeout 15 qemu-system-x86_64 \
 		-nographic \

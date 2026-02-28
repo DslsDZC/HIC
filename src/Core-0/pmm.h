@@ -43,6 +43,14 @@ typedef struct page_frame {
 /* 物理内存管理器接口 */
 void pmm_init(void);
 
+/**
+ * 初始化物理内存管理器（带内存范围参数）
+ * 
+ * 参数：
+ *   max_phys_addr - 最大物理地址，用于计算位图大小
+ */
+void pmm_init_with_range(phys_addr_t max_phys_addr);
+
 /* 添加内存区域 */
 hic_status_t pmm_add_region(phys_addr_t base, size_t size);
 

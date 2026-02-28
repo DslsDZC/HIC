@@ -4,460 +4,557 @@
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
-/**
- * 模块管理服务实现
- */
-
 #include "service.h"
-#include "../include/service_api.h"
-#include "../../Core-0/lib/mem.h"
-#include "../../Core-0/lib/console.h"
-#include "../../Core-0/lib/string.h"
+#include <module_types.h>
+#include <string.h>
 
 /* 模块实例表 */
-static module_instance_t g_module_instances[MAX_MODULES];
-static u32 g_module_count = 0;
+static module_instance_t g_module_table[MAX_MODULES];
+static int g_module_count = 0;
 
-/* 外部函数（从Core-0和密码管理服务调用） */
-extern hic_status_t password_verify(const char* password);
-extern hic_status_t crypto_sha384(const u8* data, u32 len, u8* hash);
-extern hic_status_t domain_create(domain_id_t* out);
-extern hic_status_t domain_destroy(domain_id_t domain_id);
-extern hic_status_t pmm_alloc_frames(domain_id_t owner, u64 count, u32 type, u64* out);
-extern hic_status_t pmm_free_frames(u64 addr, u64 count);
+/* 简单的内存分配器（简化版） */
+static void *g_module_memory_pool = (void *)0x20000000;  /* 512MB 开始 */
+static u32 g_module_memory_offset = 0;
 
-/* ============= 密码验证 ============= */
+#define MODULE_POOL_SIZE (32 * 1024 * 1024)  /* 32MB 模块内存池 */
 
-bool module_verify_password(const char* password) {
-    return (password_verify(password) == HIC_SUCCESS);
-}
-
-/* ============= 文件读取 ============= */
-
-hic_status_t module_read_file(const char* path, void** buffer, u64* size) {
-    /* TODO: 实现文件读取 */
-    /* 临时返回成功 */
-    (void)path;
-    (void)buffer;
-    (void)size;
-    return HIC_ERROR_NOT_IMPLEMENTED;
-}
-
-/* ============= 模块解析 ============= */
-
-hic_status_t module_parse_header(const void* data, u64 size, hicmod_header_t* header) {
-    if (!data || size < sizeof(hicmod_header_t) || !header) {
-        return HIC_ERROR_INVALID_PARAM;
+/* 模块内存分配 */
+static void *module_alloc(u32 size) {
+    if (g_module_memory_offset + size > MODULE_POOL_SIZE) {
+        return NULL;  /* 内存不足 */
     }
     
-    memcopy(header, data, sizeof(hicmod_header_t));
+    void *ptr = (void *)((u8 *)g_module_memory_pool + g_module_memory_offset);
+    g_module_memory_offset += size;
     
-    /* 验证魔数 */
+    /* 清零内存 */
+    memset(ptr, 0, size);
+    
+    return ptr;
+}
+
+/* 查找模块（按名称） */
+static module_instance_t *find_module_by_name(const char *name) {
+    int i;
+    for (i = 0; i < g_module_count; i++) {
+        if (strcmp(g_module_table[i].name, name) == 0) {
+            return &g_module_table[i];
+        }
+    }
+    return NULL;
+}
+
+/* 查找模块（按 UUID） */
+static module_instance_t *find_module_by_uuid(const u8 *uuid) {
+    int i;
+    for (i = 0; i < g_module_count; i++) {
+        if (memcmp(g_module_table[i].uuid, uuid, 16) == 0) {
+            return &g_module_table[i];
+        }
+    }
+    return NULL;
+}
+
+/* 获取空闲槽位 */
+static int find_free_slot(void) {
+    int i;
+    for (i = 0; i < MAX_MODULES; i++) {
+        if (g_module_table[i].state == MODULE_STATE_unloaded) {
+            return i;
+        }
+    }
+    return -1;  /* 无可用槽位 */
+}
+
+/* 验证模块头部 */
+static hic_status_t verify_module_header(const hicmod_header_t *header) {
     if (header->magic != HICMOD_MAGIC) {
-        console_puts("[MODULE] Invalid magic number\n");
-        return HIC_ERROR_INVALID_FORMAT;
+        return HIC_PARSE_FAILED;
     }
     
-    /* 验证版本 */
     if (header->version != HICMOD_VERSION) {
-        console_puts("[MODULE] Unsupported version\n");
-        return HIC_ERROR_UNSUPPORTED;
-    }
-    
-    /* 验证大小 */
-    if (header->header_size > size) {
-        console_puts("[MODULE] Invalid header size\n");
-        return HIC_ERROR_INVALID_FORMAT;
+        return HIC_PARSE_FAILED;
     }
     
     return HIC_SUCCESS;
 }
 
-/* ============= 域管理 ============= */
-
-hic_status_t module_create_domain(const hicmod_metadata_t* metadata, domain_id_t* domain_id) {
-    /* TODO: 调用Core-0的domain_create */
-    (void)metadata;
-    (void)domain_id;
-    return HIC_ERROR_NOT_IMPLEMENTED;
-}
-
-hic_status_t module_destroy_domain(domain_id_t domain_id) {
-    /* TODO: 调用Core-0的domain_destroy */
-    (void)domain_id;
-    return HIC_ERROR_NOT_IMPLEMENTED;
-}
-
-/* ============= 资源分配 ============= */
-
-hic_status_t module_allocate_resources(domain_id_t domain_id, const hicmod_metadata_t* metadata) {
-    /* 分配物理内存 */
-    u64 phys_addr;
-    hic_status_t status = pmm_alloc_frames(domain_id, 
-                                          (metadata->max_memory + 4095) / 4096,
-                                          1,  /* PAGE_FRAME_PRIVILEGED */
-                                          &phys_addr);
-    if (status != HIC_SUCCESS) {
-        console_puts("[MODULE] Failed to allocate memory\n");
-        return status;
-    }
+/* 模块加载实现 */
+static hic_status_t load_module_from_memory(const char *name, const void *data, u32 size, module_instance_t *module) __attribute__((unused));
+static hic_status_t load_module_from_memory(const char *name, const void *data, u32 size, module_instance_t *module) {
+    const hicmod_header_t *header;
+    const void *code_data;
+    void *code_base;
+    int i;
     
-    console_puts("[MODULE] Allocated ");
-    console_putu64(metadata->max_memory);
-    console_puts(" bytes for module\n");
-    
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_reclaim_resources(module_instance_t* instance) {
-    if (!instance) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    /* TODO: 释放所有能力 */
-    /* TODO: 释放物理内存 */
-    
-    return HIC_SUCCESS;
-}
-
-/* ============= 模块加载 ============= */
-
-hic_status_t module_load_code(module_instance_t* instance, const void* data, u64 size) {
-    if (!instance || !data || size == 0) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    /* TODO: 加载代码段 */
-    /* TODO: 加载数据段 */
-    /* TODO: 加载BSS段 */
-    /* TODO: 加载只读数据 */
-    
-    instance->module_base = (u64)data;
-    instance->module_size = size;
-    
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_register_endpoints(module_instance_t* instance) {
-    if (!instance) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    /* TODO: 注册模块端点到系统服务注册表 */
-    
-    return HIC_SUCCESS;
-}
-
-/* ============= 签名验证 ============= */
-
-hic_status_t module_verify_signature(const char* module_path) {
-    void* data = NULL;
-    u64 size = 0;
-    
-    /* 读取模块文件 */
-    hic_status_t status = module_read_file(module_path, &data, &size);
-    if (status != HIC_SUCCESS) {
-        return status;
+    /* 检查参数 */
+    if (!name || !data || size < 72 || !module) {
+        return HIC_INVALID_PARAM;
     }
     
     /* 解析头部 */
-    hicmod_header_t header;
-    status = module_parse_header(data, size, &header);
+    header = (const hicmod_header_t *)data;
+    
+    /* 验证头部 */
+    hic_status_t status = verify_module_header(header);
     if (status != HIC_SUCCESS) {
         return status;
     }
     
-    /* 计算模块哈希 */
-    u8 hash[48];
-    status = crypto_sha384((const u8*)data, header.code_offset + header.code_size, hash);
-    if (status != HIC_SUCCESS) {
-        return status;
+    /* 提取代码数据 */
+    if (header->code_size == 0 || header->header_size + header->code_size > size) {
+        return HIC_PARSE_FAILED;
     }
     
-    /* TODO: 获取签名并验证 */
-    /* 调用crypto_service的RSA验证函数 */
+    code_data = (const u8 *)data + header->header_size;
     
-    console_puts("[MODULE] Signature verification (TODO: implement full verification)\n");
+    /* 分配内存并复制代码 */
+    code_base = module_alloc(header->code_size);
+    if (!code_base) {
+        return HIC_OUT_OF_MEMORY;
+    }
+    
+    memcpy(code_base, code_data, header->code_size);
+    
+    /* 初始化模块信息 */
+    memset(module, 0, sizeof(module_instance_t));
+    
+    strncpy(module->name, name, sizeof(module->name) - 1);
+    memcpy(module->uuid, header->uuid, 16);
+    module->version = header->semantic_version;
+    module->state = MODULE_STATE_loaded;
+    module->code_base = code_base;
+    module->code_size = header->code_size;
+    module->flags = header->flags;
+    module->instance_id = g_module_count;
+    module->auto_restart = 1;  /* 默认启用自动重启 */
+    module->restart_count = 0;
+    
+    /* TODO: 查找符号（简化版：假设 init/start/stop/cleanup 在固定位置） */
+    /* TODO: 实现 ELF 符号解析 */
     
     return HIC_SUCCESS;
 }
 
-/* ============= 依赖解析 ============= */
-
-hic_status_t module_parse_dependencies(const char* module_path,
-                                       hicmod_dependency_t* dependencies,
-                                       u32 max_count, u32* count) {
-    (void)module_path;
-    (void)dependencies;
-    (void)max_count;
-    (void)count;
-    /* TODO: 实现依赖解析 */
-    return HIC_ERROR_NOT_IMPLEMENTED;
+/* 模块卸载实现 */
+static hic_status_t unload_module_internal(module_instance_t *module) {
+    int i;
+    
+    if (!module) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    /* 检查引用计数 */
+    if (module->ref_count > 0) {
+        return HIC_BUSY;
+    }
+    
+    /* 检查状态 */
+    if (module->state == MODULE_STATE_running) {
+        /* 调用停止函数 */
+        if (module->stop) {
+            module->stop();
+        }
+    }
+    
+    /* 调用清理函数 */
+    if (module->cleanup) {
+        module->cleanup();
+    }
+    
+    /* 释放备份状态 */
+    if (module->backup_state) {
+        /* TODO: 释放内存 */
+        module->backup_state = NULL;
+    }
+    
+    /* 清理模块信息 */
+    memset(module, 0, sizeof(module_instance_t));
+    module->state = MODULE_STATE_unloaded;
+    
+    return HIC_SUCCESS;
 }
 
-bool module_check_dependencies(hicmod_dependency_t* dependencies, u32 count) {
-    (void)dependencies;
-    (void)count;
-    /* TODO: 实现依赖检查 */
-    return true;
-}
-
-/* ============= 公共API ============= */
-
-hic_status_t module_manager_init(void) {
-    memzero(g_module_instances, sizeof(g_module_instances));
+/* 服务初始化 */
+hic_status_t module_manager_service_init(void) {
+    memset(g_module_table, 0, sizeof(g_module_table));
     g_module_count = 0;
-    
-    console_puts("[MODULE] Module manager initialized\n");
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_load(const char* module_path, const char* password,
-                         module_load_result_t* result) {
-    if (!module_path || !password || !result) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    /* 1. 验证密码 */
-    if (!module_verify_password(password)) {
-        console_puts("[MODULE] Password verification failed\n");
-        result->status = HIC_ERROR_PERMISSION;
-        strcpy(result->error_message, "Invalid password");
-        return HIC_ERROR_PERMISSION;
-    }
-    
-    /* 2. 检查模块数量 */
-    if (g_module_count >= MAX_MODULES) {
-        console_puts("[MODULE] Maximum modules reached\n");
-        result->status = HIC_ERROR_NO_RESOURCE;
-        strcpy(result->error_message, "Maximum modules reached");
-        return HIC_ERROR_NO_RESOURCE;
-    }
-    
-    /* 3. 验证签名 */
-    hic_status_t status = module_verify_signature(module_path);
-    if (status != HIC_SUCCESS) {
-        result->status = status;
-        strcpy(result->error_message, "Signature verification failed");
-        return status;
-    }
-    
-    /* 4. 读取模块 */
-    void* data = NULL;
-    u64 size = 0;
-    status = module_read_file(module_path, &data, &size);
-    if (status != HIC_SUCCESS) {
-        result->status = status;
-        strcpy(result->error_message, "Failed to read module");
-        return status;
-    }
-    
-    /* 5. 解析头部 */
-    hicmod_header_t header;
-    status = module_parse_header(data, size, &header);
-    if (status != HIC_SUCCESS) {
-        result->status = status;
-        strcpy(result->error_message, "Invalid module format");
-        return status;
-    }
-    
-    /* 6. 创建实例 */
-    module_instance_t* instance = &g_module_instances[g_module_count];
-    memzero(instance, sizeof(module_instance_t));
-    
-    instance->instance_id = g_module_count + 1;
-    instance->state = MODULE_STATE_LOADED;
-    instance->load_time = 0;  /* TODO: 获取时间戳 */
-    
-    /* TODO: 解析元数据 */
-    /* TODO: 创建域 */
-    /* TODO: 分配资源 */
-    /* TODO: 加载代码 */
-    
-    g_module_count++;
-    
-    result->status = HIC_SUCCESS;
-    result->instance_id = instance->instance_id;
-    strcpy(result->error_message, "");
-    
-    console_puts("[MODULE] Module loaded: ");
-    console_puts(module_path);
-    console_puts(" (ID=");
-    console_putu64(instance->instance_id);
-    console_puts(")\n");
+    g_module_memory_offset = 0;
     
     return HIC_SUCCESS;
 }
 
-hic_status_t module_unload(u64 instance_id, const char* password) {
-    if (instance_id == 0 || instance_id > MAX_MODULES || !password) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
+/* 服务启动 */
+hic_status_t module_manager_service_start(void) {
+    /* 自动加载所有模块 */
+    const char *module_dir = "/build/privileged-1/modules/";
+    const char *modules[] = {
+        "libc_service.hicmod",              /* 优先级1 - 基础库 */
+        "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
+        "serial_service.hicmod",            /* 优先级3 - 串口服务 */
+        "vga_service.hicmod",               /* 优先级4 - VGA服务 */
+        "config_service.hicmod",            /* 优先级5 - 配置服务 */
+        "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
+        "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
+        "cli_service.hicmod"                /* 优先级8 - CLI服务 */
+    };
+    int i;
     
-    /* 1. 验证密码 */
-    if (!module_verify_password(password)) {
-        console_puts("[MODULE] Password verification failed\n");
-        return HIC_ERROR_PERMISSION;
-    }
-    
-    /* 2. 查找实例 */
-    module_instance_t* instance = &g_module_instances[instance_id - 1];
-    if (instance->state == MODULE_STATE_UNLOADED) {
-        return HIC_ERROR_NOT_FOUND;
-    }
-    
-    /* 3. 停止模块 */
-    if (instance->state == MODULE_STATE_RUNNING) {
-        module_stop(instance_id);
-    }
-    
-    /* 4. 回收资源 */
-    module_reclaim_resources(instance);
-    
-    /* 5. 销毁域 */
-    if (instance->domain_id != 0) {
-        module_destroy_domain(instance->domain_id);
-    }
-    
-    /* 6. 清除实例 */
-    memzero(instance, sizeof(module_instance_t));
-    g_module_count--;
-    
-    console_puts("[MODULE] Module unloaded: ID=");
-    console_putu64(instance_id);
-    console_puts("\n");
-    
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_start(u64 instance_id) {
-    if (instance_id == 0 || instance_id > MAX_MODULES) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    module_instance_t* instance = &g_module_instances[instance_id - 1];
-    if (instance->state != MODULE_STATE_LOADED && 
-        instance->state != MODULE_STATE_STOPPED) {
-        return HIC_ERROR_INVALID_STATE;
-    }
-    
-    /* TODO: 调用模块的入口点 */
-    
-    instance->state = MODULE_STATE_RUNNING;
-    
-    console_puts("[MODULE] Module started: ID=");
-    console_putu64(instance_id);
-    console_puts("\n");
-    
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_stop(u64 instance_id) {
-    if (instance_id == 0 || instance_id > MAX_MODULES) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    module_instance_t* instance = &g_module_instances[instance_id - 1];
-    if (instance->state != MODULE_STATE_RUNNING) {
-        return HIC_ERROR_INVALID_STATE;
-    }
-    
-    /* TODO: 调用模块的停止函数 */
-    
-    instance->state = MODULE_STATE_STOPPED;
-    
-    console_puts("[MODULE] Module stopped: ID=");
-    console_putu64(instance_id);
-    console_puts("\n");
-    
-    return HIC_SUCCESS;
-}
-
-hic_status_t module_list(module_instance_t* instances, u32 max_count, u32* count) {
-    if (!instances || max_count == 0 || !count) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    u32 actual_count = 0;
-    for (u32 i = 0; i < MAX_MODULES && actual_count < max_count; i++) {
-        if (g_module_instances[i].state != MODULE_STATE_UNLOADED) {
-            memcopy(&instances[actual_count], &g_module_instances[i], sizeof(module_instance_t));
-            actual_count++;
+    /* 按优先级顺序加载所有模块 */
+    for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
+        char module_path[256];
+        
+        /* 构建完整路径 */
+        strcpy(module_path, module_dir);
+        strcat(module_path, modules[i]);
+        
+        /* 加载模块 */
+        hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
+        if (status != HIC_SUCCESS) {
+            /* 加载失败，记录但继续 */
+            /* TODO: 添加日志记录 */
+            (void)status;
         }
     }
     
-    *count = actual_count;
     return HIC_SUCCESS;
 }
 
-hic_status_t module_get_info(u64 instance_id, hicmod_metadata_t* metadata) {
-    if (instance_id == 0 || instance_id > MAX_MODULES || !metadata) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
+/* 服务停止 */
+hic_status_t module_manager_service_stop(void) {
+    int i;
     
-    module_instance_t* instance = &g_module_instances[instance_id - 1];
-    if (instance->state == MODULE_STATE_UNLOADED) {
-        return HIC_ERROR_NOT_FOUND;
-    }
-    
-    memcopy(metadata, &instance->metadata, sizeof(hicmod_metadata_t));
-    return HIC_SUCCESS;
-}
-
-/* ============= 服务API ============= */
-
-static hic_status_t service_init(void) {
-    return module_manager_init();
-}
-
-static hic_status_t service_start(void) {
-    console_puts("[MODULE] Module manager service started\n");
-    return HIC_SUCCESS;
-}
-
-static hic_status_t service_stop(void) {
-    console_puts("[MODULE] Module manager service stopped\n");
-    return HIC_SUCCESS;
-}
-
-static hic_status_t service_cleanup(void) {
     /* 卸载所有模块 */
-    for (u32 i = 0; i < MAX_MODULES; i++) {
-        if (g_module_instances[i].state != MODULE_STATE_UNLOADED) {
-            module_unload(i + 1, "admin123");  /* 使用临时密码 */
+    for (i = g_module_count - 1; i >= 0; i--) {
+        if (g_module_table[i].state != MODULE_STATE_unloaded) {
+            unload_module_internal(&g_module_table[i]);
         }
     }
     
     return HIC_SUCCESS;
 }
 
-static hic_status_t service_get_info(char* buffer, u32 buffer_size) {
-    if (!buffer || buffer_size == 0) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    const char* info = "Module Manager Service v1.0.0 - "
-                       "Provides dynamic module loading and management";
-    u32 len = strlen(info);
-    
-    if (len >= buffer_size) {
-        return HIC_ERROR_BUFFER_TOO_SMALL;
-    }
-    
-    strcpy(buffer, info);
+/* 服务清理 */
+hic_status_t module_manager_service_cleanup(void) {
     return HIC_SUCCESS;
 }
 
-/* 服务API表 */
+/* 获取服务信息 */
+hic_status_t module_manager_service_get_info(char* buffer, u32 size) {
+    if (buffer && size > 0) {
+        strcpy(buffer, "Module Manager Service - Loaded modules: ");
+        /* TODO: 添加数字转换 */
+        /* strcat(buffer, itoa(g_module_count)); */
+    }
+    return HIC_SUCCESS;
+}
+
+/* 加载模块 */
+hic_status_t module_load(const char *path, int verify_signature) {
+    const char *module_name;
+    int slot;
+    (void)verify_signature;
+    
+    /* TODO: 实现文件系统读取 */
+    /* 当前简化版：假设 path 是模块名称，模块已预加载 */
+    
+    /* 从路径提取模块名称 */
+    module_name = strrchr(path, '/');
+    if (module_name) {
+        module_name++;
+    } else {
+        module_name = path;
+    }
+    
+    /* 检查是否已加载 */
+    module_instance_t *existing = find_module_by_name(module_name);
+    if (existing && existing->state != MODULE_STATE_unloaded) {
+        return HIC_BUSY;  /* 模块已加载 */
+    }
+    
+    /* 获取空闲槽位 */
+    slot = find_free_slot();
+    if (slot < 0) {
+        return HIC_OUT_OF_MEMORY;  /* 无可用槽位 */
+    }
+    
+    /* TODO: 读取文件内容 */
+    /* void *file_data = read_file(path, &file_size); */
+    /* hic_status_t status = load_module_from_memory(module_name, file_data, file_size, &g_module_table[slot]); */
+    
+    /* 简化版：直接返回成功 */
+    g_module_count++;
+    return HIC_NOT_IMPLEMENTED;
+}
+
+/* 卸载模块 */
+hic_status_t module_unload(const char *name) {
+    module_instance_t *module;
+    
+    if (!name) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    module->state = MODULE_STATE_unloading;
+    hic_status_t status = unload_module_internal(module);
+    
+    if (status == HIC_SUCCESS) {
+        /* TODO: 释放内存 */
+        g_module_count--;
+    }
+    
+    return status;
+}
+
+/* 列出模块 */
+hic_status_t module_list(module_info_t *modules, int *count) {
+    int i;
+    
+    if (!count) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    if (modules && *count >= g_module_count) {
+        for (i = 0; i < g_module_count; i++) {
+            memcpy(&modules[i].name, g_module_table[i].name, 64);
+            memcpy(&modules[i].uuid, g_module_table[i].uuid, 16);
+            modules[i].version = g_module_table[i].version;
+            modules[i].state = g_module_table[i].state;
+            modules[i].flags = g_module_table[i].flags;
+        }
+    }
+    
+    *count = g_module_count;
+    return HIC_SUCCESS;
+}
+
+/* 获取模块信息 */
+hic_status_t module_info(const char *name, module_info_t *info) {
+    module_instance_t *module;
+    
+    if (!name || !info) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    memcpy(info->name, module->name, 64);
+    memcpy(info->uuid, module->uuid, 16);
+    info->version = module->version;
+    info->state = module->state;
+    info->flags = module->flags;
+    return HIC_SUCCESS;
+}
+
+/* 验证模块 */
+hic_status_t module_verify(const char *path) {
+    /* TODO: 实现模块签名验证 */
+    /* 1. 读取模块文件 */
+    /* 2. 解析头部 */
+    /* 3. 验证校验和 */
+    /* 4. 验证签名（如果存在） */
+    (void)path;
+    return HIC_NOT_IMPLEMENTED;
+}
+
+/* 重启模块 */
+hic_status_t module_restart(const char *name) {
+    module_instance_t *module;
+    hic_status_t status;
+    
+    if (!name) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    /* 检查重启次数 */
+    if (module->restart_count >= MAX_RESTART_ATTEMPTS) {
+        module->state = MODULE_STATE_error;
+        return HIC_ERROR;  /* 超过最大重启次数 */
+    }
+    
+    /* 停止模块 */
+    if (module->stop) {
+        status = module->stop();
+        if (status != HIC_SUCCESS) {
+            module->restart_count++;
+            module->state = MODULE_STATE_error;
+            return status;
+        }
+    }
+    
+    /* 清理模块 */
+    if (module->cleanup) {
+        module->cleanup();
+    }
+    
+    /* 重新初始化 */
+    if (module->init) {
+        status = module->init();
+        if (status != HIC_SUCCESS) {
+            module->restart_count++;
+            module->state = MODULE_STATE_error;
+            return status;
+        }
+    }
+    
+    /* 重新启动 */
+    if (module->start) {
+        status = module->start();
+        if (status != HIC_SUCCESS) {
+            module->restart_count++;
+            module->state = MODULE_STATE_error;
+            return status;
+        }
+    }
+    
+    /* 重置重启计数（成功） */
+    module->restart_count = 0;
+    module->state = MODULE_STATE_running;
+    
+    return HIC_SUCCESS;
+}
+
+/* 设置自动重启 */
+hic_status_t module_set_auto_restart(const char *name, u8 enable) {
+    module_instance_t *module;
+    
+    if (!name) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    module->auto_restart = enable;
+    return HIC_SUCCESS;
+}
+
+/* 备份模块状态 */
+hic_status_t module_backup_state(const char *name) {
+    module_instance_t *module;
+    
+    if (!name) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    /* TODO: 实现状态备份 */
+    /* 1. 分配备份内存 */
+    /* 2. 复制模块状态 */
+    
+    return HIC_NOT_IMPLEMENTED;
+}
+
+/* 恢复模块状态 */
+hic_status_t module_restore_state(const char *name) {
+    module_instance_t *module;
+    
+    if (!name) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    module = find_module_by_name(name);
+    if (!module) {
+        return HIC_NOT_FOUND;
+    }
+    
+    /* TODO: 实现状态恢复 */
+    
+    return HIC_NOT_IMPLEMENTED;
+}
+
+/* 滚动更新 */
+hic_status_t module_rolling_update(const char *name, const char *new_path, int verify) {
+    module_instance_t *current;
+    u64 new_instance_id;
+    hic_status_t status;
+    (void)verify;
+    
+    if (!name || !new_path) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    /* 查找当前模块 */
+    current = find_module_by_name(name);
+    if (!current) {
+        return HIC_NOT_FOUND;
+    }
+    
+    /* 备份当前状态 */
+    status = module_backup_state(name);
+    if (status != HIC_SUCCESS) {
+        return status;
+    }
+    
+    /* 暂停当前模块 */
+    if (current->stop) {
+        status = current->stop();
+        if (status != HIC_SUCCESS) {
+            return status;
+        }
+    }
+    current->state = MODULE_STATE_suspended;
+    
+    /* 加载新版本 */
+    status = module_load(new_path, 0);
+    if (status != HIC_SUCCESS) {
+        /* 回滚 */
+        current->state = MODULE_STATE_running;
+        if (current->start) {
+            current->start();
+        }
+        return status;
+    }
+    
+    /* 恢复状态到新模块 */
+    status = module_restore_state(name);
+    if (status != HIC_SUCCESS) {
+        /* 回滚 */
+        module_unload(name);
+        current->state = MODULE_STATE_running;
+        if (current->start) {
+            current->start();
+        }
+        return status;
+    }
+    
+    /* 卸载旧模块 */
+    status = unload_module_internal(current);
+    if (status != HIC_SUCCESS) {
+        return status;
+    }
+    
+    return HIC_SUCCESS;
+}
+
+/* 模块管理器服务 API */
 const service_api_t g_service_api = {
-    .init = service_init,
-    .start = service_start,
-    .stop = service_stop,
-    .cleanup = service_cleanup,
-    .get_info = service_get_info,
+    .init = module_manager_service_init,
+    .start = module_manager_service_start,
+    .stop = module_manager_service_stop,
+    .cleanup = module_manager_service_cleanup,
+    .get_info = module_manager_service_get_info,
 };
 
-/* 服务注册函数 */
 void service_register_self(void) {
-    service_register("module_manager_service", &g_service_api);
+    service_register("module_manager", &g_service_api);
 }
