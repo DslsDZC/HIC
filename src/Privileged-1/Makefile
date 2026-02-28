@@ -55,7 +55,7 @@ services: $(SERVICE_OBJS)
 $(OBJ_DIR)/%.o: services/%/service.c
 	@echo "Building $@..."
 	@mkdir -p $(OBJ_DIR)
-	$(MAKE) -C services/$* OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR)
+	$(MAKE) -C services/$* OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR) ROOT_DIR=$(CURDIR)/../..
 
 # 生成动态模块
 modules:
@@ -63,7 +63,7 @@ modules:
 	@mkdir -p $(MOD_DIR)
 	for service in $(CORE_SERVICES); do \
 		if [ -d "services/$$service" ]; then \
-			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR); \
+			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR) ROOT_DIR=$(CURDIR)/../..; \
 			if [ -f "services/$$service/$$service.hicmod" ]; then \
 				cp "services/$$service/$$service.hicmod" $(MOD_DIR)/; \
 				echo "  Created: $$service.hicmod"; \
@@ -78,7 +78,7 @@ static_modules: $(MOD_TARGETS)
 	@mkdir -p $(STATIC_MODULES_DIR)
 	for service in $(CORE_SERVICES); do \
 		if [ -d "services/$$service" ]; then \
-			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR); \
+			$(MAKE) -C services/$$service module OBJ_DIR=$(OBJ_DIR) MOD_DIR=$(MOD_DIR) ROOT_DIR=$(CURDIR)/../..; \
 			if [ -f "services/$$service/$$service.hicmod" ]; then \
 				cp "services/$$service/$$service.hicmod" $(STATIC_MODULES_DIR)/; \
 				echo "  Embedded: $$service.hicmod"; \
