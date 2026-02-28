@@ -21,9 +21,51 @@ static audit_buffer_t g_audit_buffer;
 /* 审计日志初始化 */
 void audit_system_init(void)
 {
+    /* DEBUG: 输出字符 'n' */
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'n', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     memzero(&g_audit_buffer, sizeof(audit_buffer_t));
+
+    /* DEBUG: 输出字符 'o' */
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'o', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     g_audit_buffer.initialized = false;
+
+    /* DEBUG: 输出字符 'p' */
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'p', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     console_puts("[AUDIT] Audit system initialized (buffer not yet allocated)\n");
+
+    /* DEBUG: 输出字符 'q' */
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'q', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
 }
 
 /* 初始化审计日志缓冲区 */

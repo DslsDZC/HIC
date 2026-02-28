@@ -97,6 +97,16 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     // 【第一优先级】初始化审计日志系统
     audit_system_init();
 
+    /* DEBUG: 输出字符 'A' */
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'A', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
     // 分配审计日志缓冲区（从可用内存的末尾开始）
     if (boot_info && boot_info->mem_map && boot_info->mem_map_entry_count > 0) {
         // 查找最大可用内存区域

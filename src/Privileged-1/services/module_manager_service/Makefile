@@ -3,12 +3,12 @@
 SERVICE_NAME := module_manager_service
 SERVICE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-CFLAGS += -I/home/DslsDZC/HIC/src/Privileged-1/include
+CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 CC := gcc
 CFLAGS := -Wall -Wextra -O2 -fPIC -ffreestanding -nostdinc
-CFLAGS += -I/home/DslsDZC/HIC/src/Core-0/include
-CFLAGS += -I/home/DslsDZC/HIC/src/Privileged-1/include
+CFLAGS += -I$(ROOT_DIR)/src/Core-0/include
+CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 
 OBJS := $(OBJ_DIR)/service.o
@@ -25,7 +25,7 @@ module: $(MOD_TARGET)
 
 $(MOD_TARGET): $(TARGET) $(TXT_FILE)
 	@echo "Creating module $(MOD_TARGET)..."
-	@python3 /home/DslsDZC/HIC/scripts/create_hicmod.py $(TARGET) $(TXT_FILE) $(MOD_TARGET)
+	@python3 $(ROOT_DIR)/scripts/create_hicmod.py $(TARGET) $(TXT_FILE) $(MOD_TARGET)
 
 $(TARGET): $(OBJS)
 	@echo "Building $(SERVICE_NAME)..."

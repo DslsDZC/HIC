@@ -15,7 +15,7 @@
 #include "hal.h"
 
 /* 内联串口输出函数 */
-static inline void serial_putc(char c) {
+static void serial_putc(char c) {
     uint16_t port = 0x3F8;
     __asm__ volatile("outb %0, %1" : : "a"((u8)c), "Nd"(port));
 }
