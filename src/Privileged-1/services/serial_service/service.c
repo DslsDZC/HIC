@@ -7,6 +7,9 @@
 #include "service.h"
 #include <string.h>
 
+/* 声明 VGA 服务接口 */
+extern void vga_service_putchar(char c);
+
 /* 魔数 */
 #define SERIAL_BUFFER_MAGIC 0x53455249  /* "SERI" */
 
@@ -53,6 +56,9 @@ void serial_service_init(void) {
 void serial_service_poll(void) {
     while (serial_has_data()) {
         char c = serial_read_char();
+        
+        /* 同时输出到 VGA 显示 */
+        vga_service_putchar(c);
         
         /* 写入缓冲区 */
         uint32_t pos = g_serial_buffer.write_pos;

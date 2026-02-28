@@ -56,6 +56,11 @@ CONFIG_IRQ_FAIRNESS ?= 1             # 启用中断公平性 (0=禁用, 1=启用
 # ==================== 模块配置 ====================
 CONFIG_MODULE_LOADING ?= 1           # 启用模块加载 (0=禁用, 1=启用)
 CONFIG_MAX_MODULES ?= 32             # 最大模块数
+CONFIG_MODULE_STATIC ?= 0            # 模块构建模式 (0=动态, 1=静态嵌入)
+CONFIG_DISABLE_SERIAL_SERVICE ?= 0   # 禁用串口服务 (0=启用, 1=禁用)
+CONFIG_DISABLE_VGA_SERVICE ?= 0      # 禁用VGA服务 (0=启用, 1=禁用)
+CONFIG_DISABLE_CLI_SERVICE ?= 0      # 禁用CLI服务 (0=启用, 1=禁用)
+CONFIG_ENABLE_LEGACY_SERVICES ?= 0   # 启用旧服务 (0=禁用, 1=启用)
 
 # ==================== 使用说明 ====================
 #

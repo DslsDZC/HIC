@@ -11,9 +11,14 @@
 
 #include <stdarg.h>
 #include "console.h"
-#include "minimal_uart.h"
 #include "mem.h"
 #include "hal.h"
+
+/* 内联串口输出函数 */
+static inline void serial_putc(char c) {
+    uint16_t port = 0x3F8;
+    __asm__ volatile("outb %0, %1" : : "a"((u8)c), "Nd"(port));
+}
 
 /* 初始化控制台 */
 void console_init(console_type_t type)
@@ -30,7 +35,7 @@ void console_clear(void)
     /* 串口清屏：发送ANSI清屏序列 */
     const char *clear_seq = "\033[2J\033[H";
     while (*clear_seq) {
-        minimal_uart_putc(*clear_seq++);
+        serial_putc(*clear_seq++);
     }
 }
 
@@ -38,14 +43,14 @@ void console_clear(void)
 void console_putchar(char c)
 {
     /* 仅通过串口输出 */
-    minimal_uart_putc(c);
+    serial_putc(c);
 }
 
 /* 输出字符串 */
 void console_puts(const char *str)
 {
     while (*str) {
-        minimal_uart_putc(*str++);
+        serial_putc(*str++);
     }
 }
 

@@ -1,6 +1,6 @@
-# 串口服务 Makefile
+# VGA 服务 Makefile
 
-SERVICE_NAME := serial_service
+SERVICE_NAME := vga_service
 SERVICE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 CC := gcc
