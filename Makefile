@@ -45,15 +45,35 @@ kernel:
 	@cd $(BUILD_DIR) && $(MAKE) all
 	@echo "内核构建完成"
 
+# 构建特权服务
+privileged-services:
+	@echo "构建特权层服务"
+	@cd $(ROOT_DIR)/src/Privileged-1 && $(MAKE) clean
+	@cd $(ROOT_DIR)/src/Privileged-1 && $(MAKE) all
+	@cd $(ROOT_DIR)/src/Privileged-1 && $(MAKE) install
+	@echo "特权服务构建完成"
+
+# 构建服务模块
+privileged-modules:
+	@echo "构建服务模块"
+	@$(MAKE) -C src/Privileged-1 modules
+
+# 安装特权模块到构建目录
+privileged-install:
+	@echo "安装特权模块"
+	@mkdir -p $(BUILD_DIR)/modules
+	@cp -r $(BUILD_DIR)/modules/*.hicmod $(BUILD_DIR)/modules/ 2>/dev/null || true
+	@ls -lh $(BUILD_DIR)/modules/
+
 # 生成HIC镜像（HIK格式）
-image: kernel
+image: kernel privileged-services
 	@echo "生成HIC镜像（HIK格式）"
 	@objcopy -O binary $(BUILD_DIR)/bin/hic-kernel.elf $(BUILD_DIR)/bin/hic-kernel.bin
 	@python3 scripts/create_hik_image.py $(BUILD_DIR)/bin/hic-kernel.elf $(BUILD_DIR)/bin/hic-kernel.hic
 	@echo "HIC镜像生成完成: $(BUILD_DIR)/bin/hic-kernel.hic"
 
 # 创建磁盘镜像（IMG）
-img: bootloader kernel
+img: bootloader kernel privileged-services
 	@echo "创建磁盘镜像（IMG）"
 	@mkdir -p $(OUTPUT_DIR)
 	@python3 scripts/create_efi_disk_no_root.py \

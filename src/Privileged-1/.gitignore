@@ -1,0 +1,5 @@
+# 构建产物
+mod/
+*.o
+*.hicmod
+privileged_services.o

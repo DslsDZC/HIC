@@ -1,0 +1,47 @@
+# HIC服务模块元数据文件
+
+[service]
+name = vga_service
+display_name = VGA显示服务
+version = 1.0.0
+api_version = 1.0
+uuid = b2c3d4e5-f6a7-8901-bcde-f12345678902
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供VGA文本模式显示服务
+long = VGA显示服务提供文本模式的VGA显示功能，支持颜色设置、光标控制和滚屏。用于在QEMU GUI窗口中显示内核输出。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 16384
+max_threads = 2
+max_capabilities = 16
+cpu_quota_percent = 5
+
+[endpoints]
+vga_putchar = 1.0:vga_putchar
+vga_puts = 1.0:vga_puts
+vga_clear = 1.0:vga_clear
+vga_set_color = 1.0:vga_set_color
+vga_set_cursor = 1.0:vga_set_cursor
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = false
+priority = 6
+autostart = true
