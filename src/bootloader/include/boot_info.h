@@ -130,6 +130,13 @@ typedef struct {
         uint64_t hw_hash;               // 硬件探测哈希值
     } hardware;
 
+    // GDT信息（用于确保内核运行在Ring 0）
+    struct {
+        uint64_t gdt[6];                // GDT表（6个描述符）
+        uint16_t gdt_limit;             // GDT限（16位）
+        uint64_t gdt_base;              // GDT基址（64位）
+    } gdt;
+
 } hic_boot_info_t;
 
 // 标志位定义

@@ -22,9 +22,15 @@ extern void kernel_boot_info_init(hic_boot_info_t* boot_info);
  * 这个函数由bootloader的jump_to_kernel函数调用
  * 接收boot_info作为参数（在RDI寄存器中）
  */
+
 void kernel_start(hic_boot_info_t* boot_info) {
+    // 使用串口端口直接输出
+    volatile uint16_t port = 0x3F8;
+    
+    // 输出 'S'
+    __asm__ volatile("outb %0, %1" : : "a"((uint8_t)'S'), "Nd"(port));
+    
     // 直接转发到实际的内核入口点
-    // console_init会在kernel_boot_info_init中调用
     kernel_boot_info_init(boot_info);
     
     // 永远不应该到达这里

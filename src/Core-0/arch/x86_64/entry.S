@@ -17,6 +17,17 @@
 # 参数: %rdi = hic_boot_info_t* boot_info
 _start:
 kernel_entry:
+    # 【调试】输出当前CS寄存器值
+    mov $'C', %al
+    call .serial_putchar
+    mov %cs, %ax
+    call .serial_hex
+    call .serial_newline
+
+    # 【调试】输出'R'表示进入内核
+    mov $'R', %al
+    call .serial_putchar
+
     # 输出调试信息：'K' 表示内核入口
     mov $'K', %al
     call .serial_putchar
@@ -58,6 +69,11 @@ kernel_entry:
     mov $'4', %al
     call .serial_putchar
 
+    # 确保栈16字节对齐（System V AMD64 ABI要求）
+    # 当前栈指针已经减去了48字节（6个寄存器 * 8字节）
+    # 48 % 16 = 0，所以栈已经是16字节对齐的
+    # 不需要额外调整
+
     # 调用C语言内核入口点
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
@@ -86,6 +102,71 @@ kernel_entry:
     pop %rax                  # 恢复字符
     out %al, %dx              # 输出字符
     pop %rdx
+    ret
+
+# 串口输出十六进制数字（低4位）
+# 输入: %al = 值（只使用低4位）
+.serial_hex_digit:
+    push %rax
+    and $0xF, %al
+    cmp $10, %al
+    jae .serial_hex_letter
+    add $'0', %al
+    jmp .serial_hex_output
+.serial_hex_letter:
+    add $'A' - 10, %al
+.serial_hex_output:
+    call .serial_putchar
+    pop %rax
+    ret
+
+# 串口输出十六进制字节
+# 输入: %al = 字节
+.serial_hex:
+    push %rax
+    push %rdx
+    mov %al, %dl
+    shr $4, %al
+    call .serial_hex_digit
+    mov %dl, %al
+    call .serial_hex_digit
+    pop %rdx
+    pop %rax
+    ret
+
+# 串口输出十六进制64位数
+# 输入: %rax = 64位值
+.serial_hex64:
+    push %rax
+    push %rcx
+    push %rdx
+    
+    mov %rax, %rcx      # 保存原始值
+    mov $12, %dl        # 循环计数器（16个十六进制字符）
+.serial_hex64_loop:
+    mov %rcx, %r8       # 临时保存
+    shr $60, %r8        # 取高4位
+    and $0xF, %r8b      # 只取低4位
+    mov %r8b, %al
+    call .serial_hex_digit
+    
+    shl $4, %rcx        # 左移4位，准备下一个字符
+    dec %dl             # 计数器减1
+    jnz .serial_hex64_loop
+    
+    pop %rdx
+    pop %rcx
+    pop %rax
+    ret
+
+# 串口输出换行
+.serial_newline:
+    push %rax
+    mov $0x0D, %al    # CR
+    call .serial_putchar
+    mov $0x0A, %al    # LF
+    call .serial_putchar
+    pop %rax
     ret
 
 /* 数据段 */

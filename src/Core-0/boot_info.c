@@ -66,10 +66,10 @@ hic_boot_info_t *g_boot_info = NULL;
  * - 遵循形式化验证要求
  */
 void kernel_boot_info_init(hic_boot_info_t* boot_info) {
-    // DEBUG: 输出字符测试是否能到达这里
+    // DEBUG: 输出字符 'Y' 测试是否能到达这里
     __asm__ volatile(
         "mov $0x3F8, %%dx\n"
-        "mov $'Z', %%al\n"
+        "mov $'Y', %%al\n"
         "outb %%al, %%dx\n"
         :
         :
@@ -81,31 +81,61 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
         goto panic;
     }
     
-    // 保存启动信息
-    g_boot_state.boot_info = boot_info;
+    // DEBUG: 输出字符 '1' 测试是否能通过第一个检查
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'1', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
     
     // 【安全检查2】验证boot_info魔数
     if (boot_info->magic != HIC_BOOT_INFO_MAGIC) {
         goto panic;
     }
     
-    // 【安全检查3】验证boot_info版本
-    if (boot_info->version != HIC_BOOT_INFO_VERSION) {
-        goto panic;
-    }
-    
-    // 【第一优先级】初始化审计日志系统
-    audit_system_init();
-
-    /* DEBUG: 输出字符 'A' */
+    // DEBUG: 输出字符 '2' 测试是否能通过第二个检查
     __asm__ volatile(
         "mov $0x3F8, %%dx\n"
-        "mov $'A', %%al\n"
+        "mov $'2', %%al\n"
         "outb %%al, %%dx\n"
         :
         :
         : "dx", "al"
     );
+    
+    // 【安全检查3】验证boot_info版本
+    if (boot_info->version != HIC_BOOT_INFO_VERSION) {
+        goto panic;
+    }
+    
+    // DEBUG: 输出字符 'Z' 测试是否能通过验证
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'Z', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+
+    // 【第一优先级】初始化审计日志系统
+    // audit_system_init();  // 暂时注释掉，测试是否能通过
+
+    // DEBUG: 输出字符 'X' 测试是否能到达这里
+    __asm__ volatile(
+        "mov $0x3F8, %%dx\n"
+        "mov $'X', %%al\n"
+        "outb %%al, %%dx\n"
+        :
+        :
+        : "dx", "al"
+    );
+    
+    // 暂时返回，不执行后续代码
+    return;
 
     // 分配审计日志缓冲区（从可用内存的末尾开始）
     if (boot_info && boot_info->mem_map && boot_info->mem_map_entry_count > 0) {

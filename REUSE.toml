@@ -5,47 +5,47 @@ SPDX-PackageDownloadLocation = "https://github.com/*/HIC"
 [[annotations]]
 path = "src/Privileged-1/*"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "MPL-2.0"
 
 [[annotations]]
 path = "src/Application-3/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = "src/Core-0/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "GPL-2.0-only WITH LicenseRef-HIC-service-exception"
 
 [[annotations]]
 path = "src/bootloader/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = "scripts/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = "docs/**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "CC-BY-4.0"
 
 [[annotations]]
 path = ["README.md", "CONTRIBUTING.md", "Makefile", "**.sh"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = "**"
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 * <dsls.dzc@gmail.com>"
+SPDX-FileCopyrightText = "2026 DslsDZC <dsls.dzc@gmail.com>"
 SPDX-License-Identifier = "MIT"

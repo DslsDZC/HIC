@@ -18,9 +18,22 @@
 /* 审计日志缓冲区（全局） */
 static audit_buffer_t g_audit_buffer;
 
+/* 审计日志初始化消息 */
+static const char audit_init_msg[] = "[AUDIT] Audit system initialized (buffer not yet allocated)\n";
+
 /* 审计日志初始化 */
 void audit_system_init(void)
 {
+    uint64_t saved_rbp;
+
+    /* DEBUG: 保存RBP的值 */
+    __asm__ volatile(
+        "mov %%rbp, %0\n"
+        : "=r"(saved_rbp)
+        :
+        : "memory"
+    );
+
     /* DEBUG: 输出字符 'n' */
     __asm__ volatile(
         "mov $0x3F8, %%dx\n"
@@ -55,7 +68,7 @@ void audit_system_init(void)
         : "dx", "al"
     );
 
-    console_puts("[AUDIT] Audit system initialized (buffer not yet allocated)\n");
+    console_puts(audit_init_msg);
 
     /* DEBUG: 输出字符 'q' */
     __asm__ volatile(
@@ -66,6 +79,9 @@ void audit_system_init(void)
         :
         : "dx", "al"
     );
+
+    // 暂时禁用 console_puts 调用
+    // console_puts(audit_init_msg);
 }
 
 /* 初始化审计日志缓冲区 */

@@ -1423,7 +1423,7 @@ class HICBuildGUI(QMainWindow):
             f"{PROJECT} {VERSION}\n\n"
             f"HIC (Hierarchical Isolation Core) 构建系统\n"
             f"支持多种构建界面：Qt GUI, GTK GUI, TUI, CLI\n\n"
-            f"© 2026 *"
+            f"© 2026 DslsDZC"
         )
 
 
