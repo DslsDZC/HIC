@@ -48,6 +48,7 @@ typedef u32 hic_status_t;
 #define HIC_NOT_IMPLEMENTED 8
 #define HIC_BUFFER_TOO_SMALL 9
 #define HIC_PARSE_FAILED 10
+#define HIC_NOT_INITIALIZED 11
 
 /* 服务 API 结构 */
 typedef struct service_api {

@@ -796,6 +796,48 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
 
     log_info("Platform config data: %llu bytes\n", g_platform_size);
 
+    // 初始化GDT（全局描述符表）
+    // GDT布局：
+    // 0: 空描述符
+    // 1: 内核代码段 (Ring 0, 可执行, 可读, 64位)
+    // 2: 内核数据段 (Ring 0, 可读写, 64位)
+    // 3-5: 保留
+    console_puts("[BOOTLOADER] Initializing GDT...\n");
+    
+    uint64_t gdt_base;
+    uint64_t gdt_limit;
+
+    // 描述符0：空描述符
+    boot_info->gdt.gdt[0] = 0x0000000000000000ULL;
+
+// 描述符1：内核代码段（Ring 0）
+    boot_info->gdt.gdt[1] = 0x00209A000000FFFFULL;  // 基础描述符
+    boot_info->gdt.gdt[1] |= 0x20000000000000ULL;  // L-bit for 64-bit
+    
+    // 描述符2：内核数据段
+    boot_info->gdt.gdt[2] = 0x00CF92000000FFFFULL;
+    
+    // 描述符3：用户代码段（Ring 3）
+    boot_info->gdt.gdt[3] = 0x00CFFA000000FFFFULL;
+    boot_info->gdt.gdt[3] |= 0x20000000000000ULL;  // L-bit for 64-bit
+    
+    // 描述符4：用户数据段
+    boot_info->gdt.gdt[4] = 0x00CFF2000000FFFFULL;
+    
+    // 描述符5：TSS（占位）
+    boot_info->gdt.gdt[5] = 0x0000000000000000ULL;
+    
+    // 构建GDT指针（x86_64格式）
+    // lgdt指令期望10字节结构：[limit:16bit][base:64bit]
+    gdt_base = (uint64_t)&boot_info->gdt.gdt;
+    gdt_limit = sizeof(boot_info->gdt.gdt) - 1;  // 6 * 8 - 1 = 47
+    boot_info->gdt.gdt_base = gdt_base;
+    boot_info->gdt.gdt_limit = (uint16_t)gdt_limit;
+
+    console_printf("[BOOTLOADER] GDT initialized at 0x%lx\n", (uint64_t)(&boot_info->gdt.gdt));
+    console_printf("[BOOTLOADER] GDT base=0x%lx, limit=0x%lx\n", 
+                  boot_info->gdt.gdt_base, boot_info->gdt.gdt_limit);
+
     // 内核信息
     // 检测内核格式并读取入口点
     uint8_t *raw_kernel = (uint8_t *)kernel_data;
@@ -1153,6 +1195,79 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         
         console_puts("[BOOTLOADER] Kernel code copied to 0x100000\n");
         
+        // 解析段表并初始化BSS段
+        uint64_t segment_table_offset = 120;  // 段表偏移
+        uint8_t *segment_table = raw_bytes + segment_table_offset;
+        
+        console_printf("[BOOTLOADER] Segment count: %lu\n", segment_count);
+        
+        // 遍历段表，初始化BSS段
+        // 使用字节级读取避免对齐问题
+        for (uint64_t i = 0; i < segment_count; i++) {
+            uint8_t *seg_entry = segment_table + (i * 40);  // 每个段表项40字节
+            
+            // 手动字节级读取（小端字节序）
+            uint32_t seg_type = (uint32_t)seg_entry[0] | 
+                               ((uint32_t)seg_entry[1] << 8) | 
+                               ((uint32_t)seg_entry[2] << 16) | 
+                               ((uint32_t)seg_entry[3] << 24);
+            
+            uint32_t seg_flags = (uint32_t)seg_entry[4] | 
+                                ((uint32_t)seg_entry[5] << 8) | 
+                                ((uint32_t)seg_entry[6] << 16) | 
+                                ((uint32_t)seg_entry[7] << 24);
+            
+            uint64_t seg_file_offset = (uint64_t)seg_entry[8] | 
+                                      ((uint64_t)seg_entry[9] << 8) | 
+                                      ((uint64_t)seg_entry[10] << 16) | 
+                                      ((uint64_t)seg_entry[11] << 24) |
+                                      ((uint64_t)seg_entry[12] << 32) | 
+                                      ((uint64_t)seg_entry[13] << 40) | 
+                                      ((uint64_t)seg_entry[14] << 48) | 
+                                      ((uint64_t)seg_entry[15] << 56);
+            
+            uint64_t seg_memory_offset = (uint64_t)seg_entry[16] | 
+                                        ((uint64_t)seg_entry[17] << 8) | 
+                                        ((uint64_t)seg_entry[18] << 16) | 
+                                        ((uint64_t)seg_entry[19] << 24) |
+                                        ((uint64_t)seg_entry[20] << 32) | 
+                                        ((uint64_t)seg_entry[21] << 40) | 
+                                        ((uint64_t)seg_entry[22] << 48) | 
+                                        ((uint64_t)seg_entry[23] << 56);
+            
+            uint64_t seg_file_size = (uint64_t)seg_entry[24] | 
+                                    ((uint64_t)seg_entry[25] << 8) | 
+                                    ((uint64_t)seg_entry[26] << 16) | 
+                                    ((uint64_t)seg_entry[27] << 24) |
+                                    ((uint64_t)seg_entry[28] << 32) | 
+                                    ((uint64_t)seg_entry[29] << 40) | 
+                                    ((uint64_t)seg_entry[30] << 48) | 
+                                    ((uint64_t)seg_entry[31] << 56);
+            
+            uint64_t seg_memory_size = (uint64_t)seg_entry[32] | 
+                                      ((uint64_t)seg_entry[33] << 8) | 
+                                      ((uint64_t)seg_entry[34] << 16) | 
+                                      ((uint64_t)seg_entry[35] << 24) |
+                                      ((uint64_t)seg_entry[36] << 32) | 
+                                      ((uint64_t)seg_entry[37] << 40) | 
+                                      ((uint64_t)seg_entry[38] << 48) | 
+                                      ((uint64_t)seg_entry[39] << 56);
+            
+            (void)seg_flags;  // 消除未使用变量警告
+            (void)seg_file_offset;  // 消除未使用变量警告
+            
+            console_printf("[BOOTLOADER] Segment %lu: type=%u, flags=0x%x, mem_offset=0x%lx, file_size=0x%lx, mem_size=0x%lx\n",
+                         i, seg_type, seg_flags, seg_memory_offset, seg_file_size, seg_memory_size);
+            
+            // 如果是BSS段，初始化为零
+            if (seg_type == 4 && seg_memory_size > seg_file_size) {
+                console_printf("[BOOTLOADER] Initializing BSS segment at 0x%lx, size=0x%lx\n",
+                             seg_memory_offset, seg_memory_size - seg_file_size);
+                memset((void*)seg_memory_offset, 0, seg_memory_size - seg_file_size);
+                console_puts("[BOOTLOADER] BSS segment initialized\n");
+            }
+        }
+        
         // 调试：检查源数据的前几个字节（在跳转到内核之前）
         console_puts("[BOOTLOADER] ***NEW CODE*** Checking source kernel data...\n");
         uint8_t *kernel_code_ptr = (uint8_t*)kernel_code_start;
@@ -1351,16 +1466,64 @@ void jump_to_kernel(hic_boot_info_t *boot_info) {
     // 禁用中断
     __asm__ volatile ("cli");
 
-    // 设置栈指针,确保16字节对齐,RDI包含boot_info,然后跳转到内核
+    // 设置栈指针，确保16字节对齐
     uint64_t aligned_stack = ((uint64_t)stack_top) & 0xFFFFFFFFFFFFFFF0ULL;  // 对齐到16字节
+
+    // 根据文档设计（docs/TD/可移植性.md 第6.1.1节）：
+    // - 静态中断路由表：构建时确定，运行时零查找
+    // - 直接分发：硬件直接跳转到处理函数入口
+    // - Core-0仅在异常时介入
+    //
+    // 根据文档设计（docs/TD/3层模型.md 第2.1节）：
+    // - Core-0运行在最高特权模式（x86 Ring 0）
+    // - 特权内存访问通道：Core-0和Privileged-1共享Ring 0
+    
+    // 使用boot_info中预先初始化的GDT，确保内核运行在Ring 0
+    console_puts("[JUMP] Loading GDT from boot_info...\n");
+    console_printf("[JUMP] GDT address: 0x%lx\n", (uint64_t)(&boot_info->gdt.gdt));
+    console_printf("[JUMP] GDT base: 0x%lx, limit: 0x%x\n", boot_info->gdt.gdt_base, boot_info->gdt.gdt_limit);
+    
+    // 构造lgdt指令需要的10字节GDT指针
+    struct {
+        uint16_t limit;
+        uint64_t base;
+    } __attribute__((packed)) gdt_ptr_struct;
+    
+    gdt_ptr_struct.limit = boot_info->gdt.gdt_limit;
+    gdt_ptr_struct.base = boot_info->gdt.gdt_base;
+    
     __asm__ volatile (
-        "mov %0, %%rsp\n"      // 设置栈指针
-        "mov %2, %%rdi\n"      // 设置RDI为boot_info
-        "jmp *%1\n"            // 跳转到内核入口点
+        // 加载GDT
+        "lgdt %0\n"
         :
-        : "r"(aligned_stack), "a"(kernel_entry), "r"(boot_info)
+        : "m"(gdt_ptr_struct)
+        : "memory"
+    );
+    
+    // 使用远跳转设置CS为Ring 0（选择子0x08）
+    // 0x08 = GDT索引1（内核代码段），Ring 0
+    console_puts("[JUMP] Performing far jump to set CS=0x08 (Ring 0)...\n");
+    
+    __asm__ volatile (
+        // 设置栈指针
+        "mov %0, %%rsp\n"      // 设置栈指针
+        // 设置第一个参数
+        "mov %2, %%rdi\n"      // 设置RDI为boot_info
+        // 调试：NOP指令
+        "nop\n"                // 调试：NOP指令
+        "nop\n"                // 调试：NOP指令
+        "nop\n"                // 调试：NOP指令
+        // 远跳转到内核，加载CS=0x08 (Ring 0)
+        "pushq $0x08\n"       // 代码段选择子（索引1，Ring 0）
+        "pushq %1\n"          // 内核入口点
+        "lretq\n"             // 远跳转，加载CS和RIP
+        :
+        : "r"(aligned_stack), "r"(kernel_entry), "r"(boot_info)
         : "memory", "rdi"
     );
+    
+    // 永远不会到达这里
+    console_puts("[JUMP] ERROR: Returned from far jump!\n");
     
     // 永远不会到达这里
     while (1) {

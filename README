@@ -8,18 +8,18 @@ and runtime invariant checking.
 Quick Start
 -----------
 
-* Report a bug: See docs/Wiki/FAQ.md
+* Report a bug: See docs/Wiki_zh_cn/FAQ.md
 * Get the latest version: https://github.com/DslsDZC/HIC
-* Build the kernel: See docs/Wiki/03-QuickStart.md
-* View architecture: docs/Wiki/02-Architecture.md
+* Build the kernel: See docs/Wiki_zh_cn/03-QuickStart.md
+* View architecture: docs/Wiki_zh_cn/02-Architecture.md
 
 Essential Documentation
 -----------------------
 
 All users should be familiar with:
 
-* Building requirements: docs/Wiki/05-DevelopmentEnvironment.md
-* Code standards: docs/Wiki/06-CodingStandards.md
+* Building requirements: docs/Wiki_zh_cn/05-DevelopmentEnvironment.md
+* Code standards: docs/Wiki_zh_cn/06-CodingStandards.md
 * License: See LICENSE
 * Mathematical proofs: src/Core-0/math_proofs.tex
 
@@ -47,33 +47,31 @@ New Kernel Developer
 
 Welcome! Start your HIC development journey here:
 
-* Getting Started: docs/Wiki/03-QuickStart.md
-* Build System: docs/Wiki/04-BuildSystem.md
-* Core-0 Implementation: docs/Wiki/08-Core0.md
-* Capability System: docs/Wiki/11-CapabilitySystem.md
-* Security Mechanisms: docs/Wiki/13-SecurityMechanisms.md
-* Development Environment: docs/Wiki/05-DevelopmentEnvironment.md
+* Getting Started: docs/Wiki_zh_cn/03-QuickStart.md
+* Build System: docs/Wiki_zh_cn/04-BuildSystem.md
+* Core-0 Implementation: docs/Wiki_zh_cn/08-Core0.md
+* Capability System: docs/Wiki_zh_cn/11-CapabilitySystem.md
+* Security Mechanisms: docs/Wiki_zh_cn/13-SecurityMechanisms.md
+* Development Environment: docs/Wiki_zh_cn/05-DevelopmentEnvironment.md
 
 Academic Researcher
 -------------------
 
 Explore HIC's formal verification and security proofs:
 
-* Three-Layer Architecture: docs/Wiki/02-Architecture.md
+* Three-Layer Architecture: docs/Wiki_zh_cn/02-Architecture.md
 * Mathematical Proofs: src/Core-0/math_proofs.tex
 * Formal Verification: src/Core-0/formal_verification.c
-* Capability Theory: docs/Wiki/11-CapabilitySystem.md
-* Security Guarantees: docs/Wiki/13-SecurityMechanisms.md
-* Architecture Abstraction: docs/ARCH_ABSTRACTION.md
-* Layer Structure: docs/LAYER_STRUCTURE.md
+* Capability Theory: docs/Wiki_zh_cn/11-CapabilitySystem.md
+* Security Guarantees: docs/Wiki_zh_cn/13-SecurityMechanisms.md
 
 Security Expert
 ---------------
 
 Security documentation and verification guides:
 
-* Security Mechanisms: docs/Wiki/13-SecurityMechanisms.md
-* Capability System: docs/Wiki/11-CapabilitySystem.md
+* Security Mechanisms: docs/Wiki_zh_cn/13-SecurityMechanisms.md
+* Capability System: docs/Wiki_zh_cn/11-CapabilitySystem.md
 * Formal Verification: src/Core-0/formal_verification.c
 * Audit System: src/Core-0/audit.c
 * Domain Isolation: src/Core-0/domain.c
@@ -84,9 +82,9 @@ System Administrator
 
 Configure, tune, and troubleshoot HIC systems:
 
-* Quick Start: docs/Wiki/03-QuickStart.md
-* Build System: docs/Wiki/04-BuildSystem.md
-* Troubleshooting: docs/Wiki/FAQ.md
+* Quick Start: docs/Wiki_zh_cn/03-QuickStart.md
+* Build System: docs/Wiki_zh_cn/04-BuildSystem.md
+* Troubleshooting: docs/Wiki_zh_cn/FAQ.md
 * Boot Configuration: docs/TD/引导加载程序.md
 * BIOS/UEFI Support: docs/TD/bios.md, docs/TD/uefi.md
 
@@ -107,37 +105,36 @@ Application Developer
 Create Application-3 layer applications:
 
 * System Calls: src/Core-0/syscall.c
-* Capability System: docs/Wiki/11-CapabilitySystem.md
-* API Reference: docs/Wiki/11-CapabilitySystem.md
+* Capability System: docs/Wiki_zh_cn/11-CapabilitySystem.md
+* API Reference: docs/Wiki_zh_cn/11-CapabilitySystem.md
 * Development Guide: docs/Wiki/05-DevelopmentEnvironment.md
 
 Core Documentation
 =================
 
-* Project Overview: docs/Wiki/01-Overview.md
-* Architecture Design: docs/Wiki/02-Architecture.md
-* Quick Start Guide: docs/Wiki/03-QuickStart.md
-* Build System: docs/Wiki/04-BuildSystem.md
-* Development Environment: docs/Wiki/05-DevelopmentEnvironment.md
-* Coding Standards: docs/Wiki/06-CodingStandards.md
-* Testing Guide: docs/Wiki/07-Testing.md
+* Project Overview: docs/Wiki_zh_cn/01-Overview.md
+* Architecture Design: docs/Wiki_zh_cn/02-Architecture.md
+* Quick Start Guide: docs/Wiki_zh_cn/03-QuickStart.md
+* Build System: docs/Wiki_zh_cn/04-BuildSystem.md
+* Development Environment: docs/Wiki_zh_cn/05-DevelopmentEnvironment.md
+* Coding Standards: docs/Wiki_zh_cn/06-CodingStandards.md
+* Testing Guide: docs/Wiki_zh_cn/07-Testing.md
 
 
 Advanced Topics
 ===============
 
 * Formal Verification: src/Core-0/formal_verification.c, src/Core-0/math_proofs.tex
-* Capability System: docs/Wiki/11-CapabilitySystem.md
-* Security Mechanisms: docs/Wiki/13-SecurityMechanisms.md
-* Core-0 Layer: docs/Wiki/08-Core0.md
-* Directory Structure: docs/DIRECTORY_STRUCTURE.md
+* Capability System: docs/Wiki_zh_cn/11-CapabilitySystem.md
+* Security Mechanisms: docs/Wiki_zh_cn/13-SecurityMechanisms.md
+* Core-0 Layer: docs/Wiki_zh_cn/08-Core0.md
 
 
 Communication and Support
 =========================
 
-* Documentation: docs/Wiki/index.md
-* FAQ: docs/Wiki/FAQ.md
+* Documentation: docs/Wiki_zh_cn/index.md
+* FAQ: docs/Wiki_zh_cn/FAQ.md
 * Build Scripts: scripts/build_system.py, scripts/build_system.sh
 * Repository: https://github.com/DslsDZC/HIC
 * License: LICENSE (GPL-2.0)
