@@ -11,83 +11,17 @@
 
 #include <stdarg.h>
 #include "console.h"
+#include "minimal_uart.h"
 #include "mem.h"
 #include "hal.h"
-#include "boot_info.h"
-
-/* 默认串口端口（x86_64 COM1） */
-#define DEFAULT_SERIAL_PORT 0x3F8
-
-/* 控制台状态 */
-static console_info_t g_console_info = {
-    .type = CONSOLE_TYPE_SERIAL,
-    .serial_port = DEFAULT_SERIAL_PORT,
-    .serial_baud = 115200
-};
-
-/* 串口输出函数（使用HAL接口，支持多架构） */
-static void serial_putc(char c) {
-    /* 使用HAL接口输出，支持多架构 */
-    hal_outb(g_console_info.serial_port, (u8)c);
-}
-
-/* 等待串口发送完成（读取LSR寄存器的bit 5） */
-static void serial_wait_tx(void) {
-#if defined(__x86_64__)
-    /* x86_64架构：读取Line Status Register（LSR，偏移5）的bit 5（THRE） */
-    volatile u8 lsr;
-    do {
-        lsr = hal_inb(g_console_info.serial_port + 5);
-    } while ((lsr & 0x20) == 0);  /* 等待Transmitter Holding Register Empty */
-#else
-    /* 其他架构：简单的延迟 */
-    hal_udelay(1);
-#endif
-}
-
-/* 计算波特率除数（仅x86_64需要） */
-#if defined(__x86_64__)
-static u16 serial_calc_divisor(u32 baud) {
-    /* 基准频率 = 115200 Hz（标准PC串口时钟） */
-    if (baud == 0) return 1;  /* 防止除零 */
-    return (u16)(115200 / baud);
-}
-#endif
 
 /* 初始化控制台 */
 void console_init(console_type_t type)
 {
-    g_console_info.type = type;
+    (void)type;  /* 暂时忽略类型参数 */
     
-#if defined(__x86_64__)
-    /* x86_64架构：需要初始化串口硬件
-     * 使用最简化的配置，逐步初始化
-     */
-    u16 port = g_console_info.serial_port;
-    
-    /* 最简配置：只设置8N1，不改变波特率（假设bootloader已设置） */
-    hal_outb(port + 3, 0x03);  /* 8N1, DLAB disable */
-    
-    /* 稍微延迟 */
-    hal_udelay(10);
-#else
-    /* 其他架构：假设bootloader已经初始化串口 */
-    (void)port;
-#endif
-}
-
-/* 设置串口配置 */
-void console_set_serial_config(u16 port, u32 baud) {
-    g_console_info.serial_port = (port != 0) ? port : DEFAULT_SERIAL_PORT;
-    g_console_info.serial_baud = (baud != 0) ? baud : 115200;
-    
-    /* 重新初始化串口 */
-    console_init(g_console_info.type);
-}
-
-/* 获取控制台信息 */
-console_info_t* console_get_info(void) {
-    return &g_console_info;
+    /* 引导程序已经初始化了串口，这里不再重新初始化
+       避免与引导程序的串口配置冲突 */
 }
 
 /* 清屏 */
@@ -96,7 +30,7 @@ void console_clear(void)
     /* 串口清屏：发送ANSI清屏序列 */
     const char *clear_seq = "\033[2J\033[H";
     while (*clear_seq) {
-        serial_putc(*clear_seq++);
+        minimal_uart_putc(*clear_seq++);
     }
 }
 
@@ -104,14 +38,14 @@ void console_clear(void)
 void console_putchar(char c)
 {
     /* 仅通过串口输出 */
-    serial_putc(c);
+    minimal_uart_putc(c);
 }
 
 /* 输出字符串 */
 void console_puts(const char *str)
 {
     while (*str) {
-        serial_putc(*str++);
+        minimal_uart_putc(*str++);
     }
 }
 
