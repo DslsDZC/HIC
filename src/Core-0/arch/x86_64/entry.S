@@ -58,10 +58,6 @@ kernel_entry:
     jmp .kernel_panic_loop
 
 .boot_info_valid:
-    # 调试：重新设置栈指针（使用boot_info中的栈）
-    mov %r15, %rdi
-    mov 0x100(%rdi), %rsp    # 假设栈指针在boot_info偏移0x100处
-    
     # 输出调试信息：'4' 表示跳转到kernel_start
     mov $'4', %al
     call .serial_putchar
