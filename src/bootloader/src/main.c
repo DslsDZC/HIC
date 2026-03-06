@@ -835,7 +835,7 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     boot_info->gdt.gdt_limit = (uint16_t)gdt_limit;
 
     console_printf("[BOOTLOADER] GDT initialized at 0x%lx\n", (uint64_t)(&boot_info->gdt.gdt));
-    console_printf("[BOOTLOADER] GDT base=0x%lx, limit=0x%lx\n", 
+    console_printf("\n[BOOTLOADER] GDT base=0x%lx, limit=0x%lx\n", 
                   boot_info->gdt.gdt_base, boot_info->gdt.gdt_limit);
 
     // 内核信息
@@ -1269,7 +1269,7 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         }
         
         // 调试：检查源数据的前几个字节（在跳转到内核之前）
-        console_puts("[BOOTLOADER] ***NEW CODE*** Checking source kernel data...\n");
+        console_puts("[BOOTLOADER] NEW CODE: Checking source kernel data...\n");
         uint8_t *kernel_code_ptr = (uint8_t*)kernel_code_start;
         
         // 调试：输出 raw_bytes 的前几个字节

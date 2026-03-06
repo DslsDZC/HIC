@@ -17,25 +17,6 @@
 # 参数: %rdi = hic_boot_info_t* boot_info
 _start:
 kernel_entry:
-    # 【调试】输出当前CS寄存器值
-    mov $'C', %al
-    call .serial_putchar
-    mov %cs, %ax
-    call .serial_hex
-    call .serial_newline
-
-    # 【调试】输出'R'表示进入内核
-    mov $'R', %al
-    call .serial_putchar
-
-    # 输出调试信息：'K' 表示内核入口
-    mov $'K', %al
-    call .serial_putchar
-    
-    # 输出调试信息：'1' 表示保存寄存器
-    mov $'1', %al
-    call .serial_putchar
-    
     # 保存调用者上下文
     push %rbx
     push %rbp
@@ -47,28 +28,17 @@ kernel_entry:
     # 保存boot_info指针
     mov %rdi, %r15
 
-    # 输出调试信息：'2' 表示设置参数
-    mov $'2', %al
-    call .serial_putchar
-    
-    # 输出调试信息：'3' 表示检查boot_info指针
-    mov $'3', %al
-    call .serial_putchar
-    
     # 检查boot_info指针是否为0
     test %r15, %r15
     jnz .boot_info_valid
     
-    # boot_info指针为0，输出'E'表示错误
-    mov $'E', %al
-    call .serial_putchar
+    # boot_info指针为0，停止CPU
+    cli
+.kernel_panic_loop:
+    hlt
     jmp .kernel_panic_loop
 
 .boot_info_valid:
-    # 输出调试信息：'4' 表示跳转到kernel_start
-    mov $'4', %al
-    call .serial_putchar
-
     # 确保栈16字节对齐（System V AMD64 ABI要求）
     # 当前栈指针已经减去了48字节（6个寄存器 * 8字节）
     # 48 % 16 = 0，所以栈已经是16字节对齐的
@@ -78,15 +48,9 @@ kernel_entry:
     mov %r15, %rdi        # boot_info作为第一个参数
     call kernel_start
 
-    # DEBUG: 输出'5'表示kernel_start返回
-    mov $'5', %al
-    call .serial_putchar
-
-    # 如果kernel_start返回，输出错误信息并停止
-    cli                   # 禁用中断
-.kernel_panic_loop:
-    hlt                   # 停止CPU
-    jmp .kernel_panic_loop
+    # 如果kernel_start返回，停止CPU
+    cli
+    jmp .kernel_panic_loop   # 跳转到上面的 panic 循环
 
 # 串口输出字符函数（内联）
 # 输入: %al = 字符
