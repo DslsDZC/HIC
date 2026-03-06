@@ -3,7 +3,7 @@
 
 .PHONY: all clean bootloader kernel install help debug test build-qt build-gtk build-tui build-cli
 .PHONY: iso iso-clean iso-list iso-test
-.PHONY: gdb gdb-script qemu qemu-clean update-disk image
+.PHONY: gdb gdb-script qemu qemu-clean image
 .PHONY: install-disk
 
 # 项目配置
@@ -92,20 +92,6 @@ img: bootloader kernel privileged-services privileged-modules
 	@echo "已嵌入的模块:"
 	@mdir -i $(OUTPUT_DIR)/hic-uefi-disk.img ::modules
 	@echo "磁盘镜像创建完成: $(OUTPUT_DIR)/hic-uefi-disk.img"
-
-# 更新磁盘镜像
-update-disk: img
-	@echo "更新磁盘镜像"
-	@sudo umount /tmp/hic_mnt 2>/dev/null || true
-	@sudo losetup -f output/hic-uefi-disk.img /dev/loop0 2>/dev/null || true
-	@sudo partprobe /dev/loop0 2>/dev/null || true
-	@sudo mount /dev/loop0p1 /tmp/hic_mnt 2>/dev/null || true
-	@sudo mkdir -p /tmp/hic_mnt/EFI/BOOT
-	@sudo cp $(BOOTLOADER_DIR)/bin/bootx64.efi /tmp/hic_mnt/EFI/BOOT/
-	@sudo cp $(BUILD_DIR)/bin/hic-kernel.hic /tmp/hic_mnt/hic-kernel.bin
-	@sudo umount /tmp/hic_mnt 2>/dev/null || true
-	@sudo losetup -d /dev/loop0 2>/dev/null || true
-	@echo "磁盘镜像更新完成"
 
 # 清理
 clean: clean-debug clean-iso
@@ -293,7 +279,7 @@ run-serial:
 		2>&1 | tail -100 || true
 
 # 启动QEMU（后台）
-qemu: update-disk
+qemu: img
 	@echo " 启动QEMU（GDB模式） "
 	@cp $(QEMU_OVMF_VARS) /tmp/OVMF_VARS.4m.fd 2>/dev/null || \
 		touch /tmp/OVMF_VARS.4m.fd
@@ -337,7 +323,7 @@ clean-debug:
 	@echo "调试文件清理完成"
 
 # 快速测试（不带GDB）
-test: update-disk
+test: img
 	@echo " 快速测试启动 "
 	@cp $(QEMU_OVMF_VARS) /tmp/OVMF_VARS.4m.fd 2>/dev/null || \
 		touch /tmp/OVMF_VARS.4m.fd
@@ -396,7 +382,6 @@ help:
 	@echo "  make kernel             - 仅构建内核"
 	@echo "  make image              - 生成HIC镜像"
 	@echo "  make img                - 创建磁盘镜像（IMG）"
-	@echo "  make update-disk        - 更新磁盘镜像"
 	@echo "  make clean              - 清理所有构建文件"
 	@echo "  make install            - 安装构建产物到output目录"
 	@echo ""

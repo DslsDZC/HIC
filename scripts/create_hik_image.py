@@ -33,11 +33,11 @@ def create_hic_image(elf_path, output_path):
     # 段信息
     # 从ELF文件中读取段信息
     # .text 段: 0x100000, 大小 0x19ff6
-    # .data 段: 0x121000, 大小 0xa03
-    # .bss  段: 0x122000, 大小 0x2f000
+    # .data 段: 0x122000, 大小 0xa03
+    # .bss  段: 0x123000, 大小 0x2f000
     
     code_size = len(binary_code)
-    bss_offset = 0x22000  # .bss 段在 binary_code 中的偏移 (0x122000 - 0x100000)
+    bss_offset = 0x23000  # .bss 段在 binary_code 中的偏移 (0x123000 - 0x100000)
     bss_size = 0x2f000    # .bss 段大小
     
     print(f"代码大小: 0x{code_size:x}")
@@ -59,33 +59,31 @@ def create_hic_image(elf_path, output_path):
     struct.pack_into('<Q', header, 60, 0)
     struct.pack_into('<Q', header, 68, 0)
     
-    # 段表 (80字节, 2个段项)
-    segment_table = bytearray(80)
+    # 段表 (64字节, 2个段项，每个32字节)
+    segment_table = bytearray(64)
     
     # 段1: 代码段（包含 .text 和 .data）
     struct.pack_into('<I', segment_table, 0, 1)  # CODE
     struct.pack_into('<I', segment_table, 4, 7)  # READABLE | WRITABLE | EXECUTABLE
-    struct.pack_into('<Q', segment_table, 8, 160)
-    struct.pack_into('<Q', segment_table, 16, 0x100000)
+    struct.pack_into('<Q', segment_table, 8, 192)  # file_offset = 192 (0xC0)
+    struct.pack_into('<Q', segment_table, 16, 0x100000)  # memory_offset
     struct.pack_into('<Q', segment_table, 24, code_size)
-    struct.pack_into('<Q', segment_table, 32, code_size)
     
     # 段2: BSS 段
-    struct.pack_into('<I', segment_table, 40, 4)  # BSS
-    struct.pack_into('<I', segment_table, 44, 3)  # READABLE | WRITABLE
-    struct.pack_into('<Q', segment_table, 48, 0)  # 文件中没有数据
-    struct.pack_into('<Q', segment_table, 56, 0x122000)
-    struct.pack_into('<Q', segment_table, 64, 0)  # 文件大小为0
-    struct.pack_into('<Q', segment_table, 72, bss_size)  # 内存大小
+    struct.pack_into('<I', segment_table, 32, 4)  # BSS
+    struct.pack_into('<I', segment_table, 36, 3)  # READABLE | WRITABLE
+    struct.pack_into('<Q', segment_table, 40, 0)  # file_offset = 0 (BSS无文件数据)
+    struct.pack_into('<Q', segment_table, 48, 0x123000)  # memory_offset = 0x123000
+    struct.pack_into('<Q', segment_table, 56, 0)  # file_size = 0
+    struct.pack_into('<Q', segment_table, 60, bss_size)  # memory_size
     
     # 调试：输出段表字节
     print(f"Segment table bytes: {' '.join(f'{b:02x}' for b in segment_table)}")
     print(f"Segment 0 type: {struct.unpack('<I', segment_table[0:4])[0]}")
     print(f"Segment 0 file_offset: {hex(struct.unpack('<Q', segment_table[8:16])[0])}")
     print(f"Segment 0 memory_offset: {hex(struct.unpack('<Q', segment_table[16:24])[0])}")
-    
-    # 调试：输出头部字节
-    print(f"Header bytes (offsets 112-119): {' '.join(f'{b:02x}' for b in header[112:120])}")
+    print(f"Segment 1 type: {struct.unpack('<I', segment_table[32:36])[0]}")
+    print(f"Segment 1 memory_offset: {hex(struct.unpack('<Q', segment_table[48:56])[0])}")
     
     # 写入文件（使用os.write避免潜在问题）
     fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
