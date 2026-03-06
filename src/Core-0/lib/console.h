@@ -26,6 +26,10 @@ typedef struct {
 /* 控制台初始化 */
 void console_init(console_type_t type);
 
+/* 串口配置 */
+void console_set_serial_config(u16 port, u32 baud);
+console_info_t* console_get_info(void);
+
 /* 控制台输出 */
 void console_putchar(char c);
 void console_puts(const char *str);
