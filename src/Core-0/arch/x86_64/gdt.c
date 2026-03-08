@@ -93,18 +93,18 @@ void gdt_init(void)
     gdt_load(&gdt_ptr);
     
     /* 加载TSS */
-    tss_load(GDT_TSS << 3);
+    tss_load(TSS_SELECTOR);
     
     /* 重新加载段寄存器 */
     __asm__ volatile (
-        "mov $0x10, %%ax\n"
+        "mov %0, %%ax\n"
         "mov %%ax, %%ds\n"
         "mov %%ax, %%es\n"
         "mov %%ax, %%fs\n"
         "mov %%ax, %%gs\n"
-        "mov $0x08, %%ax\n"
+        "mov %0, %%ax\n"   /* SS 应使用数据段选择子 */
         "mov %%ax, %%ss\n"
-        : : : "ax"
+        : : "i"(KERNEL_DS_SELECTOR) : "ax"
     );
     
     console_puts("[GDT] GDT initialized\n");
@@ -129,5 +129,4 @@ void tss_set_stack(uint64_t rsp)
     tss.ist[4] = 0;
     tss.ist[5] = 0;
     tss.ist[6] = 0;
-    (void)rsp;
 }

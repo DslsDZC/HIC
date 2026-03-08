@@ -277,6 +277,27 @@ void serial_init(uint16_t port)
  */
 void serial_putchar(char c)
 {
+    // 处理换行符：将 \n 转换为 \r\n
+    if (c == '\n') {
+        // 先发送回车符
+        uint8_t lsr;
+        do {
+            __asm__ volatile (
+                "inb $5, %%al\n"    // LSR (线路状态寄存器) = port + 5
+                : "=a"(lsr)
+                : "d"(0x3F8)
+            );
+        } while (!(lsr & 0x20));  // 检查THRE位（发送保持寄存器空）
+
+        // 发送回车符
+        __asm__ volatile (
+            "movb $0x0D, %%al\n"   // '\r' = 0x0D
+            "outb %%al, $0\n"      // THR (发送保持寄存器) = port + 0
+            :
+            : "d"(0x3F8)
+        );
+    }
+
     // 等待发送缓冲区为空
     uint8_t lsr;
     do {
@@ -286,7 +307,7 @@ void serial_putchar(char c)
             : "d"(0x3F8)
         );
     } while (!(lsr & 0x20));  // 检查THRE位（发送保持寄存器空）
-    
+
     // 发送字符
     __asm__ volatile (
         "movb %0, %%al\n"
