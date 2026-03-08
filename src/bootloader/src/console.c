@@ -143,6 +143,43 @@ void console_printf(const char *fmt, ...)
                     break;
                 }
                 
+                case '0': {
+                    // 处理宽度修饰符，如 %08x, %04x
+                    fmt++;
+                    int width = 0;
+                    while (*fmt >= '0' && *fmt <= '9') {
+                        width = width * 10 + (*fmt - '0');
+                        fmt++;
+                    }
+                    
+                    if (*fmt == 'x') {
+                        unsigned int value = va_arg(args, unsigned int);
+                        uint_to_str(value, buffer, 16);
+                        
+                        // 计算填充
+                        int len = 0;
+                        while (buffer[len]) len++;
+                        int padding = width - len;
+                        
+                        // 输出前导零
+                        for (int i = 0; i < padding; i++) {
+                            console_putchar('0');
+                        }
+                        
+                        console_puts(buffer);
+                    } else {
+                        // 不支持的格式，原样输出
+                        console_putchar('0');
+                        if (width > 0) {
+                            char wbuf[16];
+                            int_to_str(width, wbuf, 10);
+                            console_puts(wbuf);
+                        }
+                        console_putchar(*fmt);
+                    }
+                    break;
+                }
+                
                 case 'x': {
                     unsigned int value = va_arg(args, unsigned int);
                     uint_to_str(value, buffer, 16);

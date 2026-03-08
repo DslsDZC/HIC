@@ -58,6 +58,13 @@ kernel_entry:
     jmp .kernel_panic_loop
 
 .boot_info_valid:
+    # 加载 GDT
+    lgdt gdt_ptr
+    
+    # 重新设置栈指针（使用boot_info中的栈）
+    mov %r15, %rdi
+    mov 0x698(%rdi), %rsp    # stack_top在boot_info偏移0x698处
+    
     # 输出调试信息：'4' 表示跳转到kernel_start
     mov $'4', %al
     call .serial_putchar

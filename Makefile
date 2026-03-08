@@ -24,7 +24,7 @@ QEMU_OVMF_VARS = /usr/share/edk2-ovmf/x64/OVMF_VARS.4m.fd
 # 主要构建目标
 
 # 默认目标 - 启动增强的构建系统
-all: build
+all: img
 
 # 快速构建向导（推荐新手）
 start:
