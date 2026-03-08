@@ -473,6 +473,16 @@ void serial_init(uint16_t port)
  */
 void serial_putchar(uint16_t port, char c)
 {
+    // 处理换行符：将 \n 转换为 \r\n
+    if (c == '\n') {
+        // 先发送回车符
+        // 等待发送缓冲区为空
+        while ((inb(port + 5) & 0x20) == 0) {
+            ;
+        }
+        outb(port, '\r');
+    }
+
     // 等待发送缓冲区为空
     while ((inb(port + 5) & 0x20) == 0) {
         ;

@@ -37,16 +37,28 @@ void console_clear(void)
 /* 输出字符 */
 void console_putchar(char c)
 {
-    /* 仅通过串口输出 */
-    minimal_uart_putc(c);
+    /* 直接输出字符，去掉强制转换 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(c), "d"(0x3F8));
 }
 
 /* 输出字符串 */
 void console_puts(const char *str)
 {
-    while (*str) {
-        minimal_uart_putc(*str++);
+    if (str == NULL) {
+        return;
     }
+    
+    /* 调试：输出 'B' 表示开始 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('B'), "d"(0x3F8));
+    
+    /* 直接输出字符，避免复杂的循环 */
+    while (*str != '\0') {
+        __asm__ volatile("outb %%al, %%dx" : : "a"(*str), "d"(0x3F8));
+        str++;
+    }
+    
+    /* 调试：输出 'E' 表示结束 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('E'), "d"(0x3F8));
 }
 
 /* 输出数字（十进制） */

@@ -35,7 +35,6 @@ x86_64_save_context:
     movq %r15, 112(%rdi)
 
     /* 保存特殊寄存器 */
-    leaq 120(%rdi), %rax
     movq (%rsp), %rdx      /* 返回地址 */
     movq %rdx, 120(%rdi)   /* RIP */
     pushfq
@@ -53,13 +52,13 @@ x86_64_save_context:
  * 参数: rdi = 上下文结构指针
  */
 x86_64_restore_context:
-    /* 恢复通用寄存器 */
+    /* 恢复通用寄存器（除 rsp 外） */
     movq 0(%rdi), %rax
     movq 8(%rdi), %rbx
     movq 16(%rdi), %rcx
     movq 24(%rdi), %rdx
+    movq 32(%rdi), %rsi       /* 恢复 rsi */
     movq 40(%rdi), %rbp
-    movq 48(%rdi), %rsp
     movq 56(%rdi), %r8
     movq 64(%rdi), %r9
     movq 72(%rdi), %r10
@@ -69,12 +68,13 @@ x86_64_restore_context:
     movq 104(%rdi), %r14
     movq 112(%rdi), %r15
 
-    /* 恢复RFLAGS */
+    /* 在原栈上恢复 RFLAGS（避免污染新栈） */
     movq 128(%rdi), %rdx
     pushq %rdx
     popfq
 
-    /* 跳转到保存的RIP */
+    /* 最后恢复 rsp 并跳转 */
+    movq 48(%rdi), %rsp
     movq 120(%rdi), %rdx
     jmp *%rdx
 
@@ -100,8 +100,8 @@ context_switch:
     /* 保存栈指针到 prev */
     movq %rsp, (%rdi)
 
-    /* 保存返回地址到 prev */
-    movq 8(%rsp), %rax
+    /* 保存返回地址到 prev（偏移 48，因为压入了 6 个寄存器） */
+    movq 48(%rsp), %rax
     movq %rax, 8(%rdi)
 
     /* 恢复next线程上下文 */

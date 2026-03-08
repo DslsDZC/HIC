@@ -13,23 +13,19 @@
 
 .extern kernel_start
 
+/* boot_info 结构体偏移常量 */
+.set BOOT_INFO_OFFSET_STACK_TOP, 0x698
+
+/* UART 寄存器常量 */
+.set UART_LSR, 0x3FD        /* 线路状态寄存器 */
+.set UART_THR, 0x3F8        /* 发送保持寄存器 */
+.set UART_THRE, 0x20        /* 发送保持寄存器空标志 */
+
 # 内核入口点
 # 参数: %rdi = hic_boot_info_t* boot_info
 _start:
 kernel_entry:
-    # 输出调试信息：'K' 表示内核入口
-    mov $'K', %al
-    call .serial_putchar
-    
-    # 输出调试信息：'K' 重复测试
-    mov $'K', %al
-    call .serial_putchar
-    
-    # 输出调试信息：'1' 表示保存寄存器
-    mov $'1', %al
-    call .serial_putchar
-    
-    # 保存调用者上下文
+    # 保存调用者上下文（在串口输出之前）
     push %rbx
     push %rbp
     push %r12
@@ -40,12 +36,12 @@ kernel_entry:
     # 保存boot_info指针
     mov %rdi, %r15
 
-    # 输出调试信息：'2' 表示设置参数
-    mov $'2', %al
+    # 输出调试信息：'K' 表示内核入口
+    mov $'K', %al
     call .serial_putchar
     
-    # 输出调试信息：'3' 表示检查boot_info指针
-    mov $'3', %al
+    # 输出调试信息：'1' 表示检查boot_info指针
+    mov $'1', %al
     call .serial_putchar
     
     # 检查boot_info指针是否为0
@@ -58,12 +54,23 @@ kernel_entry:
     jmp .kernel_panic_loop
 
 .boot_info_valid:
+    # 输出调试信息：'2' 表示加载GDT
+    mov $'2', %al
+    call .serial_putchar
+    
     # 加载 GDT
     lgdt gdt_ptr
     
+    # 输出调试信息：'3' 表示设置栈指针
+    mov $'3', %al
+    call .serial_putchar
+    
     # 重新设置栈指针（使用boot_info中的栈）
     mov %r15, %rdi
-    mov 0x698(%rdi), %rsp    # stack_top在boot_info偏移0x698处
+    mov BOOT_INFO_OFFSET_STACK_TOP(%rdi), %rsp
+    
+    # 栈指针对齐（16字节对齐，符合x86-64 ABI）
+    and $~0xF, %rsp
     
     # 输出调试信息：'4' 表示跳转到kernel_start
     mov $'4', %al
@@ -84,12 +91,12 @@ kernel_entry:
 .serial_putchar:
     push %rdx
     push %rax
-    mov $0x3FD, %dx           # 串口线状态寄存器
+    mov $UART_LSR, %dx        # 串口线路状态寄存器
 .serial_putchar_wait:
     in %dx, %al               # 读取状态
-    test $0x20, %al           # 检查发送缓冲区是否为空
+    test $UART_THRE, %al      # 检查发送保持寄存器是否为空
     jz .serial_putchar_wait
-    mov $0x3F8, %dx           # 串口数据寄存器
+    mov $UART_THR, %dx        # 串口数据寄存器
     pop %rax                  # 恢复字符
     out %al, %dx              # 输出字符
     pop %rdx

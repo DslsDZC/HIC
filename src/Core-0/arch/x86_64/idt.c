@@ -42,6 +42,12 @@ extern void isr_20(void);
 extern void isr_30(void);
 extern void isr_128(void);
 
+/* 快速中断处理存根（在 fast_path.S 中实现） */
+extern void isr_fast_stub(void);
+
+/* 外部函数声明 */
+extern void irq_dispatch(u32 irq_vector);
+
 /* 设置IDT门 */
 void idt_set_gate(uint8_t vector, uint64_t handler, uint16_t selector,
                  uint8_t type, uint8_t dpl)
@@ -113,9 +119,12 @@ void idt_init(void)
     idt_set_gate(IDT_VECTOR_SYSCALL, (uint64_t)isr_128, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL3);
     
-    /* 设置IRQ处理程序（使用快速路径） */
+    /* 设置IRQ处理程序（使用快速路径）
+     * 注意：IRQ映射到向量32-47，使用统一的快速处理存根
+     * 每个 IRQ 入口必须先压入向量号，然后调用 isr_fast_stub
+     */
     for (u32 i = 32; i < 48; i++) {
-        idt_set_gate((uint8_t)i, (uint64_t)isr_fast_stub, (uint8_t)(GDT_KERNEL_CS << 3),
+        idt_set_gate((uint8_t)i, (uint64_t)isr_fast_stub, GDT_KERNEL_CS << 3,
                      IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
     }
     
@@ -123,16 +132,13 @@ void idt_init(void)
     idt_load(&idt_ptr);
     
     console_puts("[IDT] IDT initialized (fast path for IRQs)\n");
-}
-
-/* 中断处理函数 */
-void interrupt_handler(void)
-{
-    /* 从栈中获取中断向量 */
-    u64 irq_vector;
-    __asm__ volatile ("mov 8(%%rsp), %0" : "=r"(irq_vector));
     
-    /* 调用中断控制器分发 */
-    extern void irq_dispatch(u32 irq_vector);
-    irq_dispatch((u32)irq_vector);
+    /* 注意：
+     * 1. 异常错误码处理：部分异常（如缺页、GPF等）会自动压入错误码。
+     *    汇编存根必须正确处理错误码，确保栈平衡。
+     * 2. 中断控制器初始化：IRQ映射到向量32-47，需要在加载IDT后初始化
+     *    PIC（重新编程）或APIC，避免与异常向量冲突。
+     * 3. 系统调用：此IDT支持 int 0x80（兼容模式），同时支持 syscall 指令
+     *   （通过 syscall_fast_entry）。推荐使用 syscall 指令以获得更好性能。
+     */
 }

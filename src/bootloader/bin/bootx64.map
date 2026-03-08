@@ -96,7 +96,7 @@ LOAD obj/uefi_platform_yaml.o
                 0x00000001800059db                strtoll
                 0x0000000180005a6d                snprintf
                 0x000000018000635f                sscanf
- .text          0x0000000180006630     0x14a0 obj/uefi_console.o
+ .text          0x0000000180006630     0x14d0 obj/uefi_console.o
                 0x0000000180006630                console_init
                 0x00000001800066b2                console_putchar
                 0x00000001800066d7                console_puts
@@ -113,34 +113,34 @@ LOAD obj/uefi_platform_yaml.o
                 0x0000000180007129                log_trace
                 0x000000018000716e                serial_init
                 0x0000000180007236                serial_putchar
-                0x000000018000727a                serial_puts
-                0x00000001800072ba                serial_printf
- .text          0x0000000180007ad0        0x0 obj/uefi_efi_guids.o
- .text          0x0000000180007ad0       0xe0 obj/uefi_embedded_kernel_loader.o
-                0x0000000180007ad0                load_kernel_image_embedded
- .text          0x0000000180007bb0      0xe40 obj/uefi_fat32.o
-                0x0000000180007ef6                fat32_init
-                0x0000000180008073                fat32_is_valid
-                0x0000000180008741                fat32_open_file
-                0x0000000180008806                fat32_read_file
-                0x00000001800089b7                fat32_free_buffer
- .text          0x00000001800089f0        0x0 obj/uefi_platform_embedded.o
- .text          0x00000001800089f0      0x790 obj/uefi_hardware_probe.o
-                0x0000000180008a77                hardware_probe_init
-                0x0000000180008ad2                probe_cpu
-                0x0000000180008e62                probe_memory_topology
-                0x0000000180008f6d                probe_pci_devices
-                0x0000000180008fc2                probe_interrupt_controller
-                0x00000001800090f4                hardware_probe_all
- .text          0x0000000180009180       0x20 obj/uefi_platform_yaml.o
-                0x0000000180009180                get_embedded_platform_config
-                0x000000018000918d                get_embedded_platform_config_size
+                0x00000001800072ac                serial_puts
+                0x00000001800072ec                serial_printf
+ .text          0x0000000180007b00        0x0 obj/uefi_efi_guids.o
+ .text          0x0000000180007b00       0xe0 obj/uefi_embedded_kernel_loader.o
+                0x0000000180007b00                load_kernel_image_embedded
+ .text          0x0000000180007be0      0xe40 obj/uefi_fat32.o
+                0x0000000180007f26                fat32_init
+                0x00000001800080a3                fat32_is_valid
+                0x0000000180008771                fat32_open_file
+                0x0000000180008836                fat32_read_file
+                0x00000001800089e7                fat32_free_buffer
+ .text          0x0000000180008a20        0x0 obj/uefi_platform_embedded.o
+ .text          0x0000000180008a20      0x790 obj/uefi_hardware_probe.o
+                0x0000000180008aa7                hardware_probe_init
+                0x0000000180008b02                probe_cpu
+                0x0000000180008e92                probe_memory_topology
+                0x0000000180008f9d                probe_pci_devices
+                0x0000000180008ff2                probe_interrupt_controller
+                0x0000000180009124                hardware_probe_all
+ .text          0x00000001800091b0       0x20 obj/uefi_platform_yaml.o
+                0x00000001800091b0                get_embedded_platform_config
+                0x00000001800091bd                get_embedded_platform_config_size
  *(SORT_BY_NAME(.text$*))
  *(.text.*)
  *(.gnu.linkonce.t.*)
  *(.glue_7t)
  *(.glue_7)
-                0x00000001800091a0                . = ALIGN (0x8)
+                0x00000001800091d0                . = ALIGN (0x8)
  *(SORT_NONE(.fini))
  *(.gcc_exc)
                 [!provide]                        PROVIDE (etext = .)

@@ -22,6 +22,7 @@ isr_\num:
 .macro ISR_ERRCODE num
 .global isr_\num
 isr_\num:
+    push $0        /* 压入错误码占位符（与 ISR_NOERRCODE 保持一致）*/
     push $\num    /* 压入中断向量号 */
     jmp isr_common_stub
 .endm
@@ -115,84 +116,64 @@ idt_load:
 /* 上下文保存函数（由HAL调用） */
 .global arch_save_context
 arch_save_context:
-    /* 保存寄存器到context结构 */
-    mov %rdi, %rsi          /* context指针 */
-    
     /* 保存通用寄存器 */
-    push %rax
-    popq 0(%rsi)
-    push %rbx
-    popq 8(%rsi)
-    push %rcx
-    popq 16(%rsi)
-    push %rdx
-    popq 24(%rsi)
-    push %rsi
-    push %rdi
-    popq 40(%rsi)
-    push %rbp
-    popq 48(%rsi)
-    push %r8
-    popq 56(%rsi)
-    push %r9
-    popq 64(%rsi)
-    push %r10
-    popq 72(%rsi)
-    push %r11
-    popq 80(%rsi)
-    push %r12
-    popq 88(%rsi)
-    push %r13
-    popq 96(%rsi)
-    push %r14
-    popq 104(%rsi)
-    push %r15
-    popq 112(%rsi)
-    
-    /* 保存RSP（跳过返回地址） */
-    mov (%rsp), %rax        /* 保存返回地址 */
-    mov %rax, 120(%rsi)
-    
-    /* 保存RFLAGS */
+    movq %rax, 0(%rdi)
+    movq %rbx, 8(%rdi)
+    movq %rcx, 16(%rdi)
+    movq %rdx, 24(%rdi)
+    movq %rdi, 32(%rdi)   /* 保存 RDI 本身 */
+    movq %rsi, 40(%rdi)
+    movq %rbp, 48(%rdi)
+    movq %rsp, 56(%rdi)
+    movq %r8,  64(%rdi)
+    movq %r9,  72(%rdi)
+    movq %r10, 80(%rdi)
+    movq %r11, 88(%rdi)
+    movq %r12, 96(%rdi)
+    movq %r13, 104(%rdi)
+    movq %r14, 112(%rdi)
+    movq %r15, 120(%rdi)
+
+    /* 保存返回地址（在栈顶） */
+    movq (%rsp), %rax
+    movq %rax, 128(%rdi)
+
+    /* 保存 RFLAGS */
     pushfq
-    pop %rax
-    mov %rax, 128(%rsi)
-    
+    popq %rax
+    movq %rax, 136(%rdi)
+
     ret
 
-/* 上下文恢复函数（由HAL调用） */
+/* 上下文恢复函数（由HAL调用）
+ * 参数: %rdi = 上下文结构指针
+ */
 .global arch_restore_context
 arch_restore_context:
-    mov %rdi, %rsi          /* context指针 */
-    
-    /* 恢复RFLAGS */
-    mov 128(%rsi), %rax
-    push %rax
+    /* 使用 RAX、RBX、RCX 作为临时寄存器 */
+    movq 56(%rdi), %rax     /* RSP */
+    movq 128(%rdi), %rbx    /* RIP */
+    movq 32(%rdi), %rcx     /* RDI */
+
+    /* 恢复所有通用寄存器（除 RDI、RSP、RAX、RBX、RCX 外）*/
+    movq 8(%rdi), %rdx
+    movq 40(%rdi), %rsi
+    movq 48(%rdi), %rbp
+    movq 64(%rdi), %r8
+    movq 72(%rdi), %r9
+    movq 80(%rdi), %r10
+    movq 88(%rdi), %r11     /* 恢复 R11 */
+    movq 96(%rdi), %r12     /* 恢复 R12 */
+    movq 104(%rdi), %r13    /* 恢复 R13 */
+    movq 112(%rdi), %r14
+    movq 120(%rdi), %r15
+
+    /* 恢复 RFLAGS（在原栈上） */
+    movq 136(%rdi), %rdx
+    pushq %rdx
     popfq
-    
-    /* 恢复RIP */
-    mov 120(%rsi), %rax
-    
-    /* 恢复RSP（调整栈指针） */
-    mov %rsi, %rdx
-    add $8, %rdx           /* 跳过返回地址 */
-    
-    /* 恢复通用寄存器 */
-    movq 112(%rsi), %r15
-    movq 104(%rsi), %r14
-    movq 96(%rsi), %r13
-    movq 88(%rsi), %r12
-    movq 80(%rsi), %r11
-    movq 72(%rsi), %r10
-    movq 64(%rsi), %r9
-    movq 56(%rsi), %r8
-    movq 48(%rsi), %rbp
-    movq 40(%rsi), %rdi
-    movq 32(%rsi), %rsi
-    movq 24(%rsi), %rdx
-    movq 16(%rsi), %rcx
-    movq 8(%rsi), %rbx
-    movq 0(%rsi), %rax
-    
-    /* 跳转到保存的RIP */
-    ret
+
+    /* 最后设置 RSP、RDI 并跳转 */
+    movq %rax, %rsp
+    movq %rcx, %rdi
+    jmp *%rbx

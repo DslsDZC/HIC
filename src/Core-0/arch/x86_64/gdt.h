@@ -69,13 +69,23 @@ typedef struct {
 #define GDT_SIZE_32BIT        (0 << 6)
 #define GDT_SIZE_64BIT        (1 << 6)
 
-/* GDT选择子 */
+/* GDT选择子（索引） */
 #define GDT_NULL      0
 #define GDT_KERNEL_CS  1
 #define GDT_KERNEL_DS  2
 #define GDT_USER_CS    3
 #define GDT_USER_DS    4
 #define GDT_TSS        5
+
+/* GDT段选择子（索引 << 3 | RPL）
+ * 格式：索引左移3位，低2位为请求特权级（RPL）
+ * RPL=0 表示内核态，RPL=3 表示用户态
+ */
+#define KERNEL_CS_SELECTOR  ((GDT_KERNEL_CS << 3) | 0)  /* 0x08 */
+#define KERNEL_DS_SELECTOR  ((GDT_KERNEL_DS << 3) | 0)  /* 0x10 */
+#define USER_CS_SELECTOR    ((GDT_USER_CS << 3) | 3)    /* 0x1B */
+#define USER_DS_SELECTOR    ((GDT_USER_DS << 3) | 3)    /* 0x23 */
+#define TSS_SELECTOR        (GDT_TSS << 3)              /* 0x28 */
 
 /* 初始化GDT */
 void gdt_init(void);

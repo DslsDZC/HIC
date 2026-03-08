@@ -17,11 +17,14 @@
 #define RING0   0
 #define RING3   3
 
-/* 段选择子 */
-#define KERNEL_CS  (0x08)  /* 内核代码段 */
-#define KERNEL_DS  (0x10)  /* 内核数据段 */
-#define USER_CS    (0x18)  /* 用户代码段 */
-#define USER_DS    (0x20)  /* 用户数据段 */
+/* 段选择子
+ * 格式：索引 << 3 | RPL
+ * 其中索引是 GDT 中的条目索引（从1开始），RPL 是请求特权级
+ */
+#define KERNEL_CS  (0x08)          /* 索引1，RPL0 */
+#define KERNEL_DS  (0x10)          /* 索引2，RPL0 */
+#define USER_CS    (0x1B)          /* 索引3，RPL3 */
+#define USER_DS    (0x23)          /* 索引4，RPL3 */
 
 /* x86-64控制寄存器 */
 static inline uint64_t read_cr0(void)
@@ -33,7 +36,7 @@ static inline uint64_t read_cr0(void)
 
 static inline void write_cr0(uint64_t val)
 {
-    __asm__ volatile ("mov %0, %%cr0" : : "r"(val));
+    __asm__ volatile ("mov %0, %%cr0" : : "r"(val) : "memory");
 }
 
 static inline uint64_t read_cr2(void)
@@ -45,7 +48,7 @@ static inline uint64_t read_cr2(void)
 
 static inline void write_cr2(uint64_t val)
 {
-    __asm__ volatile ("mov %0, %%cr2" : : "r"(val));
+    __asm__ volatile ("mov %0, %%cr2" : : "r"(val) : "memory");
 }
 
 static inline uint64_t read_cr3(void)
@@ -57,7 +60,7 @@ static inline uint64_t read_cr3(void)
 
 static inline void write_cr3(uint64_t val)
 {
-    __asm__ volatile ("mov %0, %%cr3" : : "r"(val));
+    __asm__ volatile ("mov %0, %%cr3" : : "r"(val) : "memory");
 }
 
 static inline uint64_t read_cr4(void)
@@ -69,7 +72,7 @@ static inline uint64_t read_cr4(void)
 
 static inline void write_cr4(uint64_t val)
 {
-    __asm__ volatile ("mov %0, %%cr4" : : "r"(val));
+    __asm__ volatile ("mov %0, %%cr4" : : "r"(val) : "memory");
 }
 
 /* 标志寄存器 */
@@ -82,18 +85,18 @@ static inline uint64_t read_rflags(void)
 
 static inline void write_rflags(uint64_t val)
 {
-    __asm__ volatile ("push %0; popf" : : "r"(val));
+    __asm__ volatile ("push %0; popf" : : "r"(val) : "memory");
 }
 
 /* 禁用/启用中断 */
 static inline void cli(void)
 {
-    __asm__ volatile ("cli");
+    __asm__ volatile ("cli" ::: "memory");
 }
 
 static inline void sti(void)
 {
-    __asm__ volatile ("sti");
+    __asm__ volatile ("sti" ::: "memory");
 }
 
 /* 暂停 */
@@ -105,7 +108,7 @@ static inline void hlt(void)
 /* 内存屏障 */
 static inline void mfence(void)
 {
-    __asm__ volatile ("mfence");
+    __asm__ volatile ("mfence" ::: "memory");
 }
 
 /* 读取时间戳计数器 */

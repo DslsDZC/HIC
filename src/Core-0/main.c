@@ -38,76 +38,9 @@ void kernel_main(void *info)
 {
     /* 第一条指令：调试输出 'A'，表示进入了 kernel_main */
     __asm__ volatile("outb %%al, %%dx" : : "a"('A'), "d"(0x3F8));
-    
-    /* ==================== 第一阶段：串口初始化（最先执行） ==================== */
-    
-    /* 直接用内联汇编初始化串口，避免函数调用问题 */
-    __asm__ volatile(
-        /* 调试：输出 '1' */
-        "mov $0x31, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        
-        /* 禁用中断 */
-        "mov $0x3F9, %%dx\n"
-        "mov $0x00, %%al\n"
-        "outb %%al, %%dx\n"
-        
-        /* 调试：输出 '2' */
-        "mov $0x32, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        
-        /* 启用DLAB，设置波特率 115200 */
-        "mov $0x3FB, %%dx\n"
-        "mov $0x80, %%al\n"
-        "outb %%al, %%dx\n"
-        "mov $0x3F8, %%dx\n"
-        "mov $0x01, %%al\n"
-        "outb %%al, %%dx\n"
-        "mov $0x3F9, %%dx\n"
-        "mov $0x00, %%al\n"
-        "outb %%al, %%dx\n"
-        
-        /* 调试：输出 '3' */
-        "mov $0x33, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        
-        /* 8N1配置 */
-        "mov $0x3FB, %%dx\n"
-        "mov $0x03, %%al\n"
-        "outb %%al, %%dx\n"
-        
-        /* 调试：输出 '4' */
-        "mov $0x34, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        
-        /* 禁用FIFO */
-        "mov $0x3FA, %%dx\n"
-        "mov $0x00, %%al\n"
-        "outb %%al, %%dx\n"
-        
-        /* 调试：输出 '5' */
-        "mov $0x35, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        
-        /* 禁用RTS/DTR */
-        "mov $0x3FC, %%dx\n"
-        "mov $0x00, %%al\n"
-        "outb %%al, %%dx\n"
-        
-        /* 调试：输出 '6' */
-        "mov $0x36, %%al\n"
-        "mov $0x3F8, %%dx\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "ax", "dx", "memory"
-    );
-    
+
+    /* ==================== 注意：串口已在 bootloader 中初始化，这里不重新初始化 ==================== */
+
     /* ==================== 第二阶段：安全验证 ==================== */
 
     /* 转换参数类型 */
