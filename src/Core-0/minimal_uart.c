@@ -69,9 +69,6 @@ static u16 calculate_baud_divisor(u32 baud_rate)
 /* 配置UART */
 void minimal_uart_configure(const uart_config_t *config)
 {
-    // 调试：输出 'C'
-    hal_outb(0x3F8, 'C');
-    
     u16 divisor = calculate_baud_divisor(config->baud_rate);
     u8 lcr = 0;
 
@@ -141,24 +138,61 @@ void minimal_uart_configure(const uart_config_t *config)
 /* 使用配置初始化UART */
 void minimal_uart_init_with_config(const uart_config_t *config)
 {
+    /* 调试输出：进入 minimal_uart_init_with_config */
+    hal_outb(0x3F8, 'I');
+
     minimal_uart_configure(config);
 
     /* 保存配置 */
     memcopy(&g_uart_config, config, sizeof(uart_config_t));
+
+    /* 调试输出：minimal_uart_init_with_config 完成 */
+    hal_outb(0x3F8, 'J');
 }
 
 /* 使用默认配置初始化UART */
 void minimal_uart_init(void)
 {
-    // 调试：尝试直接输出 'A'
-    // 不依赖 g_uart_config，直接使用 0x3F8 端口
-    hal_outb(0x3F8 + 3, 0x03);  // 8N1
-    hal_outb(0x3F8, 'A');  // 输出 'A'
+    /* 第一条指令：直接输出 'B' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('B'), "d"(0x3F8));
     
-    minimal_uart_init_with_config(&g_uart_config);
+    /* 计算波特率除数：115200 = 1843200 / (16 * 1) */
+    const u16 divisor = 1;  /* 115200波特率 */
     
-    // 调试：输出 'B'
-    hal_outb(0x3F8, 'B');
+    /* 使用内联汇编直接输出 '1' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('1'), "d"(0x3F8));
+    
+    /* 禁用中断 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(0x00), "d"(0x3F8 + UART_IER));
+    
+    /* 使用内联汇编直接输出 '2' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('2'), "d"(0x3F8));
+    
+    /* 启用DLAB，设置波特率 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(UART_LCR_DLAB), "d"(0x3F8 + UART_LCR));
+    __asm__ volatile("outb %%al, %%dx" : : "a"(divisor & 0xFF), "d"(0x3F8 + UART_DLL));
+    __asm__ volatile("outb %%al, %%dx" : : "a"((divisor >> 8) & 0xFF), "d"(0x3F8 + UART_DLM));
+    
+    /* 8N1配置 - 这也会清除DLAB */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(0x03), "d"(0x3F8 + UART_LCR));
+    
+    /* 使用内联汇编直接输出 '3' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('3'), "d"(0x3F8));
+    
+    /* 禁用FIFO */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(0x00), "d"(0x3F8 + UART_FCR));
+    
+    /* 使用内联汇编直接输出 '4' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('4'), "d"(0x3F8));
+    
+    /* 使用内联汇编直接输出 '5' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('5'), "d"(0x3F8));
+    
+    /* 禁用RTS/DTR */
+    __asm__ volatile("outb %%al, %%dx" : : "a"(0x00), "d"(0x3F8 + UART_MCR));
+    
+    /* 使用内联汇编直接输出 '6' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('6'), "d"(0x3F8));
 }
 
 /* 自动分配模式：引导层自动分配，写入文件，再从文件读取 */
@@ -186,8 +220,17 @@ void minimal_uart_init_apm_config(const char *yaml_data, size_t yaml_size)
 /* 从引导信息获取YAML数据并初始化（配置文件模式） */
 void minimal_uart_init_from_bootinfo(void)
 {
-    // 直接调用 minimal_uart_init() 使用默认配置
+    /* 先使用默认配置初始化串口，确保能输出调试信息 */
     minimal_uart_init();
+
+    /* 尝试从 boot_info 中读取平台配置（可选） */
+    if (g_boot_info && g_boot_info->platform.platform_data && g_boot_info->platform.platform_size > 0) {
+        /* TODO: 可选 - 从 YAML 重新配置串口 */
+        /* minimal_uart_init_from_yaml(
+            (const char*)g_boot_info->platform.platform_data,
+            g_boot_info->platform.platform_size
+        ); */
+    }
 }
 
 /* 从YAML配置初始化UART */
@@ -289,20 +332,8 @@ void minimal_uart_init_from_yaml(const char *yaml_data, size_t yaml_size)
 /* 发送单个字符 */
 void minimal_uart_putc(char c)
 {
-    // 调试：只在第一次调用时输出 'D'
-    static int first_call = 1;
-    if (first_call) {
-        hal_outb(0x3F8, 'D');
-        first_call = 0;
-    }
-    
-    /* 等待发送保持寄存器就绪 */
-    while (!(hal_inb((u16)(g_uart_config.base_addr + UART_LSR)) & UART_LSR_THRE)) {
-        /* 等待 */
-    }
-
-    /* 发送字符 */
-    hal_outb((u16)(g_uart_config.base_addr + UART_THR), (u8)c);
+    /* 直接输出字符 - 使用硬编码端口地址 */
+    __asm__ volatile("outb %%al, %%dx" : : "a"((u8)c), "d"(0x3F8 + UART_THR));
 }
 
 /* 发送字符串 */

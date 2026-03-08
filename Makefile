@@ -264,7 +264,8 @@ run:
 		-drive if=pflash,readonly=on,file=$(QEMU_OVMF_CODE) \
 		-display gtk \
 		-serial file:/tmp/qemu-serial.log \
-		-monitor none &
+		-monitor none \
+		>/dev/null 2>&1 &
 
 # 快速运行 QEMU (串口模式)
 run-serial:
@@ -317,8 +318,8 @@ debug: qemu gdb
 # 清理调试文件
 clean-debug:
 	@echo " 清理调试文件 "
-	@sudo umount /tmp/hic_mnt 2>/dev/null || true
-	@sudo losetup -d /dev/loop0 2>/dev/null || true
+	@umount /tmp/hic_mnt 2>/dev/null || true
+	@losetup -d /dev/loop0 2>/dev/null || true
 	@rm -f /tmp/qemu.pid /tmp/qemu_output.log /tmp/hic_debug.gdb /tmp/OVMF_VARS.4m.fd
 	@echo "调试文件清理完成"
 
@@ -366,6 +367,33 @@ deps-arch:
 	@echo " Arch Linux 依赖安装 "
 	@sudo pacman -S --needed base-devel git mingw-w64-gcc gnu-efi ncurses gtk3
 
+# 使用 GDB 调试运行（复用现有的 qemu 和 gdb 目标）
+img-run: img
+	@killall -9 qemu-system-x86_64 2>/dev/null || true
+	@sleep 1
+	@echo " 准备 OVMF 变量文件 "
+	@cp $(QEMU_OVMF_VARS) OVMF_VARS.4m.fd 2>/dev/null || touch OVMF_VARS.4m.fd
+	@qemu-system-x86_64 \
+		-drive if=pflash,format=raw,readonly=on,file=$(QEMU_OVMF_CODE) \
+		-drive if=pflash,format=raw,file=OVMF_VARS.4m.fd \
+		-drive format=raw,file=output/hic-uefi-disk.img \
+		-m $(QEMU_MEM) \
+		-nographic \
+		-s -S \
+		> qemu_output.log 2>&1 &
+	@sleep 3
+	@echo " 连接GDB..."
+	@gdb -batch -x gdb_commands.txt $(BUILD_DIR)/bin/hic-kernel.elf > gdb_output.log 2>&1
+	@echo "GDB调试完成"
+	@echo ""
+	@echo "GDB 输出"
+	@cat gdb_output.log
+	@echo ""
+	@echo "QEMU 输出"
+	@cat qemu_output.log | tail -50
+	@echo ""
+	@sleep 5
+	@killall -9 qemu-system-x86_64 2>/dev/null || true
 # 帮助信息
 
 help:

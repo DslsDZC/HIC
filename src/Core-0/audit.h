@@ -48,6 +48,11 @@ typedef enum {
     AUDIT_EVENT_MODULE_LOAD,      /* 模块加载 */
     AUDIT_EVENT_MODULE_UNLOAD,    /* 模块卸载 */
     AUDIT_EVENT_MONITOR_ACTION,   /* 监控操作 */
+    AUDIT_EVENT_NULL_POINTER,     /* 空指针访问 */
+    AUDIT_EVENT_BUFFER_OVERFLOW,  /* 缓冲区溢出 */
+    AUDIT_EVENT_INVALID_MEMORY,   /* 无效内存访问 */
+    AUDIT_EVENT_USE_AFTER_FREE,   /* 释放后使用 */
+    AUDIT_EVENT_DOUBLE_FREE,      /* 重复释放 */
 } audit_event_type_t;
 
 /* 审计日志条目 */
@@ -190,5 +195,15 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
 /* 获取统计信息 */
 u64 audit_get_entry_count(void);
 u64 audit_get_buffer_usage(void);
+
+/* 内存安全检测函数 */
+void audit_check_null_pointer(void* ptr, const char* context);
+void audit_check_buffer_overflow(void* ptr, size_t size, size_t max_size, const char* context);
+void audit_check_invalid_memory(void* ptr, const char* context);
+
+/* 便捷宏 */
+#define AUDIT_CHECK_NULL_PTR(ptr) audit_check_null_pointer(ptr, #ptr)
+#define AUDIT_CHECK_BUFFER_OVERFLOW(ptr, size, max) audit_check_buffer_overflow(ptr, size, max, #ptr)
+#define AUDIT_CHECK_INVALID_MEMORY(ptr) audit_check_invalid_memory(ptr, #ptr)
 
 #endif /* HIC_KERNEL_AUDIT_H */

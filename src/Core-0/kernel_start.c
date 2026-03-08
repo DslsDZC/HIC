@@ -22,7 +22,6 @@ extern void kernel_boot_info_init(hic_boot_info_t* boot_info);
  * 这个函数由bootloader的jump_to_kernel函数调用
  * 接收boot_info作为参数（在RDI寄存器中）
  */
-
 void kernel_start(hic_boot_info_t* boot_info) {
     // 调试：直接使用内联汇编输出 'S'
     __asm__ volatile("outb %%al, %%dx" : : "a"('S'), "d"(0x3F8));
@@ -31,6 +30,7 @@ void kernel_start(hic_boot_info_t* boot_info) {
     __asm__ volatile("outb %%al, %%dx" : : "a"((uint8_t)((uint64_t)boot_info)), "d"(0x3F8));
     
     // 直接转发到实际的内核入口点
+    // console_init会在kernel_boot_info_init中调用
     kernel_boot_info_init(boot_info);
     
     // 永远不应该到达这里

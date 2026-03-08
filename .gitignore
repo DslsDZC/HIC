@@ -27,7 +27,8 @@ scripts/output/
 *.gdb
 *.log
 debug_*.txt
-
+*.fd
+gdb_commands.txt
 # IDE
 .vscode/
 .idea/

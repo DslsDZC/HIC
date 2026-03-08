@@ -99,8 +99,14 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     // 初始化串口（从YAML配置或引导程序配置）
     minimal_uart_init_from_bootinfo();
     
+    /* 调试输出：在 console_puts 之前输出 'H' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('H'), "d"(0x3F8));
+    
     // 输出 hello
     console_puts("hello\n");
+    
+    /* 调试输出：在 console_puts 之后输出 'I' */
+    __asm__ volatile("outb %%al, %%dx" : : "a"('I'), "d"(0x3F8));
 
     // 【第一优先级】初始化审计日志系统
     // audit_system_init();  // 暂时注释掉，测试是否能通过
@@ -250,7 +256,7 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     console_puts("\n");
     
     /* 进入主循环 */
-    kernel_main_loop();
+    kernel_main(boot_info);
     
 panic:
     console_puts("\n[BOOT] >>> KERNEL PANIC! Halting system... <<<\n");
@@ -778,47 +784,4 @@ void boot_info_print_summary(void) {
     log_info("  I/O中断控制器基地址: 0x%016lx\n", g_boot_state.hw.io_irq.base_address);
     
     log_info("====================================\n\n");
-}
-
-/**
- * 内核主循环
- */
-void kernel_main_loop(void) {
-    log_info("进入内核主循环...\n");
-    
-    /* 完整实现：调度器和事件循环 */
-    /* 主循环负责：
-     * 1. 调度就绪线程
-     * 2. 处理中断
-     * 3. 管理定时器
-     * 4. 处理系统调用
-     * 5. 执行内核维护任务
-     */
-    
-    while (1) {
-        /* 1. 检查待处理的中断 */
-        if (interrupts_pending()) {
-            handle_pending_interrupts();
-        }
-        
-        /* 2. 调度器：选择下一个要运行的线程 */
-        thread_id_t next_thread = scheduler_pick_next();
-        if (next_thread != INVALID_THREAD) {
-            context_switch_to(next_thread);
-        }
-        
-        /* 3. 处理定时器 */
-        timer_update();
-        
-        /* 4. 处理待处理的系统调用 */
-        if (syscalls_pending()) {
-            handle_pending_syscalls();
-        }
-        
-        /* 5. 执行内核维护任务 */
-        kernel_maintenance_tasks();
-        
-        /* 6. 进入低功耗状态等待 */
-        hal_halt();  /* 使用HAL接口 */
-    }
 }

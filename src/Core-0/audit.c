@@ -7,6 +7,7 @@
 /**
  * HIC审计日志系统实现
  * 遵循文档第3.3节：安全审计与防篡改日志
+ * 记录所有安全相关事件
  */
 
 #include "audit.h"
@@ -24,64 +25,12 @@ static const char audit_init_msg[] = "[AUDIT] Audit system initialized (buffer n
 /* 审计日志初始化 */
 void audit_system_init(void)
 {
-    uint64_t saved_rbp;
-
-    /* DEBUG: 保存RBP的值 */
-    __asm__ volatile(
-        "mov %%rbp, %0\n"
-        : "=r"(saved_rbp)
-        :
-        : "memory"
-    );
-
-    /* DEBUG: 输出字符 'n' */
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'n', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
+    /* 清零审计缓冲区结构 */
     memzero(&g_audit_buffer, sizeof(audit_buffer_t));
-
-    /* DEBUG: 输出字符 'o' */
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'o', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
+    
     g_audit_buffer.initialized = false;
-
-    /* DEBUG: 输出字符 'p' */
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'p', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
+    
     console_puts(audit_init_msg);
-
-    /* DEBUG: 输出字符 'q' */
-    __asm__ volatile(
-        "mov $0x3F8, %%dx\n"
-        "mov $'q', %%al\n"
-        "outb %%al, %%dx\n"
-        :
-        :
-        : "dx", "al"
-    );
-
-    // 暂时禁用 console_puts 调用
-    // console_puts(audit_init_msg);
 }
 
 /* 初始化审计日志缓冲区 */
@@ -180,4 +129,80 @@ u64 audit_get_buffer_usage(void)
     }
     
     return (g_audit_buffer.write_offset * 100) / g_audit_buffer.size;
+}
+
+/* 内存安全检测：空指针访问 */
+void audit_check_null_pointer(void* ptr, const char* context)
+{
+    if (ptr == NULL) {
+        u64 data[2] = {(u64)ptr, 0};
+        u32 context_len = context ? (u32)strlen(context) : 0;
+        if (context_len > 0 && context_len <= 64) {
+            /* 复制上下文信息（最多64字节） */
+            memcopy(&data[1], context, context_len > 32 ? 32 : context_len);
+        }
+        
+        console_puts("[AUDIT] NULL POINTER DETECTED: ");
+        if (context) {
+            console_puts(context);
+        } else {
+            console_puts("unknown");
+        }
+        console_puts("\n");
+        
+        audit_log_event(AUDIT_EVENT_NULL_POINTER, 0, 0, 0, data, 2, false);
+    }
+}
+
+/* 内存安全检测：缓冲区溢出 */
+void audit_check_buffer_overflow(void* ptr, size_t size, size_t max_size, const char* context)
+{
+    if (size > max_size) {
+        u64 data[4] = {(u64)ptr, (u64)size, (u64)max_size, 0};
+        u32 context_len = context ? (u32)strlen(context) : 0;
+        if (context_len > 0 && context_len <= 64) {
+            /* 复制上下文信息（最多64字节） */
+            memcopy(&data[3], context, context_len > 32 ? 32 : context_len);
+        }
+        
+        console_puts("[AUDIT] BUFFER OVERFLOW DETECTED: ");
+        if (context) {
+            console_puts(context);
+        } else {
+            console_puts("unknown");
+        }
+        console_puts(" (size=");
+        console_putu64(size);
+        console_puts(", max=");
+        console_putu64(max_size);
+        console_puts(")\n");
+        
+        audit_log_event(AUDIT_EVENT_BUFFER_OVERFLOW, 0, 0, 0, data, 4, false);
+    }
+}
+
+/* 内存安全检测：无效内存访问 */
+void audit_check_invalid_memory(void* ptr, const char* context)
+{
+    /* 检查指针是否在合理的内存范围内 */
+    if ((u64)ptr < 0x1000 || (u64)ptr >= 0x800000000000ULL) {
+        u64 data[2] = {(u64)ptr, 0};
+        u32 context_len = context ? (u32)strlen(context) : 0;
+        if (context_len > 0 && context_len <= 64) {
+            /* 复制上下文信息（最多64字节） */
+            memcopy(&data[1], context, context_len > 32 ? 32 : context_len);
+        }
+        
+        console_puts("[AUDIT] INVALID MEMORY ACCESS: ");
+        if (context) {
+            console_puts(context);
+        } else {
+            console_puts("unknown");
+        }
+        console_puts(" (ptr=0x");
+        console_puthex64((u64)ptr);
+        console_puts(")\n");
+        
+        audit_log_event(AUDIT_EVENT_INVALID_MEMORY, 0, 0, 0, data, 2, false);
+    }
 }

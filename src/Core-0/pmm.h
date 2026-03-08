@@ -41,7 +41,6 @@ typedef struct page_frame {
 } page_frame_t;
 
 /* 物理内存管理器接口 */
-void pmm_init(void);
 
 /**
  * 初始化物理内存管理器（带内存范围参数）
