@@ -44,14 +44,6 @@ static inline int test_bit(u8 *bitmap, u64 index)
     return bitmap[index / 8] & (1 << (index % 8));
 }
 
-/* 初始化物理内存管理器 */
-void pmm_init(void)
-{
-    console_puts("[PMM] Initializing Physical Memory Manager...\n");
-    console_puts("[PMM] ERROR: pmm_init() called without max_phys_addr!\n");
-    console_puts("[PMM] Use pmm_init_with_range() instead.\n");
-}
-
 /**
  * 初始化物理内存管理器（带内存范围参数）
  * 

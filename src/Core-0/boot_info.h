@@ -276,9 +276,6 @@ boot_state_t* get_boot_state(void);
  */
 void boot_info_print_summary(void);
 
-/* 内核主循环 */
-void kernel_main_loop(void);
-
 /* 中断处理 */
 bool interrupts_pending(void);
 void handle_pending_interrupts(void);

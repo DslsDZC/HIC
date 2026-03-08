@@ -172,84 +172,84 @@ LOAD obj/uefi_platform_yaml.o
                 0x000000018000a0f0                __data_end__ = .
  *(.data_cygwin_nocopy)
 
-.rdata          0x000000018000b000    0x27400
+.rdata          0x000000018000b000    0x28400
  *(.rdata)
  .rdata         0x000000018000b000     0x2700 obj/uefi_main.o
  .rdata         0x000000018000d700       0x50 obj/uefi_bootlog.o
  .rdata         0x000000018000d750       0x20 obj/uefi_string.o
  .rdata         0x000000018000d770       0x40 obj/uefi_console.o
  *fill*         0x000000018000d7b0       0x10 
- .rdata         0x000000018000d7c0    0x22cc0 obj/uefi_embedded_kernel_loader.o
- .rdata         0x0000000180030480      0x2e0 obj/uefi_fat32.o
- .rdata         0x0000000180030760      0x2b0 obj/uefi_hardware_probe.o
- *fill*         0x0000000180030a10       0x10 
- .rdata         0x0000000180030a20     0x1700 obj/uefi_platform_yaml.o
+ .rdata         0x000000018000d7c0    0x23cc0 obj/uefi_embedded_kernel_loader.o
+ .rdata         0x0000000180031480      0x2e0 obj/uefi_fat32.o
+ .rdata         0x0000000180031760      0x2b0 obj/uefi_hardware_probe.o
+ *fill*         0x0000000180031a10       0x10 
+ .rdata         0x0000000180031a20     0x1700 obj/uefi_platform_yaml.o
  *(SORT_BY_NAME(.rdata$*))
- .rdata$zzz     0x0000000180032120       0x20 obj/uefi_main.o
- .rdata$zzz     0x0000000180032140       0x20 obj/uefi_bootlog.o
- .rdata$zzz     0x0000000180032160       0x20 obj/uefi_stdlib.o
- .rdata$zzz     0x0000000180032180       0x20 obj/uefi_string.o
- .rdata$zzz     0x00000001800321a0       0x20 obj/uefi_console.o
- .rdata$zzz     0x00000001800321c0       0x20 obj/uefi_efi_guids.o
- .rdata$zzz     0x00000001800321e0       0x20 obj/uefi_embedded_kernel_loader.o
- .rdata$zzz     0x0000000180032200       0x20 obj/uefi_fat32.o
- .rdata$zzz     0x0000000180032220       0x20 obj/uefi_platform_embedded.o
- .rdata$zzz     0x0000000180032240       0x20 obj/uefi_hardware_probe.o
- .rdata$zzz     0x0000000180032260       0x20 obj/uefi_platform_yaml.o
-                0x0000000180032280                . = ALIGN (0x4)
-                0x0000000180032280                __rt_psrelocs_start = .
+ .rdata$zzz     0x0000000180033120       0x20 obj/uefi_main.o
+ .rdata$zzz     0x0000000180033140       0x20 obj/uefi_bootlog.o
+ .rdata$zzz     0x0000000180033160       0x20 obj/uefi_stdlib.o
+ .rdata$zzz     0x0000000180033180       0x20 obj/uefi_string.o
+ .rdata$zzz     0x00000001800331a0       0x20 obj/uefi_console.o
+ .rdata$zzz     0x00000001800331c0       0x20 obj/uefi_efi_guids.o
+ .rdata$zzz     0x00000001800331e0       0x20 obj/uefi_embedded_kernel_loader.o
+ .rdata$zzz     0x0000000180033200       0x20 obj/uefi_fat32.o
+ .rdata$zzz     0x0000000180033220       0x20 obj/uefi_platform_embedded.o
+ .rdata$zzz     0x0000000180033240       0x20 obj/uefi_hardware_probe.o
+ .rdata$zzz     0x0000000180033260       0x20 obj/uefi_platform_yaml.o
+                0x0000000180033280                . = ALIGN (0x4)
+                0x0000000180033280                __rt_psrelocs_start = .
  *(.rdata_runtime_pseudo_reloc)
-                0x0000000180032280                __rt_psrelocs_end = .
-                0x0000000180032280                . = ALIGN (0x8)
-                0x0000000180032280                __DELAY_IMPORT_DIRECTORY_start__ = .
+                0x0000000180033280                __rt_psrelocs_end = .
+                0x0000000180033280                . = ALIGN (0x8)
+                0x0000000180033280                __DELAY_IMPORT_DIRECTORY_start__ = .
  SORT_BY_NAME(*)(.didat$2)
  SORT_BY_NAME(*)(.didat$3)
-                0x0000000180032280                __DELAY_IMPORT_DIRECTORY_end__ = .
-                0x0000000180032280                . = (. + (__DELAY_IMPORT_DIRECTORY_end__ - __DELAY_IMPORT_DIRECTORY_start__)?0x20:0x0)
-                0x0000000180032280                . = ALIGN (0x8)
+                0x0000000180033280                __DELAY_IMPORT_DIRECTORY_end__ = .
+                0x0000000180033280                . = (. + (__DELAY_IMPORT_DIRECTORY_end__ - __DELAY_IMPORT_DIRECTORY_start__)?0x20:0x0)
+                0x0000000180033280                . = ALIGN (0x8)
  SORT_BY_NAME(*)(.didat$4)
  SORT_BY_NAME(*)(.didat$6)
  SORT_BY_NAME(*)(.didat$7)
-                0x0000000180032280                . = ALIGN (0x8)
-                0x0000000180032280                ___CTOR_LIST__ = .
-                0x0000000180032280                __CTOR_LIST__ = .
-                0x0000000180032280        0x4 LONG 0xffffffffffffffff
-                0x0000000180032284        0x4 LONG 0xffffffffffffffff
+                0x0000000180033280                . = ALIGN (0x8)
+                0x0000000180033280                ___CTOR_LIST__ = .
+                0x0000000180033280                __CTOR_LIST__ = .
+                0x0000000180033280        0x4 LONG 0xffffffffffffffff
+                0x0000000180033284        0x4 LONG 0xffffffffffffffff
  *(.ctors)
  *(.ctor)
  *(SORT_BY_NAME(.ctors.*))
-                0x0000000180032288        0x4 LONG 0x0
-                0x000000018003228c        0x4 LONG 0x0
-                0x0000000180032290                ___DTOR_LIST__ = .
-                0x0000000180032290                __DTOR_LIST__ = .
-                0x0000000180032290        0x4 LONG 0xffffffffffffffff
-                0x0000000180032294        0x4 LONG 0xffffffffffffffff
+                0x0000000180033288        0x4 LONG 0x0
+                0x000000018003328c        0x4 LONG 0x0
+                0x0000000180033290                ___DTOR_LIST__ = .
+                0x0000000180033290                __DTOR_LIST__ = .
+                0x0000000180033290        0x4 LONG 0xffffffffffffffff
+                0x0000000180033294        0x4 LONG 0xffffffffffffffff
  *(.dtors)
  *(.dtor)
  *(SORT_BY_NAME(.dtors.*))
-                0x0000000180032298        0x4 LONG 0x0
-                0x000000018003229c        0x4 LONG 0x0
-                0x00000001800322a0                ___crt_xc_start__ = .
+                0x0000000180033298        0x4 LONG 0x0
+                0x000000018003329c        0x4 LONG 0x0
+                0x00000001800332a0                ___crt_xc_start__ = .
  *(SORT_BY_NAME(.CRT$XC*))
-                0x00000001800322a0                ___crt_xc_end__ = .
-                0x00000001800322a0                ___crt_xi_start__ = .
+                0x00000001800332a0                ___crt_xc_end__ = .
+                0x00000001800332a0                ___crt_xi_start__ = .
  *(SORT_BY_NAME(.CRT$XI*))
-                0x00000001800322a0                ___crt_xi_end__ = .
-                0x00000001800322a0                ___crt_xl_start__ = .
+                0x00000001800332a0                ___crt_xi_end__ = .
+                0x00000001800332a0                ___crt_xl_start__ = .
  *(SORT_BY_NAME(.CRT$XL*))
-                0x00000001800322a0                ___crt_xp_start__ = .
+                0x00000001800332a0                ___crt_xp_start__ = .
  *(SORT_BY_NAME(.CRT$XP*))
-                0x00000001800322a0                ___crt_xp_end__ = .
-                0x00000001800322a0                ___crt_xt_start__ = .
+                0x00000001800332a0                ___crt_xp_end__ = .
+                0x00000001800332a0                ___crt_xt_start__ = .
  *(SORT_BY_NAME(.CRT$XT*))
-                0x00000001800322a0                ___crt_xt_end__ = .
-                0x00000001800322a0                ___crt_xd_start__ = .
+                0x00000001800332a0                ___crt_xt_end__ = .
+                0x00000001800332a0                ___crt_xd_start__ = .
  *(SORT_BY_NAME(.CRT$XD*))
-                0x00000001800322a0                ___crt_xd_end__ = .
-                0x0000000180032280                ___RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
-                0x0000000180032280                __RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
-                0x0000000180032280                ___RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
-                0x0000000180032280                __RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+                0x00000001800332a0                ___crt_xd_end__ = .
+                0x0000000180033280                ___RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x0000000180033280                __RUNTIME_PSEUDO_RELOC_LIST_END__ = __rt_psrelocs_end
+                0x0000000180033280                ___RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
+                0x0000000180033280                __RUNTIME_PSEUDO_RELOC_LIST__ = __rt_psrelocs_start
 
 .eh_frame
  *(.eh_frame*)
@@ -260,28 +260,28 @@ LOAD obj/uefi_platform_yaml.o
 .xdata
  *(.xdata*)
 
-.bss            0x0000000180033000     0x11a0
-                0x0000000180033000                __bss_start__ = .
+.bss            0x0000000180034000     0x11a0
+                0x0000000180034000                __bss_start__ = .
  *(.bss)
- .bss           0x0000000180033000       0x40 obj/uefi_main.o
-                0x0000000180033000                gST
-                0x0000000180033008                gBS
- .bss           0x0000000180033040      0xc20 obj/uefi_bootlog.o
- .bss           0x0000000180033c60      0x420 obj/uefi_stdlib.o
- .bss           0x0000000180034080        0x0 obj/uefi_string.o
- .bss           0x0000000180034080      0x120 obj/uefi_console.o
- .bss           0x00000001800341a0        0x0 obj/uefi_efi_guids.o
- .bss           0x00000001800341a0        0x0 obj/uefi_embedded_kernel_loader.o
- .bss           0x00000001800341a0        0x0 obj/uefi_fat32.o
- .bss           0x00000001800341a0        0x0 obj/uefi_platform_embedded.o
- .bss           0x00000001800341a0        0x0 obj/uefi_hardware_probe.o
- .bss           0x00000001800341a0        0x0 obj/uefi_platform_yaml.o
+ .bss           0x0000000180034000       0x40 obj/uefi_main.o
+                0x0000000180034000                gST
+                0x0000000180034008                gBS
+ .bss           0x0000000180034040      0xc20 obj/uefi_bootlog.o
+ .bss           0x0000000180034c60      0x420 obj/uefi_stdlib.o
+ .bss           0x0000000180035080        0x0 obj/uefi_string.o
+ .bss           0x0000000180035080      0x120 obj/uefi_console.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_efi_guids.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_embedded_kernel_loader.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_fat32.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_platform_embedded.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_hardware_probe.o
+ .bss           0x00000001800351a0        0x0 obj/uefi_platform_yaml.o
  *(COMMON)
-                0x00000001800341a0                __bss_end__ = .
+                0x00000001800351a0                __bss_end__ = .
 
-.edata          0x0000000180035000      0xa00
+.edata          0x0000000180036000      0xa00
  *(.edata)
- .edata         0x0000000180035000      0x84c dll stuff
+ .edata         0x0000000180036000      0x84c dll stuff
 
 /DISCARD/
  *(.debug$S)
@@ -292,47 +292,47 @@ LOAD obj/uefi_platform_yaml.o
  *(.gnu.lto_*)
  *(.gnu_object_only)
 
-.idata          0x0000000180036000      0x200
+.idata          0x0000000180037000      0x200
  SORT_BY_NAME(*)(.idata$2)
  SORT_BY_NAME(*)(.idata$3)
-                0x0000000180036000        0x4 LONG 0x0
-                0x0000000180036004        0x4 LONG 0x0
-                0x0000000180036008        0x4 LONG 0x0
-                0x000000018003600c        0x4 LONG 0x0
-                0x0000000180036010        0x4 LONG 0x0
-                0x0000000180036018                . = ALIGN (0x8)
- *fill*         0x0000000180036014        0x4 
+                0x0000000180037000        0x4 LONG 0x0
+                0x0000000180037004        0x4 LONG 0x0
+                0x0000000180037008        0x4 LONG 0x0
+                0x000000018003700c        0x4 LONG 0x0
+                0x0000000180037010        0x4 LONG 0x0
+                0x0000000180037018                . = ALIGN (0x8)
+ *fill*         0x0000000180037014        0x4 
  SORT_BY_NAME(*)(.idata$4)
-                0x0000000180036018                __IAT_start__ = .
+                0x0000000180037018                __IAT_start__ = .
  SORT_BY_NAME(*)(.idata$5)
-                0x0000000180036018                __IAT_end__ = .
+                0x0000000180037018                __IAT_end__ = .
  SORT_BY_NAME(*)(.idata$6)
  SORT_BY_NAME(*)(.idata$7)
 
 .didat
  SORT_BY_NAME(*)(.didat$5)
 
-.tls            0x0000000180037000        0x0
-                0x0000000180037000                ___tls_start__ = .
+.tls            0x0000000180038000        0x0
+                0x0000000180038000                ___tls_start__ = .
  *(.tls$AAA)
  *(.tls)
  *(.tls$)
  *(SORT_BY_NAME(.tls$*))
  *(.tls$ZZZ)
-                0x0000000180037000                ___tls_end__ = .
+                0x0000000180038000                ___tls_end__ = .
 
-.endjunk        0x0000000180037000        0x0
+.endjunk        0x0000000180038000        0x0
                 [!provide]                        PROVIDE (end = .)
                 [!provide]                        PROVIDE (_end = .)
-                0x0000000180037000                __end__ = .
+                0x0000000180038000                __end__ = .
 
 .rsrc
  *(.rsrc)
  *(.rsrc$*)
 
-.reloc          0x0000000180037000        0x0
+.reloc          0x0000000180038000        0x0
  *(.reloc)
- .reloc         0x0000000180037000        0x0 dll stuff
+ .reloc         0x0000000180038000        0x0 dll stuff
 
 .stab
  *(.stab)
