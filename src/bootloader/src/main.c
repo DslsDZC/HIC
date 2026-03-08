@@ -1178,9 +1178,9 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         console_puts("[BOOTLOADER] HIC image loaded\n");
         
         // 计算内核代码在HIC镜像中的偏移量
-        // HIC镜像格式: header(120) + segment_table(40) + kernel_code
-        // kernel_code 从偏移 160 开始
-        uint64_t kernel_offset = 160;  
+        // HIC镜像格式: header(120) + segment_table(160) + kernel_code
+        // kernel_code 从偏移 280 开始
+        uint64_t kernel_offset = 280;
         uint64_t kernel_code_size = manual_image_size - kernel_offset;
         
         console_printf("[BOOTLOADER] kernel_offset=%d, kernel_code_size=%d\n", 
@@ -1218,15 +1218,14 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
         console_puts("[BOOTLOADER] Kernel code copied to 0x100000\n");
         
         // 解析段表并初始化BSS段
-        uint64_t segment_table_offset = 128;  // 段表偏移（修正：从128开始）
-        uint8_t *segment_table = raw_bytes + segment_table_offset;
-        
+        uint64_t segment_table_offset = 120;  // 段表偏移（头部大小）
+            uint8_t *segment_table = raw_bytes + segment_table_offset;        
         console_printf("[BOOTLOADER] Segment count: %lu\n", segment_count);
         
         // 遍历段表，初始化BSS段
         // 使用字节级读取避免对齐问题
         for (uint64_t i = 0; i < segment_count; i++) {
-            uint8_t *seg_entry = segment_table + (i * 32);  // 每个段表项32字节
+            uint8_t *seg_entry = segment_table + (i * 40);  // 每个段表项40字节
             
             // 手动字节级读取（小端字节序）
             uint32_t seg_type = (uint32_t)seg_entry[0] | 
@@ -1257,22 +1256,36 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
                                         ((uint64_t)seg_entry[22] << 48) | 
                                         ((uint64_t)seg_entry[23] << 56);
             
-            uint64_t seg_file_size = (uint64_t)seg_entry[24] | 
-                                    ((uint64_t)seg_entry[25] << 8) | 
-                                    ((uint64_t)seg_entry[26] << 16) | 
+            uint64_t seg_file_size = (uint64_t)seg_entry[24] |
+                                    ((uint64_t)seg_entry[25] << 8) |
+                                    ((uint64_t)seg_entry[26] << 16) |
                                     ((uint64_t)seg_entry[27] << 24) |
-                                    ((uint64_t)seg_entry[28] << 32) | 
-                                    ((uint64_t)seg_entry[29] << 40) | 
-                                    ((uint64_t)seg_entry[30] << 48) | 
+                                    ((uint64_t)seg_entry[28] << 32) |
+                                    ((uint64_t)seg_entry[29] << 40) |
+                                    ((uint64_t)seg_entry[30] << 48) |
                                     ((uint64_t)seg_entry[31] << 56);
-            
-            uint64_t seg_memory_size = (uint64_t)seg_entry[8];
-            
+
+            uint64_t seg_memory_size = (uint64_t)seg_entry[32] |
+                                       ((uint64_t)seg_entry[33] << 8) |
+                                       ((uint64_t)seg_entry[34] << 16) |
+                                       ((uint64_t)seg_entry[35] << 24) |
+                                       ((uint64_t)seg_entry[36] << 32) |
+                                       ((uint64_t)seg_entry[37] << 40) |
+                                       ((uint64_t)seg_entry[38] << 48) |
+                                       ((uint64_t)seg_entry[39] << 56);
+
             (void)seg_flags;  // 消除未使用变量警告
-            (void)seg_file_offset;  // 消除未使用变量警告
             
-            console_printf("[BOOTLOADER] Segment %lu: type=%u, flags=0x%x, mem_offset=0x%lx, file_size=0x%lx, mem_size=0x%lx\n",
-                         i, seg_type, seg_flags, seg_memory_offset, seg_file_size, seg_memory_size);
+            console_printf("[BOOTLOADER] Segment %lu: type=%u, flags=0x%x, mem_offset=0x%lx, file_offset=0x%lx, file_size=0x%lx, mem_size=0x%lx\n",
+                         i, seg_type, seg_flags, seg_memory_offset, seg_file_offset, seg_file_size, seg_memory_size);
+            
+            // 加载非BSS段（代码段、数据段等）到内存
+            if (seg_type != 4 && seg_file_size > 0) {
+                console_printf("[BOOTLOADER] Loading segment %lu to 0x%lx, size=0x%lx\n",
+                             i, seg_memory_offset, seg_file_size);
+                memcpy((void*)seg_memory_offset, raw_bytes + seg_file_offset, seg_file_size);
+                console_printf("[BOOTLOADER] Segment %lu loaded\n", i);
+            }
             
             // 如果是BSS段，初始化为零
             if (seg_type == 4 && seg_memory_size > seg_file_size) {
