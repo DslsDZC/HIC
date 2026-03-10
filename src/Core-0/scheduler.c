@@ -45,39 +45,40 @@ thread_t idle_thread;
 void scheduler_init(void)
 {
     console_puts("[SCHED] Initializing scheduler...\n");
-    
+
+    /* 初始化就绪队列 */
     for (int i = 0; i < 5; i++) {
         ready_queues[i].head = 0;
         ready_queues[i].tail = 0;
         ready_queues[i].count = 0;
         memzero((void*)ready_queues[i].threads, sizeof(ready_queues[i].threads));
     }
-    
+
     console_puts("[SCHED] Ready queues cleared (5 priority levels)\n");
-    
+
     g_current_thread = NULL;
     console_puts("[SCHED] Current thread pointer reset\n");
-    
+
     /* 初始化空闲线程 */
     memzero(&idle_thread, sizeof(thread_t));
     idle_thread.thread_id = 0xFFFFFFFF;
     idle_thread.state = THREAD_STATE_READY;
     idle_thread.priority = HIC_PRIORITY_IDLE;
-    
+
     console_puts("[SCHED] Idle thread initialized (ID: 0xFFFFFFFF)\n");
-    console_puts("[SCHED] Scheduler initialized (lock-free)\n");
+    console_puts("[SCHED] Scheduler initialized (single-core)\n");
     console_puts("[SCHED] Ready for thread scheduling\n");
 }
 
-/* 添加线程到就绪队列（无锁实现） */
+/* 添加线程到就绪队列（单核实现） */
 static void enqueue_thread(thread_t *thread)
 {
     if (thread == NULL || thread->priority > 4) {
         return;
     }
-    
+
     ready_queue_t *queue = &ready_queues[thread->priority];
-    
+
     /* 检查队列是否已满 */
     if (queue->count >= MAX_READY_THREADS) {
         console_puts("[SCHED] ERROR: Ready queue full for priority ");
@@ -85,13 +86,13 @@ static void enqueue_thread(thread_t *thread)
         console_puts("\n");
         return;
     }
-    
+
     /* 添加到队列尾部 */
     u32 tail = queue->tail;
     queue->threads[tail] = thread->thread_id;
     queue->tail = (tail + 1) % MAX_READY_THREADS;
     queue->count++;
-    
+
     thread->state = THREAD_STATE_READY;
 }
 
@@ -113,23 +114,23 @@ __attribute__((unused)) static void dequeue_thread(thread_t *thread)
     queue->count--;
 }
 
-/* 选择下一个线程（无锁实现） */
+/* 选择下一个线程（单核实现） */
 static thread_t *pick_next_thread(void)
 {
     /* 从高优先级到低优先级查找 */
     for (int prio = 4; prio >= 0; prio--) {
         ready_queue_t *queue = &ready_queues[prio];
-        
+
         if (queue->count > 0) {
             /* 取出队列头部 */
             u32 head = queue->head;
             thread_id_t tid = queue->threads[head];
             queue->head = (head + 1) % MAX_READY_THREADS;
             queue->count--;
-            
+
             /* 获取线程指针 */
             thread_t *thread = &g_threads[tid];
-            
+
             /* 轮转调度：如果队列中还有线程，将其重新加入尾部 */
             if (queue->count > 0) {
                 u32 tail = queue->tail;
@@ -137,11 +138,11 @@ static thread_t *pick_next_thread(void)
                 queue->tail = (tail + 1) % MAX_READY_THREADS;
                 queue->count++;
             }
-            
+
             return thread;
         }
     }
-    
+
     /* 没有就绪线程，返回空闲线程 */
     return &idle_thread;
 }
@@ -189,17 +190,17 @@ void schedule(void)
     context_switch(prev, next);
 }
 
-/* 选择下一个要运行的线程 */
+/* 选择下一个要运行的线程（单核实现） */
 thread_id_t scheduler_pick_next(void)
 {
     /* 按优先级从高到低查找就绪线程 */
     for (int prio = HIC_PRIORITY_REALTIME; prio >= HIC_PRIORITY_IDLE; prio--) {
         ready_queue_t *queue = &ready_queues[prio];
-        
+
         if (queue->count == 0) {
             continue;
         }
-        
+
         for (u32 i = queue->head; i != queue->tail; i = (i + 1) % MAX_READY_THREADS) {
             thread_id_t thread_id = queue->threads[i];
             if (thread_id != 0 && thread_id < MAX_THREADS) {
@@ -210,7 +211,7 @@ thread_id_t scheduler_pick_next(void)
             }
         }
     }
-    
+
     /* 没有就绪线程，返回空闲线程 */
     return idle_thread.thread_id;
 }

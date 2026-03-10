@@ -1,0 +1,119 @@
+/*
+ * SPDX-FileCopyrightText: 2026 DslsDZC <dsls.dzc@gmail.com>
+ *
+ * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
+ */
+
+/**
+ * x86-64 AP（应用处理器）启动代码（AMP架构）
+ * AP不运行完整内核，只运行简单的任务处理器
+ * 必须加载到1MB以下的物理地址
+ */
+
+.section .text
+.global ap_trampoline
+.type ap_trampoline, @function
+
+/**
+ * AP启动入口点（16位实模式）
+ * 在SIPI唤醒后从0x8000开始执行
+ */
+.code16
+ap_trampoline:
+    cli
+
+    /* 加载临时GDT */
+    lgdt [gdt_ptr]
+
+    /* 启用保护模式 */
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax
+
+    /* 远跳转到32位 */
+    ljmpl $0x08, $ap_protected_mode
+
+.code32
+ap_protected_mode:
+    /* 设置段寄存器 */
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    /* 启用PAE */
+    mov eax, cr4
+    or eax, (1 << 5)
+    mov cr4, eax
+
+    /* 设置PML4地址 */
+    mov eax, [pml4_addr]
+    mov cr3, eax
+
+    /* 启用长模式 */
+    mov ecx, 0xC0000080
+    rdmsr
+    or eax, (1 << 8)
+    wrmsr
+
+    /* 启用分页 */
+    mov eax, cr0
+    or eax, (1 << 31)
+    mov cr0, eax
+
+    /* 远跳转到64位 */
+    ljmpl $0x08, $ap_long_mode
+
+.code64
+ap_long_mode:
+    /* 设置段寄存器 */
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+
+    /* 设置栈 */
+    mov rsp, [stack_top]
+
+    /* 调用AP主函数（简单的任务处理器） */
+    call amp_ap_main
+
+    /* 如果返回，进入halt循环 */
+ap_halt:
+    cli
+    hlt
+    jmp ap_halt
+
+.size ap_trampoline, .-ap_trampoline
+
+/* ==================== 数据段 ==================== */
+
+.section .data
+
+/* GDT描述符 */
+.align 16
+gdt_ptr:
+    .word gdt_end - gdt - 1
+    .quad gdt
+
+/* GDT */
+.align 16
+gdt:
+    .quad 0
+    .quad 0x00AF9A000000FFFF  /* 代码段 */
+    .quad 0x00CF92000000FFFF  /* 数据段 */
+gdt_end:
+
+/* PML4地址 */
+.align 8
+pml4_addr:
+    .quad 0
+
+/* 栈顶 */
+.align 8
+stack_top:
+    .quad 0

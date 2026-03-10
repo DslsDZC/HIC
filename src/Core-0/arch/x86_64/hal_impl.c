@@ -123,7 +123,7 @@ uint32_t x86_64_get_privilege_level(void)
 {
     uint64_t cs;
     __asm__ volatile("mov %%cs, %0" : "=r"(cs));
-    return (cs >> 3) & 3;
+    return cs & 3;
 }
 
 /* ==================== IO端口操作 ==================== */
@@ -211,4 +211,21 @@ void gdt_load(void *gdt_ptr)
     gdt_ptr_struct.base = base;
 
     __asm__ volatile("lgdt %0" : : "m"(gdt_ptr_struct));
+}
+
+/* ==================== 多核支持 ==================== */
+
+/**
+ * 获取当前CPU ID（通过CPUID指令）
+ * 返回APIC ID作为CPU ID
+ */
+cpu_id_t x86_64_get_cpu_id(void)
+{
+    uint32_t eax, ebx, ecx, edx;
+    __asm__ volatile("cpuid"
+        : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+        : "a"(1));
+
+    /* APIC ID在EBX的高8位（bits 24-31） */
+    return (cpu_id_t)(ebx >> 24);
 }

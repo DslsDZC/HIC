@@ -205,33 +205,33 @@ void __attribute__((unused)) context_switch_to(thread_id_t next_thread)
         console_puts("[SCHED] Invalid thread ID\n");
         return;
     }
-    
+
     extern thread_t g_threads[MAX_THREADS];
     extern thread_t *g_current_thread;
-    
+
     if (next_thread >= MAX_THREADS) {
         console_puts("[SCHED] Thread ID out of range\n");
         return;
     }
-    
+
     thread_t *next = &g_threads[next_thread];
     if (next == NULL) {
         console_puts("[SCHED] Thread not found\n");
         return;
     }
-    
+
     /* 保存当前线程上下文 */
     if (g_current_thread != NULL) {
         if (g_current_thread->state == THREAD_STATE_RUNNING) {
             g_current_thread->state = THREAD_STATE_READY;
         }
     }
-    
+
     /* 切换到新线程 */
     g_current_thread = next;
     g_current_thread->state = THREAD_STATE_RUNNING;
     g_current_thread->last_run_time = hal_get_timestamp();
-    
+
     /* 执行实际的上下文切换（调用 schedule 中的实现） */
     schedule();
 }

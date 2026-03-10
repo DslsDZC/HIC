@@ -20,6 +20,7 @@
 #include "runtime_config.h"
 #include "audit.h"
 #include "formal_verification.h"
+#include "amp.h"
 #include "lib/console.h"
 #include "boot_info.h"
 #include "minimal_uart.h"
@@ -128,7 +129,23 @@ void kernel_main(void *info)
     console_puts("\n[BOOT] STEP 4: Initializing Scheduler\n");
     scheduler_init();
     console_puts("[BOOT] Scheduler initialization completed\n");
-    
+
+    /* 【步骤4.5：AMP初始化】 */
+    console_puts("\n[BOOT] STEP 4.5: Initializing AMP\n");
+    amp_init();
+    console_puts("[BOOT] AMP initialization completed\n");
+
+    /* 【步骤4.6：AP启动（如果启用）】 */
+    if (g_boot_state.hw.smp_enabled && g_amp_info.cpu_count > 1) {
+        console_puts("\n[BOOT] STEP 4.6: Booting APs\n");
+        if (amp_boot_aps() == HIC_SUCCESS) {
+            amp_wait_for_aps();
+        }
+        console_puts("[BOOT] APs booted successfully\n");
+    } else {
+        console_puts("\n[BOOT] STEP 4.6: AMP not enabled (single core or disabled)\n");
+    }
+
     /* 【步骤5：处理启动信息】 */
     console_puts("\n[BOOT] STEP 5: Processing Boot Information\n");
     boot_info_process(boot_info);
