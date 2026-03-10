@@ -88,7 +88,7 @@ def show_current_config():
     print()
     
     # 显示YAML配置
-    config_file = ROOT_DIR / "src" / "bootloader" / "platform.yaml"
+    config_file = ROOT_DIR / "platform.yaml"
     if config_file.exists():
         print_colored(f"配置文件: {config_file}", 'cyan')
         print()
@@ -129,7 +129,7 @@ def configure_build_options():
     """配置编译选项"""
     import yaml
     
-    config_file = ROOT_DIR / "src" / "bootloader" / "platform.yaml"
+    config_file = ROOT_DIR / "platform.yaml"
     
     if not config_file.exists():
         print_colored("配置文件不存在！", 'red')
@@ -186,7 +186,7 @@ def configure_features():
     """配置功能特性"""
     import yaml
     
-    config_file = ROOT_DIR / "src" / "bootloader" / "platform.yaml"
+    config_file = ROOT_DIR / "platform.yaml"
     
     if not config_file.exists():
         print_colored("配置文件不存在！", 'red')

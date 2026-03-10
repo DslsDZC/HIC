@@ -10,7 +10,9 @@
  * 必须加载到1MB以下的物理地址
  */
 
-.section .text
+.intel_syntax noprefix
+
+.section .ap_trampoline, "ax"
 .global ap_trampoline
 .type ap_trampoline, @function
 
@@ -22,8 +24,9 @@
 ap_trampoline:
     cli
 
-    /* 加载临时GDT */
-    lgdt [gdt_ptr]
+    /* 加载临时GDT - 使用相对偏移 */
+    lea eax, [gdt_ptr - ap_trampoline + 0x8000]
+    lgdt [eax]
 
     /* 启用保护模式 */
     mov eax, cr0
@@ -31,7 +34,7 @@ ap_trampoline:
     mov cr0, eax
 
     /* 远跳转到32位 */
-    ljmpl $0x08, $ap_protected_mode
+    jmp 0x08:ap_protected_mode
 
 .code32
 ap_protected_mode:
@@ -64,7 +67,7 @@ ap_protected_mode:
     mov cr0, eax
 
     /* 远跳转到64位 */
-    ljmpl $0x08, $ap_long_mode
+    jmp 0x08:ap_long_mode
 
 .code64
 ap_long_mode:
@@ -92,7 +95,7 @@ ap_halt:
 
 /* ==================== 数据段 ==================== */
 
-.section .data
+.section .ap_trampoline
 
 /* GDT描述符 */
 .align 16

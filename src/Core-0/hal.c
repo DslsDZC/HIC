@@ -12,6 +12,7 @@
  */
 
 #include "hal.h"
+#include "hardware_probe.h"
 #include "lib/console.h"
 #include "lib/mem.h"
 #include <stddef.h>
@@ -657,7 +658,7 @@ cpu_id_t hal_get_cpu_id(void)
 u32 hal_get_cpu_count(void)
 {
     extern cpu_info_t g_cpu_info;
-    return g_cpu_info.cpu_count;
+    return g_cpu_info.logical_cores;
 }
 
 /**
@@ -666,6 +667,6 @@ u32 hal_get_cpu_count(void)
 bool hal_is_bsp(void)
 {
     cpu_id_t cpu_id = hal_get_cpu_id();
-    extern cpu_info_t g_cpu_info;
-    return (cpu_id == g_cpu_info.bsp_id);
+    /* 假设BSP的CPU ID为0 */
+    return (cpu_id == 0);
 }

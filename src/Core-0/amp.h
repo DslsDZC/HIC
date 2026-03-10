@@ -13,6 +13,13 @@
 #define HIC_KERNEL_AMP_H
 
 #include "types.h"
+#include "hal.h"
+#include "capability.h"
+#include "kernel.h"
+
+/* ==================== 类型定义 ==================== */
+
+typedef hic_status_t status_t;
 
 /* ==================== 常量定义 ==================== */
 
@@ -142,6 +149,7 @@ typedef struct {
 
 /* 全局AMP信息 */
 extern amp_info_t g_amp_info;
+extern bool g_amp_enabled;
 
 /* ==================== 函数声明 ==================== */
 

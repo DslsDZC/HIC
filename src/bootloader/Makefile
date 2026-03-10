@@ -21,7 +21,7 @@ BIOS_PROJECT = bios
 VERSION = 1.0.0
 
 # Platform配置文件
-PLATFORM_YAML = platform.yaml
+PLATFORM_YAML = ../../platform.yaml
 PLATFORM_C = src/platform_yaml.c
 
 # 嵌入内核文件

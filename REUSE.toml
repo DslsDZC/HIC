@@ -1,6 +1,6 @@
 version = 1
 SPDX-PackageName = "HIC"
-SPDX-PackageDownloadLocation = "https://github.com/*/HIC"
+SPDX-PackageDownloadLocation = "https://github.com/DslsDZC/HIC"
 
 [[annotations]]
 path = "src/Privileged-1/*"

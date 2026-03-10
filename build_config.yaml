@@ -1,0 +1,144 @@
+# HIC构建系统配置文件
+# 此文件仅用于构建系统，不影响内核运行时行为
+# 与 platform.yaml 分离，提高配置清晰度
+
+# ==================== 构建选项 ====================
+
+build:
+  debug_symbols: true
+  lto: false
+  mode: dynamic
+  optimize_level: 0
+  strip: false
+
+# ==================== 构建系统配置 ====================
+
+build_system:
+  interface:
+    auto_detect: true
+    fallback_chain:
+    - qt
+    - gtk
+    - tui
+    - interactive
+    - cli
+    primary: auto
+  
+  localization:
+    auto_detect: true
+    fallback_language: en_US
+    language: zh_CN
+  
+  logging:
+    console_enabled: true
+    file_enabled: true
+    file_path: scripts/output/build.log
+    level: info
+    max_size_mb: 10
+    rotate_count: 5
+    timestamp_format: '%Y-%m-%d %H:%M:%S'
+  
+  output:
+    checksum_algorithm: sha256
+    compression: false
+    create_checksum: true
+    format: all
+    generate_report: true
+    report_format: json
+
+# ==================== 构建预设 ====================
+
+presets:
+  balanced:
+    build.debug_symbols: true
+    build.mode: dynamic
+    build.optimize_level: 2
+    features.acpi: true
+    features.smp: true
+    system_limits.max_capabilities: 2048
+    system_limits.max_domains: 256
+    system_limits.max_threads: 256
+  
+  debug:
+    build.debug_symbols: true
+    build.mode: dynamic
+    build.optimize_level: 0
+    debug.bounds_check: true
+    debug.console_log: true
+    debug.serial_log: true
+    debug.stack_canary: true
+  
+  minimal:
+    build.debug_symbols: false
+    build.mode: static
+    build.optimize_level: 2
+    build.strip: true
+    features.acpi: false
+    features.pci: false
+    features.smp: false
+    features.usb: false
+    system_limits.max_capabilities: 512
+    system_limits.max_domains: 64
+    system_limits.max_threads: 64
+  
+  performance:
+    build.debug_symbols: false
+    build.lto: true
+    build.mode: dynamic
+    build.optimize_level: 3
+    features.acpi: true
+    features.smp: true
+    system_limits.max_capabilities: 4096
+    system_limits.max_domains: 512
+    system_limits.max_threads: 512
+  
+  release:
+    build.debug_symbols: false
+    build.mode: static
+    build.optimize_level: 3
+    build.strip: true
+    features.acpi: true
+    features.smp: true
+    system_limits.max_capabilities: 2048
+    system_limits.max_domains: 256
+    system_limits.max_threads: 256
+
+# ==================== 构建配置文件 ====================
+
+profiles:
+  active: default
+  
+  developer:
+    description: 开发者专用配置，包含完整的调试支持
+    inherit: debug
+    overrides:
+      build.mode: dynamic
+      debug.console_log: true
+      debug.panic_on_bug: false
+      debug.serial_log: true
+  
+  embedded_system:
+    description: 嵌入式系统配置，最小化内存占用
+    inherit: minimal
+    overrides:
+      deployment.embedded.deterministic: true
+      deployment.mode: embedded
+      deployment.target_platform: embedded
+  
+  production:
+    description: 生产环境配置，优化性能和安全性
+    inherit: release
+    overrides:
+      security.capability.revoke_delay_ms: 0
+      security.capability.verify_on_access: true
+
+# ==================== 验证配置 ====================
+
+validation:
+  bss_size_limit: 524288
+  check_bss_size: true
+  check_kernel_size: true
+  check_memory_overlap: true
+  enabled: true
+  kernel_size_limit: 2097152
+  strict_mode: false

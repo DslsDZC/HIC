@@ -137,6 +137,13 @@ typedef struct {
         uint64_t gdt_base;              // GDT基址（64位）
     } gdt;
 
+    // 内核映像附加模块魔数区域
+    struct {
+        void* magic_region_base; // 魔数区域基地址
+        uint64_t magic_region_size;   // 魔数区域大小
+        uint32_t embedded_module_count; // 嵌入的模块数量
+    } embedded_modules;
+
 } hic_boot_info_t;
 
 // 标志位定义

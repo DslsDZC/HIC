@@ -46,4 +46,7 @@ hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size)
 hic_status_t fat32_list_dir(const char *path, char *buffer, uint32_t buffer_size, uint32_t *count);
 hic_status_t fat32_get_file_size(const char *path, uint32_t *size);
 
+/* 嵌入式模块扫描接口 */
+hic_status_t fat32_load_embedded_filesystem_drivers(void);
+
 #endif /* FAT32_SERVICE_H */

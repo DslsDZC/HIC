@@ -70,6 +70,10 @@ CORE0_ARCH_ASMS = $(wildcard $(CORE0_DIR)/arch/x86_64/*.S)
 # Privileged-1 服务（自动扫描）
 PRIVILEGED1_SRCS = $(wildcard $(PRIVILEGED1_DIR)/*.c)
 
+# 静态模块生成文件
+STATIC_MODULES_GEN_C = $(BUILD_DIR)/static_modules_gen.c
+STATIC_MODULES_GEN_O = $(OBJ_DIR)/static_modules_gen.o
+
 # 转换为目标文件
 CORE0_OBJS = $(patsubst $(CORE0_DIR)/%.c,$(OBJ_DIR)/core0/%.o,$(CORE0_SRCS))
 CORE0_LIB_OBJS = $(patsubst $(CORE0_DIR)/lib/%.c,$(OBJ_DIR)/core0/lib/%.o,$(CORE0_LIB_SRCS))
@@ -78,8 +82,8 @@ CORE0_ARCH_ASM_OBJS = $(patsubst $(CORE0_DIR)/arch/x86_64/%.S,$(OBJ_DIR)/core0/a
 
 PRIVILEGED1_OBJS = $(patsubst $(PRIVILEGED1_DIR)/%.c,$(OBJ_DIR)/privileged1/%.o,$(PRIVILEGED1_SRCS))
 
-# 所有目标文件
-ALL_OBJS = $(CORE0_OBJS) $(CORE0_LIB_OBJS) $(CORE0_ARCH_OBJS) $(CORE0_ARCH_ASM_OBJS) $(PRIVILEGED1_OBJS)
+# 所有目标文件（包含生成的静态模块）
+ALL_OBJS = $(STATIC_MODULES_GEN_O) $(CORE0_OBJS) $(CORE0_LIB_OBJS) $(CORE0_ARCH_OBJS) $(CORE0_ARCH_ASM_OBJS) $(PRIVILEGED1_OBJS)
 
 # ==================== 头文件路径 ====================
 INCLUDES = -I$(CORE0_DIR) \
@@ -101,6 +105,17 @@ all: $(BIN_DIR)/hic-kernel.elf
 
 # 内核目标
 kernel: $(BIN_DIR)/hic-kernel.elf
+
+# 生成静态模块描述符
+$(STATIC_MODULES_GEN_C): $(ROOT_DIR)/platform.yaml $(ROOT_DIR)/scripts/generate_static_modules.py
+	@echo "生成静态模块描述符..."
+	@python3 $(ROOT_DIR)/scripts/generate_static_modules.py $(ROOT_DIR)/platform.yaml $(STATIC_MODULES_GEN_C)
+	@echo "静态模块描述符生成完成"
+
+# 编译生成的静态模块文件
+$(STATIC_MODULES_GEN_O): $(STATIC_MODULES_GEN_C) | $(OBJ_DIR)
+	@echo "编译生成的静态模块: $<"
+	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # 引导程序
 bootloader:

@@ -206,7 +206,7 @@ $(ISO_DIR):
 		cp $(BUILD_DIR)/bin/hic-kernel.bin $(ISO_DIR)/kernel/hic-kernel.hic; \
 		echo "已复制 hic-kernel.bin (重命名为hic-kernel.hic)"; \
 	fi
-	@cp $(BOOTLOADER_DIR)/platform.yaml $(ISO_DIR)/
+	@cp platform.yaml $(ISO_DIR)/
 	@echo " HIC ISO安装包 " > $(ISO_DIR)/README.txt
 	@echo "1. 将此ISO刻录到USB或CD" >> $(ISO_DIR)/README.txt
 	@echo "2. 从USB/CD启动(UEFI模式)" >> $(ISO_DIR)/README.txt

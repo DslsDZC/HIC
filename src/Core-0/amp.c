@@ -14,6 +14,7 @@
 #include "pmm.h"
 #include "capability.h"
 #include "irq.h"
+#include "boot_info.h"
 #include "lib/console.h"
 #include "lib/mem.h"
 #include <stddef.h>
@@ -21,7 +22,7 @@
 /* ==================== 外部变量 ==================== */
 
 extern boot_state_t g_boot_state;
-extern bool g_amp_enabled;
+bool g_amp_enabled = false;
 
 /* ==================== 全局变量 ==================== */
 
@@ -46,12 +47,14 @@ extern void ap_trampoline(void);
 
 static inline u32 lapic_read(u32 offset)
 {
-    return *(volatile u32*)(LAPIC_BASE + offset);
+    uintptr_t addr = LAPIC_BASE + offset;
+    return *(volatile u32*)addr;
 }
 
 static inline void lapic_write(u32 offset, u32 value)
 {
-    *(volatile u32*)(LAPIC_BASE + offset) = value;
+    uintptr_t addr = LAPIC_BASE + offset;
+    *(volatile u32*)addr = value;
 }
 
 static void send_ipi(u32 apic_id, u32 vector)
@@ -75,7 +78,7 @@ void amp_init(void)
     /* 初始化CPU数据 */
     for (u32 i = 0; i < MAX_CPUS; i++) {
         amp_cpu_t *cpu = &g_amp_info.cpus[i];
-        cpu->cpu_id = i;
+        cpu->cpu_id = (cpu_id_t)i;
         cpu->state = AMP_CPU_OFFLINE;
         cpu->mode = AMP_MODE_COMPUTE;
         cpu->queue_head = 0;
@@ -143,7 +146,8 @@ void amp_init(void)
 static status_t prepare_ap_trampoline(void)
 {
     /* 复制AP启动代码到低内存 */
-    u8 *trampoline_src = (u8*)&ap_trampoline;
+    uintptr_t func_addr = (uintptr_t)&ap_trampoline;
+    u8 *trampoline_src = (u8*)func_addr;
     u8 *trampoline_dst = (u8*)AP_TRAMPOLINE_ADDR;
 
     /* 这里需要知道ap_trampoline的大小，暂时假设4KB */
@@ -180,7 +184,7 @@ status_t amp_boot_aps(void)
 
         /* 分配8KB栈 */
         phys_addr_t stack_phys;
-        status = pmm_alloc_frames(0, 2, PAGE_FRAME_KERNEL, &stack_phys);
+        status = pmm_alloc_frames(0, 2, PAGE_FRAME_CORE, &stack_phys);
         if (status != HIC_SUCCESS) {
             console_puts("[AMP] Failed to allocate stack for AP ");
             console_puthex32(i);
@@ -362,7 +366,7 @@ bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t 
     cpu_id_t cap_cpu = INVALID_CPU_ID;
     for (u32 i = 0; i < g_amp_info.cpu_count; i++) {
         if (g_amp_info.cpus[i].mode == AMP_MODE_CAP_VERIFY) {
-            cap_cpu = i;
+            cap_cpu = (cpu_id_t)i;
             break;
         }
     }
@@ -383,7 +387,7 @@ bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t 
 
         if (entry->cap_id == cap_id && 
             entry->domain_id == domain_id && 
-            entry->required_rights == required_rights) {
+            (u32)entry->required_rights == (u32)required_rights) {
             
             /* 检查缓存是否过期 */
             u64 current_time = hal_get_timestamp();
@@ -410,7 +414,7 @@ bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t 
         if (!entry->in_use) {
             entry->cap_id = cap_id;
             entry->domain_id = domain_id;
-            entry->required_rights = required_rights;
+            entry->required_rights = (cap_rights_t)required_rights;
             entry->valid = valid;
             entry->timestamp = hal_get_timestamp();
             entry->in_use = true;
@@ -506,7 +510,7 @@ cpu_id_t amp_get_idle_compute_cpu(void)
 
         if (cpu->mode == AMP_MODE_COMPUTE && 
             (cpu->state == AMP_CPU_IDLE || cpu->queue_count == 0)) {
-            return i;
+            return (cpu_id_t)i;
         }
     }
 
@@ -547,7 +551,7 @@ void amp_ap_main(void)
     cpu->lapic_address = LAPIC_BASE;
 
     console_puts("[AP] CPU ");
-    console_puthex32(cpu_id);
+    console_puthex32((u32)cpu_id);
     console_puts(" started\n");
 
     /* 根据工作模式进入不同的循环 */
@@ -580,7 +584,7 @@ void amp_cap_verify_loop(void)
     amp_cpu_t *cpu = &g_amp_info.cpus[cpu_id];
 
     console_puts("[AP] CPU ");
-    console_puthex32(cpu_id);
+    console_puthex32((u32)cpu_id);
     console_puts(" entering capability verification loop\n");
 
     while (1) {
@@ -605,7 +609,7 @@ void amp_irq_handler_loop(void)
     amp_cpu_t *cpu = &g_amp_info.cpus[cpu_id];
 
     console_puts("[AP] CPU ");
-    console_puthex32(cpu_id);
+    console_puthex32((u32)cpu_id);
     console_puts(" entering IRQ handler loop\n");
 
     while (1) {
@@ -628,7 +632,7 @@ void amp_compute_loop(void)
     amp_cpu_t *cpu = &g_amp_info.cpus[cpu_id];
 
     console_puts("[AP] CPU ");
-    console_puthex32(cpu_id);
+    console_puthex32((u32)cpu_id);
     console_puts(" entering compute loop\n");
 
     while (1) {

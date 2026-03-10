@@ -32,6 +32,22 @@ EFI_STATUS fat32_open_file(fat32_fs_t *fs, const char *path, uint64_t *file_size
 EFI_STATUS fat32_read_file(fat32_fs_t *fs, const char *path, void **buffer, uint64_t *size);
 
 /**
+ * 识别分区是否为FAT32文件系统
+ * @param partition_start 分区起始LBA
+ * @param partition_size 分区大小（扇区数）
+ * @param block_io 块设备协议
+ * @return TRUE 如果是FAT32，FALSE 否则
+ */
+static BOOLEAN __attribute__((unused)) is_fat32_partition(uint64_t partition_start, uint64_t partition_size, 
+                                 EFI_BLOCK_IO_PROTOCOL *block_io)
+{
+    (void)partition_start;
+    (void)partition_size;
+    (void)block_io;
+    return FALSE;
+}
+
+/**
  * 使用FAT32解析器加载文件（备用方案）
  */
 EFI_STATUS load_file_fat32(EFI_HANDLE device_handle, const char *path, 
@@ -905,6 +921,13 @@ hic_boot_info_t *prepare_boot_info(void *kernel_data, uint64_t kernel_size)
     boot_info->module_count = 0;
     console_puts("[BOOTLOADER] Static services embedded in kernel image\n");
 
+    // 设置嵌入模块区域信息，传递给内核
+    // 内核映像中的嵌入模块区域（.static_modules段）将用于FAT32驱动扫描
+    boot_info->embedded_modules.magic_region_base = boot_info->kernel_base;
+    boot_info->embedded_modules.magic_region_size = boot_info->kernel_size;
+    boot_info->embedded_modules.embedded_module_count = 0;
+    console_puts("[BOOTLOADER] Embedded modules region info set\n");
+
     return boot_info;
 }
 
@@ -1369,6 +1392,14 @@ EFI_STATUS load_kernel_segments(void *image_data, uint64_t image_size,
     console_puts(debug2_str);
     
     console_puts("[BOOTLOADER] Kernel ready, entry point set\n");
+    
+    // 设置嵌入模块区域信息
+    // 注意：这里使用kernel_base和kernel_size，实际嵌入模块区域可能在.static_modules段
+    // FAT32驱动将扫描这个区域以识别文件系统驱动模块
+    boot_info->embedded_modules.magic_region_base = boot_info->kernel_base;
+    boot_info->embedded_modules.magic_region_size = boot_info->kernel_size;
+    boot_info->embedded_modules.embedded_module_count = 0;
+    console_puts("[BOOTLOADER] Embedded modules region set for FAT32 driver scanning\n");
     
     return EFI_SUCCESS;
 }

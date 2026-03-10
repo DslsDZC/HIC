@@ -43,6 +43,10 @@ typedef enum {
     HAL_ARCH_MAX
 } hal_arch_type_t;
 
+/* CPU标识符类型 */
+typedef u32 cpu_id_t;
+#define INVALID_CPU_ID ((cpu_id_t)-1)
+
 /* 架构无关的上下文结构（完整实现） */
 typedef struct hal_context {
     /* 通用寄存器 */
@@ -63,6 +67,9 @@ typedef struct hal_context {
 
 /* 获取当前架构类型 */
 hal_arch_type_t hal_get_arch_type(void);
+
+/* 获取当前CPU标识符 */
+cpu_id_t hal_get_cpu_id(void);
 
 /* ==================== 内存屏障接口 ==================== */
 

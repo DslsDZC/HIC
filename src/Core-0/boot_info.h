@@ -133,6 +133,22 @@ typedef struct {
         char name[64];
     } modules[16];
     u64 module_count;
+
+    // 磁盘信息（用于 FAT32 文件系统）
+    struct {
+        void* disk_base;         // 磁盘镜像基地址
+        u64 disk_size;           // 磁盘镜像大小
+        u32 sector_size;         // 扇区大小（通常为 512）
+    } disk;
+
+    // 已加载驱动信息（由引导层加载的扩展文件系统驱动）
+    struct {
+        void* base;              // 驱动内存基地址
+        u64 size;                // 驱动大小
+        char name[64];           // 驱动名称
+        u32 partition_index;     // 所属 FAT32 分区索引
+    } loaded_drivers[8];
+    u64 loaded_drivers_count;
     
     // 系统信息
     struct {
@@ -181,6 +197,13 @@ typedef struct {
         u64 platform_size;       // platform.yaml文件大小
         u64 platform_hash;       // platform.yaml哈希值
     } platform;
+
+    // 内核映像附加模块魔数区域
+    struct {
+        void* magic_region_base; // 魔数区域基地址
+        u64 magic_region_size;   // 魔数区域大小
+        u32 embedded_module_count; // 嵌入的模块数量
+    } embedded_modules;
 
 } hic_boot_info_t;
 
