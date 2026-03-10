@@ -679,7 +679,7 @@ def check_interface_available(interface: str) -> bool:
 
 def load_build_system_config() -> Dict[str, Any]:
     """从platform.yaml加载构建系统配置"""
-    config_file = CONFIG["root_dir"] / "src" / "bootloader" / "platform.yaml"
+    config_file = CONFIG["root_dir"] / "platform.yaml"
     default_config = {
         "interface": {
             "primary": "auto",

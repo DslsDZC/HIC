@@ -49,6 +49,9 @@ static inline void pci_write_config(u8 bus, u8 device, u8 function, u8 offset, u
 /* 外部变量 */
 extern boot_state_t g_boot_state;
 
+/* 全局硬件信息变量 */
+cpu_info_t g_cpu_info;
+
 /* 辅助函数：数字转字符串 */
 static void u16_to_str(u16 value, char* buf, u64 buf_size) {
     if (buf_size == 0) return;

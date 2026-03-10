@@ -190,4 +190,7 @@ void hardware_probe_init(void);
  */
 hic_status_t hardware_probe_all(hardware_probe_result_t *result);
 
+/* 全局硬件信息变量 */
+extern cpu_info_t g_cpu_info;
+
 #endif /* HIC_HARDWARE_PROBE_H */

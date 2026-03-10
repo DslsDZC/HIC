@@ -1,0 +1,445 @@
+# HIC内核运行时配置文件
+# 所有参数都可以固定，如果为空则自动探测
+# 此文件允许用户覆盖系统的任何自动探测行为
+
+# ==================== 目标架构 ====================
+target:
+  # 架构类型：x86_64, arm64, riscv64
+  # 如果为空，自动从编译选项探测
+  architecture:
+
+  # 字节序：little, big
+  # 如果为空，自动根据架构探测
+  endian:
+
+  # 页面大小（字节）
+  # 如果为空，自动根据架构探测（x86_64=4096）
+  page_size:
+
+  # 字长：32, 64
+  # 如果为空，自动根据架构探测
+  word_size:
+
+# ==================== 核心服务列表 ====================
+core_services:
+  # 内核核心服务列表
+  # 如果为空，使用默认核心服务
+  - name: capability_manager
+    priority: 0
+    type: core
+  - name: scheduler
+    priority: 1
+    type: core
+  - name: memory_manager
+    priority: 2
+    type: core
+  - name: irq_controller
+    priority: 3
+    type: core
+  - name: syscall_dispatcher
+    priority: 4
+    type: core
+  - name: module_manager
+    priority: 5
+    type: core
+
+# ==================== 静态模块配置 ====================
+# 这些模块将静态链接到内核中，在启动时自动加载
+# 必须在动态模块之前加载，用于提供基础功能（如文件系统）
+static_modules:
+  # FAT32 文件系统服务（必需：用于加载其他模块）
+  - name: fat32_service
+    type: service
+    auto_start: true
+    critical: true
+    privileged: true
+    capabilities:
+      - disk_access
+      - memory_alloc
+
+  # 模块管理器服务（必需：通过 FAT32 探索并加载其他模块）
+  - name: module_manager_service
+    type: service
+    auto_start: true
+    critical: true
+    privileged: true
+    capabilities:
+      - filesystem_access
+      - module_load
+      - module_unload
+
+# ==================== CPU特性配置 ====================
+cpu_features:
+  # AES指令集
+  # 如果为空，自动通过 CPUID 探测
+  aes:
+
+  # AVX指令集
+  # 如果为空，自动通过 CPUID 探测
+  avx:
+
+  # AVX2指令集
+  # 如果为空，自动通过 CPUID 探测
+  avx2:
+
+  # MMX指令集
+  # 如果为空，自动通过 CPUID 探测
+  mmx:
+
+  # RDRAND随机数生成器
+  # 如果为空，自动通过 CPUID 探测
+  rdrand:
+
+  # SSE指令集
+  # 如果为空，自动通过 CPUID 探测
+  sse:
+
+  # SSE2指令集
+  # 如果为空，自动通过 CPUID 探测
+  sse2:
+
+  # SSE3指令集
+  # 如果为空，自动通过 CPUID 探测
+  sse3:
+
+  # SSE4.1指令集
+  # 如果为空，自动通过 CPUID 探测
+  sse4_1:
+
+  # SSE4.2指令集
+  # 如果为空，自动通过 CPUID 探测
+  sse4_2:
+
+  # SSSE3指令集
+  # 如果为空，自动通过 CPUID 探测
+  ssse3:
+
+# ==================== 功能特性开关 ====================
+features:
+  # ACPI 高级配置和电源接口
+  # 如果为空，自动检测 ACPI 表
+  acpi:
+
+  # AHCI SATA控制器
+  # 如果为空，自动检测 AHCI 控制器
+  ahci:
+
+  # APIC 高级可编程中断控制器
+  # 如果为空，自动检测 APIC
+  apic:
+
+  # EFI 统一可扩展固件接口
+  # 如果为空，自动检测 EFI 环境
+  efi:
+
+  # PCI 外设组件互连
+  # 如果为空，自动检测 PCI 总线
+  pci:
+
+  # SMP 对称/非对称多处理
+  # 如果为空，自动检测 CPU 数量
+  smp:
+
+  # USB 通用串行总线
+  # 如果为空，自动检测 USB 控制器
+  usb:
+
+  # VirtIO 虚拟化IO
+  # 如果为空，自动检测 VirtIO 设备
+  virtio:
+
+# ==================== 内存配置 ====================
+memory:
+  # 内存布局
+  layout:
+    # 内核基地址
+    # 如果为空，自动选择合适的地址
+    kernel_base:
+
+    # 内核大小（字节）
+    # 如果为空，从 ELF 文件读取
+    kernel_size:
+
+    # 域内存池基地址
+    # 如果为空，自动在可用内存中分配
+    domain_pool_base:
+
+    # 域内存池大小（字节）
+    # 如果为空，根据可用内存动态计算
+    domain_pool_size:
+
+    # 应用内存池基地址
+    # 如果为空，自动在可用内存中分配
+    app_pool_base:
+
+    # 应用内存池大小（字节）
+    # 如果为空，根据可用内存动态计算
+    app_pool_size:
+
+  # 缓存配置
+  cache:
+    # 缓冲区缓存大小（字节）
+    # 如果为空，默认为 1MB
+    buffer_cache_size:
+
+    # 页面缓存百分比
+    # 如果为空，默认为 20%
+    page_cache_percent:
+
+  # 页表配置
+  page_tables:
+    # 最大页表数
+    # 如果为空，根据系统配置动态计算
+    max_page_tables:
+
+    # 每个页表的条目数
+    # 如果为空，根据架构自动设置（x86_64=512）
+    page_table_entries:
+
+# ==================== 资源配额配置 ====================
+resource_quotas:
+  # 域默认配额
+  domain_default:
+    # CPU 配额百分比
+    # 如果为空，默认为 10%
+    cpu_quota_percent:
+
+    # 最大能力数
+    # 如果为空，默认为 128
+    max_capabilities:
+
+    # 最大内存（字节）
+    # 如果为空，默认为 1MB
+    max_memory:
+
+    # 最大线程数
+    # 如果为空，默认为 16
+    max_threads:
+
+  # 服务配额
+  service_quotas:
+    # 控制台驱动配额
+    console_driver:
+      # CPU 配额百分比
+      # 如果为空，默认为 5%
+      cpu_quota_percent:
+
+      # 最大能力数
+      # 如果为空，默认为 16
+      max_capabilities:
+
+      # 最大内存（字节）
+      # 如果为空，默认为 64KB
+      max_memory:
+
+      # 最大线程数
+      # 如果为空，默认为 2
+      max_threads:
+
+# ==================== 调度器配置 ====================
+scheduler:
+  # 负载均衡配置
+  load_balancing:
+    # 启用负载均衡
+    # 如果为空，默认为 true
+    enabled:
+
+    # 迁移间隔（毫秒）
+    # 如果为空，默认为 100
+    migration_interval_ms:
+
+    # 负载均衡阈值（百分比）
+    # 如果为空，默认为 80%
+    threshold_percent:
+
+  # 调度策略
+  # 如果为空，默认为 priority_rr
+  policy:
+
+  # 抢占式调度
+  # 如果为空，默认为 true
+  preemptive:
+
+  # 优先级范围
+  priorities:
+    # 实时优先级范围
+    # 如果为空，默认为 0-2
+    realtime:
+
+    # 高优先级范围
+    # 如果为空，默认为 3-10
+    high:
+
+    # 普通优先级范围
+    # 如果为空，默认为 11-50
+    normal:
+
+    # 低优先级范围
+    # 如果为空，默认为 51-100
+    low:
+
+    # 空闲优先级范围
+    # 如果为空，默认为 101-127
+    idle:
+
+  # 时间片长度（毫秒）
+  # 如果为空，默认为 10
+  time_slice_ms:
+
+# ==================== 安全配置 ====================
+security:
+  # 启用审计
+  # 如果为空，默认为 true
+  audit_enabled:
+
+  # 能力系统配置
+  capability:
+    # 最大能力数
+    # 如果为空，根据可用内存动态计算
+    max_capabilities:
+
+    # 撤销延迟（毫秒）
+    # 如果为空，默认为 100
+    revoke_delay_ms:
+
+    # 访问时验证
+    # 如果为空，默认为 true
+    verify_on_access:
+
+  # 形式验证
+  # 如果为空，默认为 true
+  form_verification:
+
+  # 隔离模式
+  # 如果为空，默认为 strict
+  isolation_mode:
+
+  # 内存安全配置
+  memory:
+    # 保护页大小（字节）
+    # 如果为空，默认为 4096
+    guard_page_size:
+
+    # 启用保护页
+    # 如果为空，默认为 true
+    guard_pages:
+
+    # 释放时清零
+    # 如果为空，默认为 true
+    zero_on_free:
+
+  # 特权访问配置
+  privileged_access:
+    # 启用访问检查
+    # 如果为空，默认为 true
+    access_check_enabled:
+
+    # 启用特权访问
+    # 如果为空，默认为 true
+    enabled:
+
+    # 记录特权操作
+    # 如果为空，默认为 true
+    log_privileged_ops:
+
+# ==================== 系统限制配置 ====================
+system_limits:
+  # 每个域的能力数
+  # 如果为空，默认为 128
+  capabilities_per_domain:
+
+  # 最大能力数
+  # 如果为空，根据可用内存动态计算
+  max_capabilities:
+
+  # 最大域数
+  # 如果为空，根据可用内存动态计算
+  max_domains:
+
+  # 最大线程数
+  # 如果为空，根据可用内存动态计算
+  max_threads:
+
+  # 每个域的线程数
+  # 如果为空，默认为 16
+  threads_per_domain:
+
+# ==================== 调试配置 ====================
+debug:
+  # 边界检查
+  # 如果为空，默认为 true
+  bounds_check:
+
+  # 控制台日志
+  # 如果为空，默认为 true
+  console_log:
+
+  # 遇到 bug 时 panic
+  # 如果为空，默认为 true
+  panic_on_bug:
+
+  # 串口日志
+  # 如果为空，默认为 true
+  serial_log:
+
+  # 栈保护
+  # 如果为空，默认为 true
+  stack_canary:
+
+# ==================== 串口配置 ====================
+uart:
+  # 波特率
+  # 如果为空，默认为 115200
+  baud_rate:
+
+  # 缓冲区大小
+  # 如果为空，默认为 4096
+  buffer_size:
+
+  # 数据位数
+  # 如果为空，默认为 8
+  data_bits:
+
+  # 早期初始化
+  # 如果为空，默认为 true
+  early_init:
+
+  # 校验位：none, odd, even
+  # 如果为空，默认为 none
+  parity:
+
+  # 串口端口（I/O 端口地址）
+  # 如果为空，自动探测 COM1/COM2/COM3/COM4
+  port:
+
+  # 停止位数
+  # 如果为空，默认为 1
+  stop_bits:
+
+# ==================== 模块配置 ====================
+dynamic_modules:
+  # 启用模块加载
+  # 如果为空，默认为 true
+  enable_module_loading:
+
+  # 最大模块数
+  # 如果为空，不限制
+  max_modules:
+
+  # 预加载模块列表
+  # 如果为空，不预加载任何模块
+  preload:
+
+  # 模块仓库配置
+  repository:
+    # 启用缓存
+    # 如果为空，默认为 true
+    cache_enabled:
+
+    # 本地模块路径
+    # 如果为空，默认为 /var/lib/hic/modules
+    local_path:
+
+    # 验证签名
+    # 如果为空，默认为 true
+    verify_signature:

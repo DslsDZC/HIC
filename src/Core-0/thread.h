@@ -95,6 +95,10 @@ void scheduler_tick(void);
 thread_id_t scheduler_pick_next(void);
 void context_switch_to(thread_id_t next_thread);
 
+/* 调度器性能监控 */
+void scheduler_get_perf(u64 *schedule_count, u64 *avg_cycles, u64 *max_cycles);
+void scheduler_print_perf(void);
+
 /* 当前线程 */
 extern thread_t *g_current_thread;
 

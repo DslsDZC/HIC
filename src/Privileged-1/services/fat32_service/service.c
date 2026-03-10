@@ -13,6 +13,21 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Boot信息结构（简化版） */
+typedef struct {
+    uint32_t magic;
+    uint32_t version;
+    uint64_t flags;
+    struct {
+        void *magic_region_base;
+        uint64_t magic_region_size;
+        uint32_t embedded_module_count;
+    } embedded_modules;
+} hic_boot_info_t;
+
+/* 外部引用boot_info */
+extern hic_boot_info_t *g_boot_info;
+
 /* 全局FAT32上下文 */
 static fat32_service_ctx_t g_fat32_ctx = {0};
 
@@ -70,6 +85,10 @@ hic_status_t fat32_service_init(void) {
 /* 启动FAT32服务 */
 hic_status_t fat32_service_start(void) {
     /* FAT32服务启动成功 */
+    
+    /* 加载嵌入的文件系统驱动 */
+    fat32_load_embedded_filesystem_drivers();
+    
     return HIC_SUCCESS;
 }
 
@@ -315,4 +334,65 @@ hic_status_t fat32_get_file_size(const char *path, uint32_t *size) {
     }
     
     return HIC_NOT_FOUND;
+}
+
+/* HIC模块魔数和驱动类型 */
+#define HICMOD_MAGIC 0x48494B4D  // "HICM"
+#define HICMOD_DRIVER_TYPE_FILESYSTEM 0x46535953  // "FSYS"
+
+/* 加载嵌入的文件系统驱动 */
+hic_status_t fat32_load_embedded_filesystem_drivers(void) {
+    extern hic_boot_info_t *g_boot_info;
+    
+    if (!g_boot_info) {
+        return HIC_NOT_INITIALIZED;
+    }
+    
+    void *magic_region = g_boot_info->embedded_modules.magic_region_base;
+    uint32_t region_size = g_boot_info->embedded_modules.magic_region_size;
+    
+    if (!magic_region || region_size == 0) {
+        return HIC_SUCCESS;  // 没有嵌入模块，不是错误
+    }
+    
+    uint8_t *region_ptr = (uint8_t *)magic_region;
+    uint32_t offset = 0;
+    int loaded_count = 0;
+    
+    /* 遍历嵌入模块区域 */
+    while (offset + 52 < region_size) {  // 最小模块头部大小
+        /* 直接读取字段偏移，不依赖结构体 */
+        uint32_t magic = *(uint32_t *)(region_ptr + offset);
+        uint32_t driver_type = *(uint32_t *)(region_ptr + offset + 4);
+        
+        /* 验证魔数 */
+        if (magic != HICMOD_MAGIC) {
+            break;  // 不是模块，结束扫描
+        }
+        
+        /* 检查是否为文件系统驱动 */
+        if (driver_type == HICMOD_DRIVER_TYPE_FILESYSTEM) {
+            /* TODO: 加载文件系统驱动 */
+            /* 目前只计数 */
+            loaded_count++;
+        }
+        
+        /* 读取模块大小字段以跳到下一个模块 */
+        uint32_t code_size = *(uint32_t *)(region_ptr + offset + 36);
+        uint32_t data_size = *(uint32_t *)(region_ptr + offset + 40);
+        uint32_t header_size = *(uint32_t *)(region_ptr + offset + 48);
+        
+        /* 跳到下一个模块 */
+        uint32_t total_size = header_size + code_size + data_size;
+        offset += total_size;
+        
+        /* 对齐到4字节边界 */
+        offset = (offset + 3) & ~3;
+    }
+    
+    if (loaded_count == 0) {
+        return HIC_NOT_FOUND;
+    }
+    
+    return HIC_SUCCESS;
 }

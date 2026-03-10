@@ -34,7 +34,7 @@ VERSION = "0.1.0"
 ROOT_DIR = Path(__file__).parent.parent
 BUILD_DIR = ROOT_DIR / "build"
 OUTPUT_DIR = ROOT_DIR / "output"
-PLATFORM_YAML = ROOT_DIR / "src" / "bootloader" / "platform.yaml"
+PLATFORM_YAML = ROOT_DIR / "platform.yaml"
 
 # 翻译加载函数
 def load_translations():

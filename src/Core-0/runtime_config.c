@@ -58,7 +58,7 @@ static void init_default_config(void)
     g_runtime_config.heap_size_mb = 128;
     g_runtime_config.stack_size_kb = 8;
     g_runtime_config.page_cache_percent = 20;
-    g_runtime_config.enable_swap = false;
+    // g_runtime_config.enable_swap = false; // 字段已移除
     
     /* 安全配置默认值 */
     g_runtime_config.enable_secure_boot = true;
@@ -76,7 +76,7 @@ static void init_default_config(void)
     g_runtime_config.enable_debug = false;
     g_runtime_config.enable_trace = false;
     g_runtime_config.enable_verbose = false;
-    g_runtime_config.debug_port = 0x3F8;
+    // g_runtime_config.debug_port = 0x3F8; // 字段已移除
     
     /* 设备配置默认值 */
     g_runtime_config.enable_pci = true;
@@ -86,11 +86,11 @@ static void init_default_config(void)
     
     /* 能力系统配置默认值 */
     g_runtime_config.max_capabilities = 65536;
-    g_runtime_config.enable_capability_derivation = true;
+    // g_runtime_config.enable_capability_derivation = true; // 字段已移除
     
     /* 域配置默认值 */
     g_runtime_config.max_domains = 16;
-    g_runtime_config.domain_stack_size_kb = 16;
+    // g_runtime_config.domain_stack_size_kb = 16; // 字段已移除
     
     /* 中断配置默认值 */
     g_runtime_config.max_irqs = 256;
@@ -101,17 +101,17 @@ static void init_default_config(void)
     g_runtime_config.max_modules = 32;
     
     /* 安全配置默认值 */
-    strcpy(g_runtime_config.default_password, "admin123");
-    g_runtime_config.password_required = true;
-    g_runtime_config.password_min_length = 8;
-    g_runtime_config.password_require_upper = true;
-    g_runtime_config.password_require_lower = true;
-    g_runtime_config.password_require_digit = true;
+    // strcpy(g_runtime_config.default_password, "admin123"); // 字段已移除
+    // g_runtime_config.password_required = true; // 字段已移除
+    // g_runtime_config.password_min_length = 8; // 字段已移除
+    // g_runtime_config.password_require_upper = true; // 字段已移除
+    // g_runtime_config.password_require_lower = true; // 字段已移除
+    // g_runtime_config.password_require_digit = true; // 字段已移除
     
     /* 配置元数据 */
     g_runtime_config.config_source = CONFIG_SOURCE_DEFAULT;
     g_runtime_config.config_timestamp = 0;
-    memzero(g_runtime_config.config_hash, sizeof(g_runtime_config.config_hash));
+    // memzero(g_runtime_config.config_hash, sizeof(g_runtime_config.config_hash)); // 字段已移除
 }
 
 /* 初始化运行时配置系统 */
@@ -441,11 +441,11 @@ void runtime_config_load_from_yaml(const char* yaml_data, size_t yaml_size)
 config_item_t* runtime_config_get_item(const char* name)
 {
     /* 首先检查自定义配置项 */
-    for (u32 i = 0; i < g_runtime_config.num_custom_items; i++) {
-        if (strcmp(g_runtime_config.custom_items[i].name, name) == 0) {
-            return &g_runtime_config.custom_items[i];
-        }
-    }
+    // for (u32 i = 0; i < g_runtime_config.num_custom_items; i++) { // 字段已移除
+    //     if (strcmp(g_runtime_config.custom_items[i].name, name) == 0) {
+    //         return &g_runtime_config.custom_items[i];
+    //     }
+    // }
     
     /* 检查内置配置项 */
     if (strcmp(name, "log_level") == 0) {
@@ -569,9 +569,9 @@ void runtime_config_print(void)
     console_puts(g_runtime_config.enable_trace ? "true" : "false");
     console_puts("\n");
     
-    console_puts("  debug_port: 0x");
-    console_puthex32(g_runtime_config.debug_port);
-    console_puts("\n");
+    // console_puts("  debug_port: 0x"); // 字段已移除
+    // console_puthex32(g_runtime_config.debug_port); // 字段已移除
+    // console_puts("\n"); // 字段已移除
     
     console_puts("==============================\n\n");
 }

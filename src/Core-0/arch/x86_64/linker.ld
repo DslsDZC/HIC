@@ -73,9 +73,22 @@ SECTIONS
     /* 静态服务模块段 */
     .static_modules ALIGN(4K) : AT(ADDR(.static_modules)) {
         __static_modules_start = .;
-        KEEP(*(.static_module_fat32))
+        KEEP(*(.static_modules))
         __static_modules_end = .;
     }
+
+    /* 内核结束（在添加AP启动代码之前） */
+    _kernel_end_before_ap = .;
+    
+    /* AP启动代码段（链接到0x8000，但加载到内核中） */
+    .ap_trampoline 0x8000 : AT(ALIGN(_kernel_end_before_ap, 4K)) {
+        __ap_trampoline_start = .;
+        KEEP(*(.ap_trampoline))
+        __ap_trampoline_end = .;
+    }
+    
+    /* 最终内核结束地址 */
+    _kernel_end = ALIGN(_kernel_end_before_ap, 4K) + SIZEOF(.ap_trampoline);
 
     /* 丢弃调试信息 */
     /DISCARD/ : {

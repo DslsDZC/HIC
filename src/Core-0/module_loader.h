@@ -18,12 +18,15 @@
 #include "hardware_probe.h"
 
 /* 模块格式定义 */
-#define HICMOD_MAGIC 0x48494B4D  // "HICM"
+#define HICMOD_MAGIC 0x48494B4D  // "HICM" - 模块文件魔数
+#define HICMOD_DRIVER_TYPE_FILESYSTEM 0x46535953  // "FSYS" - 文件系统驱动（引导层识别此值后直接加载）
+
 #define HICMOD_VERSION 1
 
 /* 模块头 */
 typedef struct hicmod_header {
-    u32 magic;                  // 魔数
+    u32 magic;                  // 魔数 0x48494B4D "HICM"
+    u32 driver_type;            // 驱动类型识别符（0x46535953 表示文件系统驱动）
     u32 version;                // 格式版本
     u8 uuid[16];                // 模块UUID
     u32 semantic_version;       // 语义化版本

@@ -108,6 +108,25 @@ void kernel_main(void *info)
     
     audit_log_event(AUDIT_EVENT_PMM_ALLOC, 0, 0, 0, NULL, 0, true);
     
+    /* ==================== 第三阶段：配置系统初始化 ==================== */
+    
+    /* 【步骤：初始化运行时配置系统】 */
+    console_puts("\n[BOOT] STEP 0: Initializing Runtime Configuration\n");
+    runtime_config_init();
+    console_puts("[BOOT] Runtime configuration initialized\n");
+    
+    /* 【步骤：从引导信息加载配置】 */
+    console_puts("[BOOT] Loading configuration from boot info...\n");
+    runtime_config_load_from_bootinfo();
+    console_puts("[BOOT] Configuration loaded from boot info\n");
+    
+    /* 【步骤：验证配置一致性】 */
+    if (!runtime_config_validate()) {
+        console_puts("[BOOT] WARNING: Runtime configuration validation failed, using defaults\n");
+    } else {
+        console_puts("[BOOT] Runtime configuration validated\n");
+    }
+    
     /* ==================== 第四阶段：核心子系统初始化 ==================== */
     
     /* 【步骤1：内存管理器初始化】 */
