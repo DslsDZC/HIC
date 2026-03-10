@@ -91,21 +91,99 @@ status_t pmm_free_frames(phys_addr_t addr, u64 count);
 
 ### CPU时间管理
 
+#### 多核支持
+
+HIC支持多核CPU系统，采用AMP架构设计。每个CPU核心维护独立的数据结构，减少锁竞争。
+
+#### Per-CPU数据结构
+
+```c
+/**
+ * CPU状态枚举
+ */
+typedef enum {
+    CPU_STATE_OFFLINE,    /* 离线 */
+    CPU_STATE_ONLINE,     /* 在线 */
+    CPU_STATE_BOOTING,    /* 启动中 */
+    CPU_STATE_HALTED,     /* 停止 */
+} cpu_state_t;
+
+/**
+ * Per-CPU数据结构
+ */
+typedef struct {
+    cpu_id_t cpu_id;              /* CPU ID */
+    bool is_bsp;                  /* 是否是BSP */
+    bool is_online;               /* 是否在线 */
+    cpu_state_t state;            /* CPU状态 */
+
+    /* 栈信息 */
+    void *stack_base;             /* 栈基地址 */
+    size_t stack_size;            /* 栈大小 */
+
+    /* 调度器 */
+    thread_t *ready_queue[MAX_PRIORITY];  /* 就绪队列 */
+    thread_t *current_thread;            /* 当前线程 */
+    u64 context_switches;                /* 上下文切换次数 */
+    spinlock_t run_queue_lock;           /* 运行队列锁 */
+
+    /* 本地APIC */
+    volatile u32 *local_apic;    /* 本地APIC地址 */
+
+    /* 统计信息 */
+    u64 interrupts_handled;      /* 处理的中断数 */
+    u64 idle_ticks;              /* 空闲时钟周期 */
+} percpu_data_t;
+
+/**
+ * 全局CPU信息
+ */
+typedef struct {
+    percpu_data_t cpus[MAX_CPUS];  /* Per-CPU数据 */
+    u32 cpu_count;                 /* CPU总数 */
+    u32 online_cpus;               /* 在线CPU数 */
+    cpu_id_t bsp_id;               /* BSP ID */
+} cpu_info_t;
+
+/* 全局CPU信息 */
+static cpu_info_t g_cpu_info;
+```
+
+#### Per-CPU变量访问
+
+```c
+/**
+ * 获取当前CPU的per-CPU数据
+ */
+static inline percpu_data_t* get_percpu(void) {
+    cpu_id_t cpu_id = get_cpu_id();
+    return &g_cpu_info.cpus[cpu_id];
+}
+
+/**
+ * Per-CPU变量访问宏
+ */
+#define PERCPU_GET(name)     (get_percpu()->name)
+#define PERCPU_SET(name, v)  (get_percpu()->name = (v))
+```
+
 #### 调度器
 
 ```c
 /**
- * 线程调度器
+ * 线程调度器（Per-CPU）
  */
 typedef struct {
     thread_t *ready_queue[MAX_PRIORITY];  /* 就绪队列 */
     thread_t *current_thread;            /* 当前线程 */
     u64 context_switches;                /* 上下文切换次数 */
     u64 idle_ticks;                      /* 空闲时钟周期 */
+    spinlock_t run_queue_lock;           /* 运行队列锁 */
 } scheduler_t;
 
-/* 全局调度器 */
-static scheduler_t g_scheduler;
+/* 注意：调度器现在是per-CPU的 */
+/* scheduler_t *g_scheduler;  // 旧版本 */
+/* scheduler_t g_scheduler[MAX_CPUS];  // 新版本 */
 ```
 
 #### 调度策略
@@ -122,18 +200,41 @@ typedef enum {
 } sched_policy_t;
 
 /**
- * @brief 选择下一个线程
+ * @brief 选择下一个线程（Per-CPU版本）
  * @return 线程指针
  */
 thread_t *schedule_next_thread(void)
 {
+    percpu_data_t *cpu = get_percpu();
+
     switch (g_policy) {
     case SCHED_PRIORITY:
-        return schedule_priority();
+        return schedule_priority(&cpu->ready_queue);
     case SCHED_RR:
-        return schedule_round_robin();
+        return schedule_round_robin(&cpu->ready_queue);
     default:
-        return schedule_fifo();
+        return schedule_fifo(&cpu->ready_queue);
+    }
+}
+
+/**
+ * @brief 负载均衡（BSP调用）
+ */
+void scheduler_balance_load(void) {
+    /* BSP负责负载均衡决策 */
+    if (!PERCPU_GET(is_bsp)) {
+        return;
+    }
+
+    /* 检查各CPU负载 */
+    for (cpu_id_t i = 0; i < g_cpu_info.cpu_count; i++) {
+        percpu_data_t *cpu = &g_cpu_info.cpus[i];
+        if (!cpu->is_online) continue;
+
+        /* 如果某个CPU负载过高，迁移任务 */
+        if (cpu->ready_queue_count > LOAD_THRESHOLD) {
+            migrate_thread(cpu, find_idle_cpu());
+        }
     }
 }
 ```
@@ -156,8 +257,8 @@ typedef struct {
     u32 reserved;      /* 保留 */
 } __attribute__((packed)) idt_entry_t;
 
-/* IDT数组 */
-static idt_entry_t g_idt[256];
+/* IDT数组（Per-CPU） */
+static idt_entry_t g_idt[MAX_CPUS][256];
 ```
 
 #### 中断路由表
@@ -175,6 +276,113 @@ typedef struct {
 
 /* 中断路由表（构建时生成） */
 static irq_route_entry_t g_irq_route_table[256];
+```
+
+#### IPI核间通信
+
+```c
+/**
+ * IPI类型
+ */
+typedef enum {
+    IPI_RESCHEDULE,    /* 重新调度 */
+    IPI_STOP,          /* 停止CPU */
+    IPI_TLB_FLUSH,     /* 刷新TLB */
+    IPI_CALL_FUNC,     /* 调用函数 */
+} ipi_type_t;
+
+/**
+ * IPI处理函数
+ */
+typedef void (*ipi_handler_t)(cpu_id_t source);
+
+/* IPI处理表 */
+static ipi_handler_t g_ipi_handlers[IPI_MAX];
+
+/**
+ * @brief 注册IPI处理函数
+ * @param type IPI类型
+ * @param handler 处理函数
+ */
+void ipi_register_handler(ipi_type_t type, ipi_handler_t handler) {
+    g_ipi_handlers[type] = handler;
+}
+
+/**
+ * @brief IPI中断入口
+ */
+void ipi_entry(void) {
+    cpu_id_t source = get_ipi_source();
+    ipi_type_t type = get_ipi_type();
+
+    if (g_ipi_handlers[type]) {
+        g_ipi_handlers[type](source);
+    }
+
+    /* EOI */
+    lapic_write(LAPIC_EOI, 0);
+}
+
+/**
+ * @brief 发送IPI
+ * @param target 目标CPU
+ * @param type IPI类型
+ */
+void ipi_send(cpu_id_t target, ipi_type_t type) {
+    u32 vector = IPI_BASE + type;
+    lapic_write(LAPIC_ICR, (vector) | (target << 24) | (1 << 14));
+    while (lapic_read(LAPIC_ICR) & (1 << 12));
+}
+
+/**
+ * @brief 广播IPI（除了自己）
+ * @param type IPI类型
+ */
+void ipi_broadcast(ipi_type_t type) {
+    u32 vector = IPI_BASE + type;
+    lapic_write(LAPIC_ICR, (vector) | (0xFF << 24) | (1 << 14) | (1 << 11));
+    while (lapic_read(LAPIC_ICR) & (1 << 12));
+}
+
+/**
+ * @brief 重新调度IPI处理
+ */
+void ipi_reschedule_handler(cpu_id_t source) {
+    /* 标记需要重新调度 */
+    PERCPU_SET(need_reschedule, true);
+}
+```
+
+#### Per-CPU中断处理
+
+```c
+/**
+ * @brief 中断处理入口（Per-CPU版本）
+ */
+void irq_handler(void) {
+    percpu_data_t *cpu = get_percpu();
+
+    /* 更新统计 */
+    cpu->interrupts_handled++;
+
+    /* 获取中断向量 */
+    u32 vector = get_irq_vector();
+
+    /* 检查是否是IPI */
+    if (vector >= IPI_BASE && vector < IPI_BASE + IPI_MAX) {
+        ipi_entry();
+        return;
+    }
+
+    /* 查找处理程序 */
+    irq_route_entry_t *route = &g_irq_route_table[vector];
+    if (route->handler) {
+        route->handler();
+    }
+
+    /* EOI */
+    lapic_write(LAPIC_EOI, 0);
+}
 ```
 
 ## 能力系统

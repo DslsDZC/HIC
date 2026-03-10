@@ -5,10 +5,40 @@
  */
 
 /**
- * x86-64上下文切换汇编实现
+ * x86-64上下文切换汇编实现（多核支持）
  */
 
 .section .text
+
+/* ==================== 外部函数声明 ==================== */
+
+/* CPU ID获取函数 */
+.extern x86_64_get_cpu_id
+
+/* ==================== Per-CPU数据结构偏移 ==================== */
+
+/* percpu_data_t结构偏移（必须与percpu.h中定义一致） */
+#define PERCPU_CPU_ID           0
+#define PERCPU_IS_BSP           4
+#define PERCPU_IS_ONLINE        5
+#define PERCPU_STATE            6
+#define PERCPU_STACK_BASE       8
+#define PERCPU_STACK_SIZE       16
+#define PERCPU_STACK_TOP        24
+#define PERCPU_READY_QUEUE      32
+#define PERCPU_READY_QUEUE_COUNT 32 + (8 * 256)
+#define PERCPU_CURRENT_THREAD   PERCPU_READY_QUEUE_COUNT + 8
+#define PERCPU_CONTEXT_SWITCHES PERCPU_CURRENT_THREAD + 8
+#define PERCPU_IDLE_TICKS       PERCPU_CONTEXT_SWITCHES + 8
+#define PERCPU_NEED_RESCHEDULE  PERCPU_IDLE_TICKS + 8
+#define PERCPU_LOCAL_APIC       PERCPU_NEED_RESCHEDULE + 8
+#define PERCPU_INTERRUPTS_HANDLED PERCPU_LOCAL_APIC + 8
+#define PERCPU_IPI_RECEIVED     PERCPU_INTERRUPTS_HANDLED + 8
+#define PERCPU_IPI_SENT         PERCPU_IPI_RECEIVED + 8
+#define PERCPU_INIT_DONE        PERCPU_IPI_SENT + 8
+
+/* percpu_data_t大小（用于计算per-CPU数组的偏移） */
+#define PERCPU_SIZE             PERCPU_INIT_DONE + 4
 
 .global x86_64_save_context
 .type x86_64_save_context, @function
@@ -83,8 +113,11 @@ x86_64_restore_context:
 .global context_switch
 .type context_switch, @function
 
-/* 上下文切换函数
+/* 上下文切换函数（多核支持）
  * 参数: rdi = prev线程上下文指针, rsi = next线程上下文指针
+ *
+ * 注意：per-CPU数据（current_thread, context_switches）的更新
+ * 在C代码的context_switch_to()函数中处理
  */
 context_switch:
     /* 保存当前线程上下文到 prev */
@@ -111,7 +144,7 @@ context_switch:
 
     /* 恢复返回地址 */
     movq 8(%rsi), %rax
-    movq %rax, 8(%rsp)
+    movq %rax, 48(%rsp)
 
     /* 恢复调用者保存的寄存器 */
     popq %r15

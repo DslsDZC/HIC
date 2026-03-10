@@ -634,4 +634,38 @@ void hal_stack_trace(void)
 /* 外部函数声明（由架构特定代码提供） */
 #if defined(__x86_64__)
 extern void gdt_load(void *gdt_ptr);
+extern cpu_id_t x86_64_get_cpu_id(void);
 #endif
+
+/* ==================== 多核支持接口 ==================== */
+
+/**
+ * 获取当前CPU ID
+ */
+cpu_id_t hal_get_cpu_id(void)
+{
+#if defined(__x86_64__)
+    return x86_64_get_cpu_id();
+#else
+    return 0; /* 其他架构暂不支持，返回默认值 */
+#endif
+}
+
+/**
+ * 获取CPU数量
+ */
+u32 hal_get_cpu_count(void)
+{
+    extern cpu_info_t g_cpu_info;
+    return g_cpu_info.cpu_count;
+}
+
+/**
+ * 检查当前CPU是否是BSP
+ */
+bool hal_is_bsp(void)
+{
+    cpu_id_t cpu_id = hal_get_cpu_id();
+    extern cpu_info_t g_cpu_info;
+    return (cpu_id == g_cpu_info.bsp_id);
+}
