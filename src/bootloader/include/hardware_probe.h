@@ -90,11 +90,26 @@ typedef struct {
     char name[32];                  // 控制器名称
 } interrupt_controller_t;
 
-// 硬件探测结果
+// 内存区域（与内核mem_region_t兼容）
+typedef struct {
+    uint64_t base;                  // 区域基地址
+    uint64_t size;                  // 区域大小
+    uint32_t type;                  // 内存类型（HIC_MEM_TYPE_*）
+    uint32_t reserved;
+} mem_region_t;
+
+// 内存拓扑信息（与内核memory_topology_t兼容）
+typedef struct {
+    uint64_t total_usable;          // 总可用内存
+    uint64_t total_physical;        // 总物理内存
+    uint32_t region_count;          // 区域数量
+    mem_region_t regions[32];       // 内存区域表
+} memory_topology_t;
+
+// 硬件探测结果（与内核hardware_probe_result_t兼容）
 typedef struct {
     cpu_info_t cpu;                // CPU信息
-    memory_map_entry_t *memory;     // 内存拓扑
-    uint32_t memory_count;          // 内存区域数量
+    memory_topology_t memory;       // 内存拓扑
     device_list_t devices;          // 设备列表
     interrupt_controller_t local_irq;  // 本地中断控制器
     interrupt_controller_t io_irq;     // I/O中断控制器
@@ -108,6 +123,8 @@ void probe_memory_topology(hic_boot_info_t *boot_info);
 void probe_pci_devices(device_list_t *result);
 void probe_interrupt_controller(interrupt_controller_t *local, 
                                  interrupt_controller_t *io);
-void hardware_probe_all(hardware_probe_result_t *result);
+void probe_acpi_info(hic_boot_info_t *boot_info, hardware_probe_result_t *result);
+void probe_timers_and_serial(hardware_probe_result_t *result);
+void hardware_probe_all(hic_boot_info_t *boot_info, hardware_probe_result_t *result);
 
 #endif // HIC_BOOTLOADER_HARDWARE_PROBE_H

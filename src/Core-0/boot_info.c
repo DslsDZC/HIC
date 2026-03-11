@@ -188,7 +188,46 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
     // 【步骤8：静态硬件探测】
     console_puts("\n[BOOT] STEP 8: Hardware Information\n");
     console_puts("[BOOT] Hardware information provided by bootloader\n");
-    console_puts("[BOOT] No hardware probing in kernel (deferred to bootloader)\n");
+    
+    // 检查引导层是否提供了硬件探测结果
+    if (boot_info->hardware.hw_data != NULL && boot_info->hardware.hw_size >= sizeof(hardware_probe_result_t)) {
+        console_puts("[BOOT] Copying hardware probe results from bootloader...\n");
+        
+        // 从引导层复制硬件探测结果
+        hardware_probe_result_t *bootloader_hw = (hardware_probe_result_t *)boot_info->hardware.hw_data;
+        memcpy(&g_boot_state.hw, bootloader_hw, sizeof(hardware_probe_result_t));
+        
+        console_puts("[BOOT] Hardware probe results copied successfully\n");
+        console_puts("[BOOT]   CPU: ");
+        console_puts(g_boot_state.hw.cpu.brand_string);
+        console_puts("\n");
+        console_puts("[BOOT]   Logical cores: ");
+        console_putu64(g_boot_state.hw.cpu.logical_cores);
+        console_puts(", Physical cores: ");
+        console_putu64(g_boot_state.hw.cpu.physical_cores);
+        console_puts("\n");
+        console_puts("[BOOT]   Memory: ");
+        console_putu64(g_boot_state.hw.memory.total_usable / (1024 * 1024));
+        console_puts(" MB usable, ");
+        console_putu64(g_boot_state.hw.memory.total_physical / (1024 * 1024));
+        console_puts(" MB total\n");
+        console_puts("[BOOT]   PCI devices: ");
+        console_putu64(g_boot_state.hw.devices.pci_count);
+        console_puts("\n");
+    } else {
+        console_puts("[BOOT] No hardware probe results from bootloader, using static detection\n");
+        console_puts("[BOOT] Performing minimal hardware detection...\n");
+        
+        // 执行最小化的硬件探测（仅CPU和内存）
+        detect_cpu_info(&g_boot_state.hw.cpu);
+        detect_memory_topology(&g_boot_state.hw.memory);
+        
+        // 设置默认值
+        g_boot_state.hw.devices.pci_count = 0;
+        g_boot_state.hw.local_irq.base_address = 0xFEE00000;
+        g_boot_state.hw.io_irq.base_address = 0xFEC00000;
+        g_boot_state.hw.smp_enabled = (g_boot_state.hw.cpu.logical_cores > 1);
+    }
     
     // 【步骤9：模块自动加载驱动】
     console_puts("\n[BOOT] STEP 9: Auto-loading Drivers\n");
