@@ -198,6 +198,20 @@ typedef struct {
         u64 platform_hash;       // platform.yaml哈希值
     } platform;
 
+    // 硬件探测结果（按照文档规范，硬件探测在引导层完成）
+    struct {
+        void* hw_data;           // 硬件探测数据指针
+        u64 hw_size;             // 硬件探测数据大小
+        u64 hw_hash;             // 硬件探测哈希值
+    } hardware;
+
+    // GDT信息（用于确保内核运行在Ring 0）
+    struct {
+        u64 gdt[6];              // GDT表（6个描述符）
+        u16 gdt_limit;           // GDT限（16位）
+        u64 gdt_base;            // GDT基址（64位）
+    } gdt;
+
     // 内核映像附加模块魔数区域
     struct {
         void* magic_region_base; // 魔数区域基地址
