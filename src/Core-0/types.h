@@ -93,6 +93,28 @@ typedef u8 priority_t;
 #define HIC_PRIORITY_HIGH      3
 #define HIC_PRIORITY_REALTIME  4
 
+/* 逻辑核心标识符 */
+typedef u32 logical_core_id_t;
+#define INVALID_LOGICAL_CORE   ((logical_core_id_t)-1)
+#define MAX_LOGICAL_CORES      1024   /* 支持超配，逻辑核心数可以大于物理核心数 */
+
+/* 物理核心标识符 */
+typedef u32 physical_core_id_t;
+#define INVALID_PHYSICAL_CORE  ((physical_core_id_t)-1)
+
+/* 逻辑核心属性标志 */
+typedef u32 logical_core_flags_t;
+#define LOGICAL_CORE_FLAG_EXCLUSIVE     (1U << 0)  /* 独占物理核心 */
+#define LOGICAL_CORE_FLAG_REALTIME      (1U << 1)  /* 实时优先级 */
+#define LOGICAL_CORE_FLAG_BACKGROUND    (1U << 2)  /* 后台优先级 */
+#define LOGICAL_CORE_FLAG_MIGRATABLE    (1U << 3)  /* 允许迁移 */
+#define LOGICAL_CORE_FLAG_PINNED        (1U << 4)  /* 固定到特定物理核心 */
+#define LOGICAL_CORE_FLAG_HIGH_PERF     (1U << 5)  /* 高性能偏好 */
+#define LOGICAL_CORE_FLAG_POWER_SAVE    (1U << 6)  /* 节能偏好 */
+
+/* 逻辑核心配额（CPU时间百分比，0-100） */
+typedef u8 logical_core_quota_t;
+
 /* 中断向量 */
 typedef u8 irq_vector_t;
 

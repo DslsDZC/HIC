@@ -1,6 +1,6 @@
 # HIC 项目 .gitignore
 
-.cache/
+.cache/clangd/index
 AGENTS.md
 # 构建输出
 build/
@@ -9,7 +9,7 @@ iso_output/
 safec/
 # 工具链缓存（可选，如果不想提交到版本控制）
 # .toolchains/
-.toolchains/cache/
+.toolchains
 
 # Python
 __pycache__/

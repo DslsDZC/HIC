@@ -435,3 +435,71 @@ hic_status_t get_capability_derivatives(cap_id_t cap, cap_id_t *derivatives, u32
     *count = 0;
     return HIC_SUCCESS;
 }
+
+/* ==================== 逻辑核心能力函数 ==================== */
+
+/**
+ * 创建逻辑核心能力
+ */
+hic_status_t cap_create_logical_core(domain_id_t owner,
+                                    logical_core_id_t logical_core_id,
+                                    logical_core_flags_t flags,
+                                    logical_core_quota_t quota,
+                                    cap_rights_t rights,
+                                    cap_id_t *out) {
+    if (owner >= HIC_DOMAIN_MAX || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 查找空闲能力槽 */
+    cap_id_t cap = HIC_CAP_INVALID;
+    for (u32 i = 1; i < CAP_TABLE_SIZE && cap == HIC_CAP_INVALID; i++) {
+        if (g_global_cap_table[i].cap_id == 0) {
+            cap = i;
+        }
+    }
+    
+    if (cap == HIC_CAP_INVALID) {
+        return HIC_ERROR_NO_RESOURCE;
+    }
+    
+    /* 填充能力条目 */
+    g_global_cap_table[cap].cap_id = cap;
+    g_global_cap_table[cap].rights = rights;
+    g_global_cap_table[cap].owner = owner;
+    g_global_cap_table[cap].flags = 0;
+    
+    /* 设置逻辑核心信息 */
+    g_global_cap_table[cap].logical_core.logical_core_id = logical_core_id;
+    g_global_cap_table[cap].logical_core.flags = flags;
+    g_global_cap_table[cap].logical_core.quota = quota;
+    
+    *out = cap;
+    return HIC_SUCCESS;
+}
+
+/**
+ * 获取逻辑核心能力信息
+ */
+hic_status_t cap_get_logical_core_info(cap_id_t cap_id,
+                                      logical_core_id_t *logical_core_id,
+                                      logical_core_flags_t *flags,
+                                      logical_core_quota_t *quota) {
+    if (cap_id >= CAP_TABLE_SIZE || !capability_exists(cap_id)) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    cap_entry_t *entry = &g_global_cap_table[cap_id];
+    
+    if (logical_core_id) {
+        *logical_core_id = entry->logical_core.logical_core_id;
+    }
+    if (flags) {
+        *flags = entry->logical_core.flags;
+    }
+    if (quota) {
+        *quota = entry->logical_core.quota;
+    }
+    
+    return HIC_SUCCESS;
+}

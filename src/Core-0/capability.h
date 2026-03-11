@@ -43,6 +43,13 @@ typedef unsigned char bool;
 #define CAP_MEM_EXEC   (1U << 2)
 #define CAP_MEM_DEVICE (1U << 3)
 
+/* 逻辑核心权限标志 */
+#define CAP_LCORE_USE      (1U << 8)  /* 使用逻辑核心（创建线程） */
+#define CAP_LCORE_QUERY    (1U << 9)  /* 查询逻辑核心信息 */
+#define CAP_LCORE_MIGRATE  (1U << 10) /* 迁移逻辑核心 */
+#define CAP_LCORE_SET_AFFINITY (1U << 11) /* 设置亲和性 */
+#define CAP_LCORE_MONITOR  (1U << 12) /* 监控性能计数器 */
+
 /* 能力权限 */
 typedef u32 cap_rights_t;
 
@@ -62,6 +69,11 @@ typedef struct __attribute__((aligned(64))) cap_entry {
         struct {
             domain_id_t  target;
         } endpoint;
+        struct {
+            logical_core_id_t logical_core_id;
+            logical_core_flags_t flags;
+            logical_core_quota_t quota;
+        } logical_core;
     };
 } cap_entry_t;
 
@@ -240,5 +252,43 @@ bool privileged_check_access(domain_id_t domain, phys_addr_t addr, cap_rights_t 
 /* 特权域管理接口 */
 void cap_set_privileged_domain(domain_id_t domain, bool privileged);
 bool cap_is_privileged_domain(domain_id_t domain);
+
+/* ==================== 逻辑核心能力接口 ==================== */
+
+/**
+ * @brief 创建逻辑核心能力
+ * 
+ * 为指定的逻辑核心创建能力对象。
+ * 
+ * @param owner 拥有者域ID
+ * @param logical_core_id 逻辑核心ID
+ * @param flags 逻辑核心属性标志
+ * @param quota CPU时间配额
+ * @param rights 能力权限
+ * @param out 输出的能力ID
+ * @return 状态码
+ */
+hic_status_t cap_create_logical_core(domain_id_t owner,
+                                    logical_core_id_t logical_core_id,
+                                    logical_core_flags_t flags,
+                                    logical_core_quota_t quota,
+                                    cap_rights_t rights,
+                                    cap_id_t *out);
+
+/**
+ * @brief 获取逻辑核心能力信息
+ * 
+ * 从能力条目中提取逻辑核心信息。
+ * 
+ * @param cap_id 能力ID
+ * @param logical_core_id 输出的逻辑核心ID
+ * @param flags 输出的逻辑核心标志
+ * @param quota 输出的CPU时间配额
+ * @return 状态码
+ */
+hic_status_t cap_get_logical_core_info(cap_id_t cap_id,
+                                      logical_core_id_t *logical_core_id,
+                                      logical_core_flags_t *flags,
+                                      logical_core_quota_t *quota);
 
 #endif /* HIC_KERNEL_CAPABILITY_H */
