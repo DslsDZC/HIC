@@ -466,15 +466,23 @@ void boot_info_process(hic_boot_info_t* boot_info) {
 void boot_info_init_memory(hic_boot_info_t* boot_info) {
     console_puts("[DEBUG] boot_info_init_memory() called\n");
     
-    /* 第一步：计算最大物理地址 */
+    /* 第一步：计算最大物理地址（只考虑可用内存区域，忽略 MMIO） */
     phys_addr_t max_phys_addr = 0;
     
     for (u64 i = 0; i < boot_info->mem_map_entry_count; i++) {
         hic_mem_entry_t* entry = &boot_info->mem_map[i];
-        phys_addr_t region_end = entry->base_address + entry->length;
-        if (region_end > max_phys_addr) {
-            max_phys_addr = region_end;
+        /* 只考虑可用内存区域，忽略 MMIO 和保留区域 */
+        if (entry->type == HIC_MEM_TYPE_USABLE) {
+            phys_addr_t region_end = entry->base_address + entry->length;
+            if (region_end > max_phys_addr) {
+                max_phys_addr = region_end;
+            }
         }
+    }
+    
+    /* 如果没有找到可用内存，使用默认值 256MB */
+    if (max_phys_addr == 0) {
+        max_phys_addr = 256 * 1024 * 1024;
     }
     
     console_puts("[BOOT] Calculated max physical address: 0x");

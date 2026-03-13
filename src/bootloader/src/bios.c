@@ -462,7 +462,7 @@ static void bios_get_memory_map(hic_boot_info_t *boot_info)
         }
         
         if (entry_count >= 64) {
-            log_warning("Memory map entry count exceeded 64\n");
+            log_warn("Memory map entry count exceeded 64\n");
             break;
         }
         
@@ -613,7 +613,7 @@ static void bios_find_acpi_tables(hic_boot_info_t *boot_info)
         }
     }
     
-    log_warning("ACPI RSDP not found\n");
+    log_warn("ACPI RSDP not found\n");
     boot_info->flags &= ~HIC_BOOT_FLAG_ACPI_ENABLED;
 }
 
@@ -740,7 +740,7 @@ static void bios_get_system_info(hic_boot_info_t *boot_info)
     return;
 
 mem_error:
-    log_warning("Failed to get extended memory size, using default\n");
+    log_warn("Failed to get extended memory size, using default\n");
     boot_info->system.memory_size_mb = 1024;  // 默认1GB
     boot_info->system.cpu_count = 1;
 }
