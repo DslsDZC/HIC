@@ -18,7 +18,7 @@
 #include "lib/mem.h"
 
 /* 全局域表 */
-static domain_t g_domains[MAX_DOMAINS];
+domain_t g_domains[MAX_DOMAINS];
 static u32 g_domain_count = 0;
 
 /* 域系统初始化 */
