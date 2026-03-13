@@ -16,6 +16,9 @@
 #include "bootlog.h"
 #include "efi.h"
 
+// UEFI Boot Services全局指针
+extern EFI_BOOT_SERVICES *gBS;
+
 // 内存清零函数
 static inline void hw_memzero(void *ptr, size_t size)
 {
@@ -37,16 +40,16 @@ static inline void hw_cpuid(uint32_t leaf, uint32_t subleaf,
 // PCI配置访问辅助函数
 static inline uint32_t pci_read_config(uint32_t addr)
 {
-    __asm__ volatile("outl %0, %1" : : "a"(addr), "Nd"(0xCF8));
+    __asm__ volatile("outl %0, %%dx" : : "a"(addr), "d"((uint16_t)0xCF8));
     uint32_t value;
-    __asm__ volatile("inl %1, %0" : "=a"(value) : "Nd"(0xCFC));
+    __asm__ volatile("inl %%dx, %0" : "=a"(value) : "d"((uint16_t)0xCFC));
     return value;
 }
 
 static inline void pci_write_config(uint32_t addr, uint32_t value)
 {
-    __asm__ volatile("outl %0, %1" : : "a"(addr), "Nd"(0xCF8));
-    __asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(0xCFC));
+    __asm__ volatile("outl %0, %%dx" : : "a"(addr), "d"((uint16_t)0xCF8));
+    __asm__ volatile("outl %0, %%dx" : : "a"(value), "d"((uint16_t)0xCFC));
 }
 
 // 初始化硬件探测
@@ -237,7 +240,7 @@ void probe_pci_devices(device_list_t *result)
                 dev->revision = class_rev & 0xFF;
                 
                 // 读取BAR寄存器
-                for (int i = 0; i < 6; i++) {
+                for (unsigned int i = 0; i < 6; i++) {
                     dev->pci.bar[i] = pci_read_config((1U << 31) | (bus << 16) | (device << 11) | (function << 8) | (0x10 + i * 4));
                 }
                 
@@ -361,7 +364,7 @@ void probe_acpi_info(hic_boot_info_t *boot_info, hardware_probe_result_t *result
     
     // 检查是否有ACPI RSDP
     if (!boot_info->rsdp) {
-        log_warning("  No ACPI RSDP found\n");
+        log_warn("  No ACPI RSDP found\n");
         return;
     }
     
@@ -396,13 +399,13 @@ void probe_acpi_info(hic_boot_info_t *boot_info, hardware_probe_result_t *result
     // 解析MADT（APIC表）
     uint8_t *sdt = (uint8_t *)(revision >= 2 ? xsdt_address : rsdt_address);
     if (!sdt) {
-        log_warning("  No SDT found\n");
+        log_warn("  No SDT found\n");
         return;
     }
     
     // 验证SDT签名
     if (memcmp(sdt, "RSDT", 4) != 0 && memcmp(sdt, "XSDT", 4) != 0) {
-        log_warning("  Invalid SDT signature\n");
+        log_warn("  Invalid SDT signature\n");
         return;
     }
     
@@ -474,7 +477,7 @@ void probe_timers_and_serial(hardware_probe_result_t *result)
     
     // 检查设备列表是否已满
     if (result->devices.device_count >= sizeof(result->devices.devices) / sizeof(result->devices.devices[0])) {
-        log_warning("  Device list is full, skipping timer/serial detection\n");
+        log_warn("  Device list is full, skipping timer/serial detection\n");
         return;
     }
     

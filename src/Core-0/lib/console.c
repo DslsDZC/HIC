@@ -48,17 +48,10 @@ void console_puts(const char *str)
         return;
     }
     
-    /* 调试：输出 'B' 表示开始 */
-    __asm__ volatile("outb %%al, %%dx" : : "a"('B'), "d"(0x3F8));
-    
-    /* 直接输出字符，避免复杂的循环 */
     while (*str != '\0') {
         __asm__ volatile("outb %%al, %%dx" : : "a"(*str), "d"(0x3F8));
         str++;
     }
-    
-    /* 调试：输出 'E' 表示结束 */
-    __asm__ volatile("outb %%al, %%dx" : : "a"('E'), "d"(0x3F8));
 }
 
 /* 输出数字（十进制） */

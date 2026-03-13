@@ -54,6 +54,18 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
 {
     console_puts("[PMM] Initializing Physical Memory Manager...\n");
     
+    /* 限制最大物理地址为 4GB（实际物理内存不超过此值） */
+    /* 这避免了 MMIO 区域导致位图过大的问题 */
+    const phys_addr_t MAX_PHYS_ADDR_LIMIT = 0x100000000ULL;  /* 4GB */
+    if (max_phys_addr > MAX_PHYS_ADDR_LIMIT) {
+        console_puts("[PMM] Limiting max physical address from 0x");
+        console_puthex64(max_phys_addr);
+        console_puts(" to 0x");
+        console_puthex64(MAX_PHYS_ADDR_LIMIT);
+        console_puts(" (4GB limit)\n");
+        max_phys_addr = MAX_PHYS_ADDR_LIMIT;
+    }
+    
     /* 计算最大帧数 */
     max_frames = (max_phys_addr + PAGE_SIZE - 1) / PAGE_SIZE;
     
@@ -76,7 +88,7 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
     /* 注意：这是在PMM完全初始化之前，所以使用临时分配 */
     /* 实际应用中，位图应该从bootloader预留的特定内存区域分配 */
     /* 这里我们使用静态分配，但大小动态计算 */
-    static u8 static_bitmap[1024 * 1024];  /* 1MB静态缓冲区（足够用于256MB内存） */
+    static u8 static_bitmap[1024 * 1024];  /* 1MB静态缓冲区（足够用于4GB内存） */
     
     if (bitmap_size > sizeof(static_bitmap)) {
         console_puts("[PMM] ERROR: Bitmap too large for static buffer!\n");
