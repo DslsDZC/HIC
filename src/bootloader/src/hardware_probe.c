@@ -442,7 +442,7 @@ void probe_acpi_info(hic_boot_info_t *boot_info, hardware_probe_result_t *result
                     }
                 } else if (entry_type == 1) {  // I/O APIC
                     uint8_t ioapic_id = table[offset + 2];
-                    uint8_t reserved = table[offset + 3];
+                    uint8_t reserved = table[offset + 3]; (void)reserved;
                     uint32_t ioapic_address = *(uint32_t *)&table[offset + 4];
                     uint32_t gsi_base = *(uint32_t *)&table[offset + 8];
                     

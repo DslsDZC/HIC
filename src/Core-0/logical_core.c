@@ -569,6 +569,8 @@ hic_status_t hic_thread_create_on_core(cap_handle_t logical_core_handle,
                                       priority_t priority,
                                       void *arg,
                                       thread_id_t *out_thread_id) {
+    (void)arg;  /* 参数暂未使用，保留API兼容性 */
+    
     if (logical_core_handle == CAP_HANDLE_INVALID || out_thread_id == NULL) {
         return HIC_ERROR_INVALID_PARAM;
     }
@@ -636,7 +638,7 @@ hic_status_t hic_logical_core_get_info(cap_handle_t logical_core_handle,
     
     /* 复制信息 */
     logical_core_t *core = &g_logical_cores[logical_core_id];
-    memcpy(info, core, sizeof(logical_core_t));
+    memcopy(info, core, sizeof(logical_core_t));
     
     return HIC_SUCCESS;
 }
@@ -739,7 +741,7 @@ hic_status_t hic_logical_core_get_perf(cap_handle_t logical_core_handle,
     }
     
     logical_core_t *core = &g_logical_cores[logical_core_id];
-    memcpy(perf, &core->perf, sizeof(logical_core_perf_t));
+    memcopy(perf, &core->perf, sizeof(logical_core_perf_t));
     
     return HIC_SUCCESS;
 }

@@ -131,3 +131,36 @@ hic_status_t thread_terminate(thread_id_t thread_id)
 
     return HIC_SUCCESS;
 }
+
+/* 创建线程 */
+hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
+                          priority_t priority, thread_id_t *out)
+{
+    if (out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 简化实现：查找空闲线程槽 */
+    for (thread_id_t i = 0; i < MAX_THREADS; i++) {
+        if (g_threads[i].state == THREAD_STATE_TERMINATED || g_threads[i].state == 0) {
+            /* 初始化线程结构 */
+            thread_t *thread = &g_threads[i];
+            memzero(thread, sizeof(thread_t));
+            thread->thread_id = i;
+            thread->domain_id = domain_id;
+            thread->state = THREAD_STATE_READY;
+            thread->priority = priority;
+            /* thread->entry_point = entry_point; */ (void)entry_point;
+            thread->stack_base = 0;  /* 暂不分配栈 */
+            thread->stack_size = 0;
+            thread->last_run_time = 0;
+            thread->cpu_time_used = 0;
+            thread->time_slice = 1000000;  /* 默认时间片 */
+            
+            *out = i;
+            return HIC_SUCCESS;
+        }
+    }
+    
+    return HIC_ERROR_NO_RESOURCE;
+}

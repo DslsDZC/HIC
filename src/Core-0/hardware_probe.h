@@ -190,6 +190,16 @@ void hardware_probe_init(void);
  */
 hic_status_t hardware_probe_all(hardware_probe_result_t *result);
 
+/**
+ * 探测CPU信息（内部函数，用于最小化探测）
+ */
+void detect_cpu_info(cpu_info_t *info);
+
+/**
+ * 探测内存拓扑（内部函数，用于最小化探测）
+ */
+void detect_memory_topology(memory_topology_t *topo);
+
 /* 全局硬件信息变量 */
 extern cpu_info_t g_cpu_info;
 
