@@ -24,6 +24,7 @@
 #include "atomic.h"
 #include "lib/mem.h"
 #include "lib/console.h"
+#include "formal_verification.h"
 
 /* ==================== 全局能力表 ==================== */
 __capability cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
@@ -422,7 +423,17 @@ u32 get_capability_type(cap_id_t cap) {
     if (!capability_exists(cap)) {
         return 0;
     }
-    return g_global_cap_table[cap].rights;
+    
+    cap_rights_t rights = g_global_cap_table[cap].rights;
+    
+    /* 根据权限特征判断能力类型 */
+    if (rights & CAP_MEM_DEVICE) {
+        return CAP_MMIO;      /* MMIO区域 */
+    } else if (rights & (CAP_MEM_READ | CAP_MEM_WRITE | CAP_MEM_EXEC)) {
+        return CAP_MEMORY;    /* 内存能力 */
+    }
+    
+    return CAP_MEMORY;  /* 默认为内存能力 */
 }
 
 /* 获取能力派生信息 */
