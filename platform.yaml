@@ -46,8 +46,20 @@ core_services:
 # ==================== 静态模块配置 ====================
 # 这些模块将静态链接到内核中，在启动时自动加载
 # 必须在动态模块之前加载，用于提供基础功能（如文件系统）
+# 
+# 配置说明：
+# - name: 模块名称（对应 src/Privileged-1/services/<name>/ 目录）
+# - type: 模块类型 (driver|service|system|user)
+# - auto_start: 是否在启动时自动加载
+# - critical: 是否为关键服务（启动失败会导致内核 panic）
+# - privileged: 是否为特权服务（运行在 Privileged-1 层）
+# - capabilities: 初始能力列表
+#
+# 加载顺序：按列表顺序依次加载
+
 static_modules:
-  # FAT32 文件系统服务（必需：用于加载其他模块）
+  # FAT32 文件系统服务（必需：用于读取磁盘）
+  # 提供文件访问能力，module_manager_service 依赖此服务
   - name: fat32_service
     type: service
     auto_start: true
@@ -57,7 +69,19 @@ static_modules:
       - disk_access
       - memory_alloc
 
-  # 模块管理器服务（必需：通过 FAT32 探索并加载其他模块）
+  # 模块签名验证服务（必需：用于验证动态模块签名）
+  # 提供模块签名验证能力，确保加载的模块可信
+  - name: module_signer
+    type: service
+    auto_start: true
+    critical: true
+    privileged: true
+    capabilities:
+      - crypto_access
+      - signature_verify
+
+  # 模块管理器服务（必需：加载和管理动态模块）
+  # 读取 /modules.list 并加载磁盘上的动态模块
   - name: module_manager_service
     type: service
     auto_start: true

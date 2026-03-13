@@ -96,19 +96,6 @@ void kernel_boot_info_init(hic_boot_info_t* boot_info) {
         goto panic;
     }
 
-    /* 注意：串口已在 bootloader 中初始化，这里不重新初始化 */
-
-    /* 调试输出：在 console_puts 之前输出 'H' */
-    __asm__ volatile("outb %%al, %%dx" : : "a"('H'), "d"(0x3F8));
-
-    // 输出 hello（逐个字符输出以便调试）
-    __asm__ volatile("outb %%al, %%dx" : : "a"('h'), "d"(0x3F8));
-    __asm__ volatile("outb %%al, %%dx" : : "a"('e'), "d"(0x3F8));
-    __asm__ volatile("outb %%al, %%dx" : : "a"('l'), "d"(0x3F8));
-    __asm__ volatile("outb %%al, %%dx" : : "a"('l'), "d"(0x3F8));
-    __asm__ volatile("outb %%al, %%dx" : : "a"('o'), "d"(0x3F8));
-    __asm__ volatile("outb %%al, %%dx" : : "a"('\n'), "d"(0x3F8));
-
     /* 调试输出：在 console_puts 之后输出 'I' */
     __asm__ volatile("outb %%al, %%dx" : : "a"('I'), "d"(0x3F8));
 

@@ -25,7 +25,8 @@
 #include "boot_info.h"
 #include "minimal_uart.h"
 #include "module_loader.h"
-#include "static_module.h"
+#include "include/static_module.h"
+#include "include/module_primitives.h"
 
 /* 外部全局变量 */
 extern boot_state_t g_boot_state;
@@ -219,9 +220,19 @@ void kernel_main(void *info)
     
     /* 【步骤11：加载静态模块】 */
     console_puts("\n[BOOT] STEP 11: Loading Static Modules\n");
+    console_puts("[BOOT] Loading static modules from configuration (platform.yaml)...\n");
     static_module_system_init();
-    static_module_load_all();
-    console_puts("[BOOT] Static modules loading completed\n");
+    int static_loaded = static_module_load_all();
+    console_puts("[BOOT] Static modules loaded: ");
+    console_putu32((u32)static_loaded);
+    console_puts("\n");
+    
+    /* 【步骤11.5：初始化模块原语系统】 */
+    console_puts("\n[BOOT] STEP 11.5: Initializing Module Primitives\n");
+    console_puts("[BOOT] Initializing Core-0 module primitives for Privileged-1...\n");
+    module_primitives_init();
+    console_puts("[BOOT] Module primitives initialized\n");
+    console_puts("[BOOT] Dynamic module loading will be handled by Privileged-1 services\n");
     
     /* ==================== 第七阶段：最终化 ==================== */
     
