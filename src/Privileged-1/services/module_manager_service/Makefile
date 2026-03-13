@@ -12,6 +12,8 @@ CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 
 OBJS := $(OBJ_DIR)/module_manager_service.service.o
+OBJS += $(OBJ_DIR)/module_manager_service.dynamic_module_loader.o
+OBJS += $(OBJ_DIR)/module_manager_service.service_registry.o
 
 TARGET := $(OBJ_DIR)/$(SERVICE_NAME).o
 MOD_TARGET := $(MOD_DIR)/$(SERVICE_NAME).hicmod
@@ -32,6 +34,12 @@ $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -r $^ -o $@
 
 $(OBJ_DIR)/module_manager_service.service.o: service.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/module_manager_service.dynamic_module_loader.o: dynamic_module_loader.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/module_manager_service.service_registry.o: service_registry.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:

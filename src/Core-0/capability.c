@@ -395,33 +395,33 @@ bool capability_exists(cap_id_t cap) {
 }
 
 /* 获取能力权限 */
-cap_rights_t get_capability_permissions(cap_id_t cap) {
+u64 get_capability_permissions(cap_id_t cap) {
     if (!capability_exists(cap)) {
         return 0;
     }
-    return g_global_cap_table[cap].rights;
+    return (u64)g_global_cap_table[cap].rights;
 }
 
 /* 获取能力对象类型 */
-u32 get_capability_object_type(cap_id_t cap) {
+obj_type_t get_capability_object_type(cap_id_t cap) {
     /* 简化实现：返回能力类型 */
     if (!capability_exists(cap)) {
-        return 0;
+        return OBJ_MEMORY;  /* 默认返回内存类型 */
     }
     
     /* 根据权限判断类型 */
     cap_rights_t rights = g_global_cap_table[cap].rights;
     if (rights & CAP_MEM_DEVICE) {
-        return 2; /* MMIO */
+        return OBJ_DEVICE; /* 设备 */
     } else {
-        return 1; /* Memory */
+        return OBJ_MEMORY; /* 内存 */
     }
 }
 
 /* 获取能力类型 */
-u32 get_capability_type(cap_id_t cap) {
+cap_type_t get_capability_type(cap_id_t cap) {
     if (!capability_exists(cap)) {
-        return 0;
+        return CAP_MEMORY;
     }
     
     cap_rights_t rights = g_global_cap_table[cap].rights;
@@ -437,14 +437,13 @@ u32 get_capability_type(cap_id_t cap) {
 }
 
 /* 获取能力派生信息 */
-hic_status_t get_capability_derivatives(cap_id_t cap, cap_id_t *derivatives, u32 *count) {
-    if (!capability_exists(cap) || derivatives == NULL || count == NULL) {
-        return HIC_ERROR_INVALID_PARAM;
+cap_id_t* get_capability_derivatives(cap_id_t cap) {
+    if (!capability_exists(cap)) {
+        return NULL;
     }
     
-    /* 简化实现：返回无派生 */
-    *count = 0;
-    return HIC_SUCCESS;
+    /* 简化实现：返回空列表 */
+    return NULL;
 }
 
 /* ==================== 逻辑核心能力函数 ==================== */

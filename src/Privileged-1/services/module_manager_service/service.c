@@ -5,6 +5,8 @@
  */
 
 #include "service.h"
+#include "dynamic_module_loader.h"
+#include "service_registry.h"
 #include <module_types.h>
 #include <string.h>
 
@@ -181,39 +183,51 @@ hic_status_t module_manager_service_init(void) {
     g_module_count = 0;
     g_module_memory_offset = 0;
     
+    /* 初始化服务注册表 */
+    service_registry_init();
+    
+    /* 初始化动态模块加载器 */
+    dynamic_module_loader_init();
+    
     return HIC_SUCCESS;
 }
 
 /* 服务启动 */
 hic_status_t module_manager_service_start(void) {
-    /* 自动加载所有模块 */
-    const char *module_dir = "/build/privileged-1/modules/";
-    const char *modules[] = {
-        "libc_service.hicmod",              /* 优先级1 - 基础库 */
-        "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
-        "serial_service.hicmod",            /* 优先级3 - 串口服务 */
-        "vga_service.hicmod",               /* 优先级4 - VGA服务 */
-        "config_service.hicmod",            /* 优先级5 - 配置服务 */
-        "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
-        "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
-        "cli_service.hicmod"                /* 优先级8 - CLI服务 */
-    };
-    int i;
+    /* 尝试从 modules.list 加载模块 */
+    int loaded_count = dynamic_module_load_all();
     
-    /* 按优先级顺序加载所有模块 */
-    for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
-        char module_path[256];
+    /* 如果没有从 modules.list 加载任何模块，则使用默认加载列表 */
+    if (loaded_count <= 0) {
+        /* 自动加载所有模块 */
+        const char *module_dir = "/build/privileged-1/modules/";
+        const char *modules[] = {
+            "libc_service.hicmod",              /* 优先级1 - 基础库 */
+            "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
+            "serial_service.hicmod",            /* 优先级3 - 串口服务 */
+            "vga_service.hicmod",               /* 优先级4 - VGA服务 */
+            "config_service.hicmod",            /* 优先级5 - 配置服务 */
+            "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
+            "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
+            "cli_service.hicmod"                /* 优先级8 - CLI服务 */
+        };
+        int i;
         
-        /* 构建完整路径 */
-        strcpy(module_path, module_dir);
-        strcat(module_path, modules[i]);
-        
-        /* 加载模块 */
-        hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
-        if (status != HIC_SUCCESS) {
-            /* 加载失败，记录但继续 */
-            /* TODO: 添加日志记录 */
-            (void)status;
+        /* 按优先级顺序加载所有模块 */
+        for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
+            char module_path[256];
+            
+            /* 构建完整路径 */
+            strcpy(module_path, module_dir);
+            strcat(module_path, modules[i]);
+            
+            /* 加载模块 */
+            hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
+            if (status != HIC_SUCCESS) {
+                /* 加载失败，记录但继续 */
+                /* TODO: 添加日志记录 */
+                (void)status;
+            }
         }
     }
     
