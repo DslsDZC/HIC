@@ -60,18 +60,43 @@ SECTIONS
         __bss_end = .;
     }
 
-    /* 栈段（预留16KB） */
-    .stack ALIGN(4K) : AT(ADDR(.stack)) {
-        __stack_start = .;
-        . += 16K;
-        __stack_end = .;
-    }
-
     /* ==================== 静态服务代码段（全自动） ==================== */
-    /* 所有静态服务代码统一放在此段，按 platform.yaml 配置自动链接 */
+    /* 每个服务使用独立的段名，在链接脚本中显式定义起始/结束符号 */
+    /* 必须放在内核主段内，确保被 bootloader 加载 */
+    
+    /* 
+     * 静态服务段命名规则：
+     * - 代码段: .static_svc.<name>.text
+     * - 只读数据: .static_svc.<name>.rodata  
+     * - 数据段: .static_svc.<name>.data
+     * - BSS段: .static_svc.<name>.bss
+     */
+    
     .static_services ALIGN(4K) : AT(ADDR(.static_services)) {
         __static_services_start = .;
-        /* 包含所有静态服务的代码和只读数据 */
+        
+        /* verifier 服务段 */
+        __start_static_svc_verifier_text = .;
+        KEEP(*(.static_svc.verifier.text))
+        KEEP(*(.static_svc.verifier.rodata))
+        __stop_static_svc_verifier_text = .;
+        
+        /* fat32_service 服务段 */
+        __start_static_svc_fat32_service_text = .;
+        KEEP(*(.static_svc.fat32_service.text))
+        KEEP(*(.static_svc.fat32_service.rodata))
+        __stop_static_svc_fat32_service_text = .;
+        
+        /* init_launcher 服务段 */
+        __start_static_svc_init_launcher_text = .;
+        KEEP(*(.static_svc.init_launcher.text))
+        KEEP(*(.static_svc.init_launcher.rodata))
+        __stop_static_svc_init_launcher_text = .;
+        
+        /* 通配符匹配其他静态服务段 */
+        *(.static_svc.*)
+        
+        /* 兼容旧格式 */
         KEEP(*(.static_service.code))
         KEEP(*(.static_service.text))
         KEEP(*(.static_service.rodata))
@@ -82,6 +107,24 @@ SECTIONS
     /* 静态服务数据段 */
     .static_services_data ALIGN(4K) : AT(ADDR(.static_services_data)) {
         __static_services_data_start = .;
+        
+        /* verifier 数据段 */
+        __start_static_svc_verifier_data = .;
+        KEEP(*(.static_svc.verifier.data))
+        __stop_static_svc_verifier_data = .;
+        
+        /* fat32_service 数据段 */
+        __start_static_svc_fat32_service_data = .;
+        KEEP(*(.static_svc.fat32_service.data))
+        __stop_static_svc_fat32_service_data = .;
+        
+        /* init_launcher 数据段 */
+        __start_static_svc_init_launcher_data = .;
+        KEEP(*(.static_svc.init_launcher.data))
+        __stop_static_svc_init_launcher_data = .;
+        
+        /* 通配符 */
+        *(.static_svc.*.data)
         KEEP(*(.static_service.data))
         *(.static_service.data.*)
         __static_services_data_end = .;
@@ -90,6 +133,24 @@ SECTIONS
     /* 静态服务 BSS 段 */
     .static_services_bss ALIGN(4K) : AT(ADDR(.static_services_bss)) {
         __static_services_bss_start = .;
+        
+        /* verifier BSS 段 */
+        __start_static_svc_verifier_bss = .;
+        KEEP(*(.static_svc.verifier.bss))
+        __stop_static_svc_verifier_bss = .;
+        
+        /* fat32_service BSS 段 */
+        __start_static_svc_fat32_service_bss = .;
+        KEEP(*(.static_svc.fat32_service.bss))
+        __stop_static_svc_fat32_service_bss = .;
+        
+        /* init_launcher BSS 段 */
+        __start_static_svc_init_launcher_bss = .;
+        KEEP(*(.static_svc.init_launcher.bss))
+        __stop_static_svc_init_launcher_bss = .;
+        
+        /* 通配符 */
+        *(.static_svc.*.bss)
         KEEP(*(.static_service.bss))
         *(.static_service.bss.*)
         __static_services_bss_end = .;
@@ -100,6 +161,19 @@ SECTIONS
         __static_modules_start = .;
         KEEP(*(.static_modules))
         __static_modules_end = .;
+    }
+
+    /* 栈段（预留16KB） */
+    .stack ALIGN(4K) : AT(ADDR(.stack)) {
+        __stack_start = .;
+        . += 16K;
+        __stack_end = .;
+    }
+
+    /* 大型 BSS 段（放在内核主段之后） */
+    .lbss ALIGN(4K) : AT(ADDR(.lbss)) {
+        *(.lbss)
+        *(.lbss.*)
     }
 
     /* 内核结束 */

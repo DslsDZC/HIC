@@ -170,6 +170,16 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
         return HIC_ERROR_NO_RESOURCE;
     }
     
+    /* 分配内核栈 (2 页 = 8KB) */
+    extern hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
+                                          page_frame_type_t type, phys_addr_t *out);
+    phys_addr_t stack_phys;
+    hic_status_t status = pmm_alloc_frames(domain_id, 2, PAGE_FRAME_PRIVILEGED, &stack_phys);
+    if (status != HIC_SUCCESS) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_RESOURCE;
+    }
+    
     /* 初始化线程结构 */
     thread_t *thread = &g_threads[free_slot];
     memzero(thread, sizeof(thread_t));
@@ -178,15 +188,32 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     thread->domain_id = domain_id;
     thread->state = THREAD_STATE_READY;
     thread->priority = priority;
-    thread->stack_base = 0;  /* 栈由调用者分配或稍后分配 */
-    thread->stack_size = 0;
+    thread->stack_base = (virt_addr_t)stack_phys;
+    thread->stack_size = 2 * PAGE_SIZE;
     thread->last_run_time = 0;
     thread->cpu_time_used = 0;
-    thread->time_slice = 1000000;  /* 默认时间片 1ms */
-    thread->wait_data = (void *)entry_point;  /* 暂存入口点 */
+    thread->time_slice = 100;  /* 默认时间片 */
     thread->wait_flags = 0;
     
+    /* 初始化栈：设置入口点
+     * context_switch 会恢复以下寄存器：rbx, rbp, r12-r15
+     * 然后执行 ret，所以需要在栈顶放置入口点地址
+     */
+    u64 *stack_top = (u64 *)(stack_phys + 2 * PAGE_SIZE);
+    
+    /* 压入入口点地址（作为 ret 的返回地址） */
+    stack_top--;
+    *stack_top = (u64)entry_point;
+    
+    /* 为 callee-saved 寄存器预留空间 (rbx, rbp, r12-r15 = 6 个) */
+    stack_top -= 6;
+    
+    thread->stack_ptr = (virt_addr_t)stack_top;
+    
     atomic_exit_critical(irq);
+    
+    /* 将线程加入调度队列 */
+    thread_ready(free_slot);
     
     *out = free_slot;
     return HIC_SUCCESS;

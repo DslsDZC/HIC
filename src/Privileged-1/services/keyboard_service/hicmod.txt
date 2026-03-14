@@ -1,0 +1,57 @@
+# HIC服务模块元数据文件
+
+[service]
+name = keyboard_service
+display_name = 键盘服务
+version = 1.0.0
+api_version = 1.0
+uuid = 00000000-0000-0000-0000-000000000020
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供PS/2键盘输入服务
+long = 键盘服务提供基于x86架构的PS/2键盘驱动，支持美式QWERTY布局。提供按键事件缓冲、修饰键处理和字符转换功能。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+libc_service = 1.0:1.0:1.0
+
+[resources]
+max_memory = 16384
+max_threads = 1
+max_capabilities = 16
+cpu_quota_percent = 3
+
+[endpoints]
+keyboard_init = 1.0:keyboard_service_init
+keyboard_poll = 1.0:keyboard_service_poll
+keyboard_has_event = 1.0:keyboard_service_has_event
+keyboard_read_event = 1.0:keyboard_service_read_event
+keyboard_read_char = 1.0:keyboard_service_read_char
+keyboard_get_key_name = 1.0:keyboard_service_get_key_name
+
+[permissions]
+# 需要I/O端口访问权限（0x60, 0x64）
+io_port_access = true
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = false
+priority = 3
+autostart = true
+
+[io_ports]
+# PS/2 键盘端口
+data_port = 0x60
+status_port = 0x64
+command_port = 0x64

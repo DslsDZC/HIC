@@ -146,10 +146,12 @@ static void update_sched_mode(void)
 {
     u32 active_count = 0;
     
-    /* 统计活跃线程数 */
+    /* 统计活跃线程数 - 只统计有效的线程槽 */
     for (u32 i = 0; i < MAX_THREADS; i++) {
-        if (g_threads[i].state == THREAD_STATE_READY || 
-            g_threads[i].state == THREAD_STATE_RUNNING) {
+        /* 检查线程槽是否有效：thread_id 必须等于数组索引 */
+        if (g_threads[i].thread_id == (thread_id_t)i &&
+            (g_threads[i].state == THREAD_STATE_READY || 
+             g_threads[i].state == THREAD_STATE_RUNNING)) {
             active_count++;
         }
     }
@@ -407,6 +409,29 @@ void schedule(void)
     thread_t *prev = (thread_t*)g_current_thread;
     thread_t *next = pick_next_thread();
     
+    /* DEBUG: 显示调度状态 */
+    static int sched_debug_count = 0;
+    if (sched_debug_count < 10) {
+        console_puts("[SCHED] schedule() prev=");
+        if (prev == NULL) {
+            console_puts("NULL");
+        } else if (prev == &idle_thread) {
+            console_puts("IDLE");
+        } else {
+            console_putu32(prev->thread_id);
+        }
+        console_puts(" next=");
+        if (next == &idle_thread) {
+            console_puts("IDLE");
+        } else {
+            console_putu32(next->thread_id);
+            console_puts(" sp=");
+            console_puthex64(next->stack_ptr);
+        }
+        console_puts("\n");
+        sched_debug_count++;
+    }
+    
     if (next == prev) {
         atomic_exit_critical(irq_state);
         return;
@@ -492,6 +517,27 @@ hic_status_t thread_wakeup(thread_id_t thread_id) {
     
     thread->time_slice = 100;
     thread->state = THREAD_STATE_READY;
+    enqueue_thread(thread);
+    
+    return HIC_SUCCESS;
+}
+
+/**
+ * 将新创建的线程加入调度队列
+ * 用于 thread_create 之后调用
+ */
+hic_status_t thread_ready(thread_id_t thread_id) {
+    if (thread_id >= MAX_THREADS) return HIC_ERROR_INVALID_PARAM;
+    
+    thread_t* thread = &g_threads[thread_id];
+    if (thread == NULL) return HIC_ERROR_INVALID_PARAM;
+    
+    /* 只有 READY 状态的线程才能入队 */
+    if (thread->state != THREAD_STATE_READY) {
+        thread->state = THREAD_STATE_READY;
+    }
+    
+    thread->time_slice = 100;
     enqueue_thread(thread);
     
     return HIC_SUCCESS;

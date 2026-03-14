@@ -85,6 +85,9 @@ void thread_yield(void);
 hic_status_t thread_block(thread_id_t thread_id);
 hic_status_t thread_wakeup(thread_id_t thread_id);
 
+/* 将线程加入调度队列 */
+hic_status_t thread_ready(thread_id_t thread_id);
+
 /* 全局线程表 */
 extern thread_t g_threads[MAX_THREADS];
 
