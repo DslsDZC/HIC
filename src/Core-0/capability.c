@@ -32,6 +32,17 @@ __capability cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
 /* ==================== 域密钥表（每个域一个） ==================== */
 domain_key_t g_domain_keys[HIC_DOMAIN_MAX];
 
+/* ==================== 能力派生跟踪 ==================== */
+#define MAX_DERIVATIVES_PER_CAP 16
+
+typedef struct cap_derivative {
+    cap_id_t parent;
+    cap_id_t children[MAX_DERIVATIVES_PER_CAP];
+    u32 child_count;
+} cap_derivative_t;
+
+static cap_derivative_t g_derivatives[CAP_TABLE_SIZE];
+
 /* ==================== 初始化 ==================== */
 
 void capability_system_init(void) {
@@ -254,6 +265,11 @@ hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, cap_rights_t sub_rig
     /* 复制父能力的数据 */
     g_global_cap_table[cap].memory = g_global_cap_table[parent].memory;
     
+    /* 记录派生关系 */
+    if (g_derivatives[parent].child_count < MAX_DERIVATIVES_PER_CAP) {
+        g_derivatives[parent].children[g_derivatives[parent].child_count++] = cap;
+    }
+    
     atomic_exit_critical(irq);
     
     *out = cap;
@@ -404,18 +420,35 @@ u64 get_capability_permissions(cap_id_t cap) {
 
 /* 获取能力对象类型 */
 obj_type_t get_capability_object_type(cap_id_t cap) {
-    /* 简化实现：返回能力类型 */
     if (!capability_exists(cap)) {
         return OBJ_MEMORY;  /* 默认返回内存类型 */
     }
     
-    /* 根据权限判断类型 */
     cap_rights_t rights = g_global_cap_table[cap].rights;
+    cap_entry_t *entry = &g_global_cap_table[cap];
+    
+    /* 根据权限特征和大小判断对象类型 */
     if (rights & CAP_MEM_DEVICE) {
-        return OBJ_DEVICE; /* 设备 */
-    } else {
-        return OBJ_MEMORY; /* 内存 */
+        return OBJ_DEVICE;  /* 设备 */
     }
+    
+    /* 检查是否为IPC端点（大小为0，且target有效） */
+    if (entry->memory.size == 0 && entry->endpoint.target < HIC_DOMAIN_MAX) {
+        return OBJ_IPC;
+    }
+    
+    /* 检查是否为共享内存 */
+    if ((rights & (CAP_MEM_READ | CAP_MEM_WRITE)) == (CAP_MEM_READ | CAP_MEM_WRITE) &&
+        entry->memory.size > 0 && !(rights & CAP_MEM_EXEC)) {
+        return OBJ_SHARED;
+    }
+    
+    /* 检查是否为线程相关 */
+    if (rights & (CAP_LCORE_USE | CAP_LCORE_QUERY)) {
+        return OBJ_THREAD;
+    }
+    
+    return OBJ_MEMORY;  /* 默认内存类型 */
 }
 
 /* 获取能力类型 */
@@ -425,25 +458,85 @@ cap_type_t get_capability_type(cap_id_t cap) {
     }
     
     cap_rights_t rights = g_global_cap_table[cap].rights;
+    cap_entry_t *entry = &g_global_cap_table[cap];
     
     /* 根据权限特征判断能力类型 */
+    
+    /* MMIO区域能力 */
     if (rights & CAP_MEM_DEVICE) {
-        return CAP_MMIO;      /* MMIO区域 */
-    } else if (rights & (CAP_MEM_READ | CAP_MEM_WRITE | CAP_MEM_EXEC)) {
-        return CAP_MEMORY;    /* 内存能力 */
+        return CAP_MMIO;
     }
     
-    return CAP_MEMORY;  /* 默认为内存能力 */
+    /* IPC端点能力 */
+    if (entry->memory.size == 0 && entry->endpoint.target < HIC_DOMAIN_MAX) {
+        return CAP_ENDPOINT;
+    }
+    
+    /* 中断能力 */
+    if (rights & (1U << 20)) {  /* 假设中断权限位 */
+        return CAP_IRQ;
+    }
+    
+    /* 服务能力 */
+    if (rights & CAP_LCORE_QUERY) {
+        return CAP_SERVICE;
+    }
+    
+    /* 线程能力 */
+    if (rights & (CAP_LCORE_USE | CAP_LCORE_MIGRATE)) {
+        return CAP_THREAD;
+    }
+    
+    /* 共享内存能力 */
+    if ((rights & (CAP_MEM_READ | CAP_MEM_WRITE)) == (CAP_MEM_READ | CAP_MEM_WRITE) &&
+        !(rights & CAP_MEM_EXEC)) {
+        return CAP_SHARED;
+    }
+    
+    /* 设备能力 */
+    if (rights & (1U << 16)) {  /* 假设设备权限位 */
+        return CAP_DEVICE;
+    }
+    
+    /* 派生能力 */
+    if (rights & CAP_LCORE_BORROW) {
+        return CAP_CAP_DERIVE;
+    }
+    
+    /* 默认内存能力 */
+    if (rights & (CAP_MEM_READ | CAP_MEM_WRITE | CAP_MEM_EXEC)) {
+        return CAP_MEMORY;
+    }
+    
+    return CAP_MEMORY;
 }
 
-/* 获取能力派生信息 */
+/* 查找能力的派生信息 */
 cap_id_t* get_capability_derivatives(cap_id_t cap) {
     if (!capability_exists(cap)) {
         return NULL;
     }
     
-    /* 简化实现：返回空列表 */
-    return NULL;
+    /* 
+     * 注意：这是一个静态缓冲区，调用者应该立即使用返回值
+     * 在下一次调用此函数前使用完毕
+     */
+    static cap_id_t derivative_list[MAX_DERIVATIVES_PER_CAP + 1];
+    
+    cap_derivative_t *deriv = &g_derivatives[cap];
+    
+    if (deriv->child_count == 0) {
+        derivative_list[0] = HIC_CAP_INVALID;
+        return derivative_list;
+    }
+    
+    /* 复制子能力列表 */
+    for (u32 i = 0; i < deriv->child_count && i < MAX_DERIVATIVES_PER_CAP; i++) {
+        derivative_list[i] = deriv->children[i];
+    }
+    derivative_list[deriv->child_count] = HIC_CAP_INVALID;  /* 终止标记 */
+    
+    return derivative_list;
 }
 
 /* ==================== 逻辑核心能力函数 ==================== */

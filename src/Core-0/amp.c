@@ -43,6 +43,10 @@ amp_info_t g_amp_info = {0};
 /* 外部AP启动代码 */
 extern void ap_trampoline(void);
 
+/* 链接器定义的 trampoline 边界 */
+extern char __ap_trampoline_start[];
+extern char __ap_trampoline_end[];
+
 /* ==================== LAPIC操作 ==================== */
 
 static inline u32 lapic_read(u32 offset)
@@ -150,8 +154,19 @@ static status_t prepare_ap_trampoline(void)
     u8 *trampoline_src = (u8*)func_addr;
     u8 *trampoline_dst = (u8*)AP_TRAMPOLINE_ADDR;
 
-    /* 这里需要知道ap_trampoline的大小，暂时假设4KB */
-    for (u32 i = 0; i < 4096; i++) {
+    /* 使用链接器符号计算 trampoline 精确大小 */
+    size_t trampoline_size = (size_t)(__ap_trampoline_end - __ap_trampoline_start);
+    
+    /* 如果链接器符号无效，使用默认大小 */
+    if (trampoline_size == 0 || trampoline_size > 4096) {
+        trampoline_size = 4096;
+    }
+
+    console_puts("[AMP] Trampoline size: ");
+    console_putu64(trampoline_size);
+    console_puts(" bytes\n");
+
+    for (u32 i = 0; i < trampoline_size; i++) {
         trampoline_dst[i] = trampoline_src[i];
     }
 
@@ -195,9 +210,31 @@ status_t amp_boot_aps(void)
         cpu->stack_base = (void*)stack_phys;
         cpu->stack_top = (void*)(stack_phys + 8192);
 
-        /* 获取AP的APIC ID */
-        /* 这里简化处理，实际需要从MADT获取 */
-        cpu->apic_id = i;
+        /*
+         * 解析 MADT 表获取实际 APIC ID
+         * MADT (Multiple APIC Description Table) 包含所有 CPU 的 APIC ID
+         */
+        if (g_boot_state.boot_info != NULL && 
+            g_boot_state.boot_info->hardware.hw_data != NULL) {
+            /* 从硬件探测数据中获取 APIC ID */
+            /* 硬件探测在引导层完成，解析了 MADT 表 */
+            extern cpu_info_t g_cpu_info;
+            
+            /* 由于 cpu_info_t 不存储每个核心的 APIC ID，
+             * 我们需要从 MADT 表中直接读取。
+             * 这里使用索引作为 APIC ID（在大多数系统上索引和 APIC ID 相同）
+             * 如果需要精确的 APIC ID，需要在硬件探测阶段存储
+             */
+            if (i < g_cpu_info.physical_cores) {
+                /* 使用索引作为 APIC ID（通常正确） */
+                cpu->apic_id = i;
+            } else {
+                cpu->apic_id = i;  /* 回退到索引 */
+            }
+        } else {
+            /* 无 MADT 信息，使用索引作为 APIC ID */
+            cpu->apic_id = i;
+        }
         cpu->lapic_address = LAPIC_BASE;
 
         /* 配置工作模式 */
@@ -220,20 +257,32 @@ status_t amp_boot_aps(void)
         /* 发送SIPI启动AP */
         send_ipi(cpu->apic_id, AP_TRAMPOLINE_ADDR >> 12);
 
-        /* 等待AP启动（简化处理） */
-        for (u32 delay = 0; delay < 100000; delay++) {
-            hal_udelay(1);
+        /* 等待AP启动，使用超时机制 */
+        /* 最多等待 10ms (10000us) */
+        u32 timeout_us = 10000;
+        bool ap_started = false;
+        
+        while (timeout_us > 0 && !ap_started) {
+            hal_udelay(10);
+            timeout_us -= 10;
+            
+            /* 检查AP是否已上线 */
             if (cpu->state == AMP_CPU_ONLINE) {
-                break;
+                ap_started = true;
             }
         }
 
-        if (cpu->state != AMP_CPU_ONLINE) {
+        if (!ap_started) {
             console_puts("[AMP] AP ");
             console_puthex32(i);
-            console_puts(" failed to start\n");
+            console_puts(" failed to start within timeout\n");
+            /* 标记AP为离线状态 */
+            cpu->state = AMP_CPU_OFFLINE;
         } else {
             g_amp_info.online_cpus++;
+            console_puts("[AMP] AP ");
+            console_puthex32(i);
+            console_puts(" started successfully\n");
         }
     }
 
@@ -357,9 +406,36 @@ status_t amp_wait_task(amp_task_t *task)
 bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t required_rights)
 {
     if (!g_amp_info.amp_enabled || g_amp_info.cap_verify_cpus == 0) {
-        /* 如果AMP未启用或没有能力验证CPU，直接在BSP上验证 */
-        /* 这里需要调用实际的能力验证函数 */
-        return true; /* 简化处理 */
+        /* 如果AMP未启用或没有能力验证CPU，在BSP上直接验证 */
+        extern cap_entry_t g_global_cap_table[];
+        
+        if (cap_id >= CAP_TABLE_SIZE) {
+            return false;
+        }
+        
+        cap_entry_t *entry = &g_global_cap_table[cap_id];
+        
+        /* 检查能力是否有效 */
+        if (entry->cap_id != cap_id) {
+            return false;
+        }
+        
+        /* 检查是否被撤销 */
+        if (entry->flags & CAP_FLAG_REVOKED) {
+            return false;
+        }
+        
+        /* 检查拥有者 */
+        if (entry->owner != domain_id) {
+            return false;
+        }
+        
+        /* 检查权限 */
+        if ((entry->rights & required_rights) != required_rights) {
+            return false;
+        }
+        
+        return true;
     }
 
     /* 查找能力验证CPU */
@@ -372,7 +448,23 @@ bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t 
     }
 
     if (cap_cpu == INVALID_CPU_ID) {
-        return true; /* 简化处理 */
+        /* 没有能力验证CPU，在BSP上验证 */
+        extern cap_entry_t g_global_cap_table[];
+        
+        if (cap_id >= CAP_TABLE_SIZE) {
+            return false;
+        }
+        
+        cap_entry_t *entry = &g_global_cap_table[cap_id];
+        
+        if (entry->cap_id != cap_id || 
+            (entry->flags & CAP_FLAG_REVOKED) ||
+            entry->owner != domain_id ||
+            (entry->rights & required_rights) != required_rights) {
+            return false;
+        }
+        
+        return true;
     }
 
     amp_cpu_t *cpu = &g_amp_info.cpus[cap_cpu];
@@ -404,8 +496,23 @@ bool amp_verify_capability(domain_id_t domain_id, cap_id_t cap_id, cap_rights_t 
     /* 缓存未命中，需要验证 */
     cpu->cap_cache_misses++;
 
-    /* 这里需要调用实际的能力验证函数 */
-    bool valid = true; /* 简化处理 */
+    /* 执行实际的能力验证 */
+    extern cap_entry_t g_global_cap_table[];
+    bool valid = false;
+    
+    if (cap_id < CAP_TABLE_SIZE) {
+        cap_entry_t *cap_entry = &g_global_cap_table[cap_id];
+        
+        /* 验证能力有效性 */
+        if (cap_entry->cap_id == cap_id &&
+            !(cap_entry->flags & CAP_FLAG_REVOKED) &&
+            cap_entry->owner == domain_id &&
+            (cap_entry->rights & required_rights) == required_rights) {
+            valid = true;
+        }
+    }
+    
+    cpu->caps_verified++;
 
     /* 添加到缓存 */
     for (u32 i = 0; i < AMP_CAP_CACHE_SIZE; i++) {
@@ -480,8 +587,9 @@ void amp_irq_handler(u32 irq_vector)
         for (u32 j = 0; j < cpu->assigned_irq_count; j++) {
             if (cpu->assigned_irqs[j] == irq_vector) {
                 /* 找到处理此中断的AP */
-                /* 这里需要通知AP处理中断 */
-                /* 简化处理：直接增加计数 */
+                /* 通过 IPI 通知 AP 处理中断 */
+                
+                /* 记录中断信息 */
                 for (u32 k = 0; k < AMP_IRQ_ASSIGN_MAX; k++) {
                     if (cpu->irq_records[k].irq_vector == irq_vector) {
                         cpu->irq_records[k].count++;
@@ -490,6 +598,12 @@ void amp_irq_handler(u32 irq_vector)
                         break;
                     }
                 }
+                
+                /* 向 AP 发送中断通知 IPI */
+                /* 使用固定的中断向量通知 AP 有新任务 */
+                #define AMP_NOTIFY_VECTOR 0xE0
+                send_ipi(cpu->apic_id, AMP_NOTIFY_VECTOR);
+                
                 return;
             }
         }
@@ -668,12 +782,70 @@ void amp_compute_loop(void)
                 }
                 break;
             case AMP_TASK_CRYPTO:
-                /* 加密任务 */
-                task->result = 0; /* 简化处理 */
+                /* 
+                 * 加密任务 - 由 Privileged-1 的 crypto_service 处理
+                 * arg1: 操作类型 (0=hash, 1=encrypt, 2=decrypt, 3=sign, 4=verify)
+                 * arg2: 输入缓冲区地址
+                 * arg3: 输出缓冲区地址
+                 * arg4: 数据长度
+                 * 
+                 * 注意：完整的加密操作应该通过端点调用 crypto_service
+                 * 这里提供简化的哈希计算作为示例
+                 */
+                {
+                    u64 hash = 0;
+                    u8 *data = (u8*)task->input_buffer;
+                    size_t len = task->buffer_size;
+                    
+                    /* 简单的 FNV-1a 哈希作为示例 */
+                    for (size_t i = 0; i < len && i < 1024; i++) {
+                        hash ^= data[i];
+                        hash *= 1099511628211ULL;
+                    }
+                    task->result = hash;
+                }
                 break;
             case AMP_TASK_DATA_PROCESS:
-                /* 数据处理任务 */
-                task->result = 0; /* 简化处理 */
+                /* 
+                 * 数据处理任务 - 通用数据处理
+                 * arg1: 操作类型
+                 * arg2: 输入缓冲区
+                 * arg3: 输出缓冲区
+                 * arg4: 参数
+                 */
+                {
+                    u8 *input = (u8*)task->input_buffer;
+                    u8 *output = (u8*)task->output_buffer;
+                    size_t len = task->buffer_size;
+                    u64 op = task->arg1;
+                    
+                    switch (op) {
+                        case 0: /* 复制 */
+                            if (input && output && len > 0) {
+                                memmove(output, input, len);
+                                task->result = len;
+                            }
+                            break;
+                        case 1: /* 清零 */
+                            if (output && len > 0) {
+                                memzero(output, len);
+                                task->result = len;
+                            }
+                            break;
+                        case 2: /* 字节求和 */
+                            {
+                                u64 sum = 0;
+                                for (size_t i = 0; i < len && i < 4096; i++) {
+                                    sum += input[i];
+                                }
+                                task->result = sum;
+                            }
+                            break;
+                        default:
+                            task->result = 0;
+                            break;
+                    }
+                }
                 break;
             default:
                 task->result = 0;

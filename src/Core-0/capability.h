@@ -49,6 +49,7 @@ typedef unsigned char bool;
 #define CAP_LCORE_MIGRATE  (1U << 10) /* 迁移逻辑核心 */
 #define CAP_LCORE_SET_AFFINITY (1U << 11) /* 设置亲和性 */
 #define CAP_LCORE_MONITOR  (1U << 12) /* 监控性能计数器 */
+#define CAP_LCORE_BORROW   (1U << 13) /* 借用逻辑核心 */
 
 /* 能力权限 */
 typedef u32 cap_rights_t;

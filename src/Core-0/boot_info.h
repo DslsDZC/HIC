@@ -248,15 +248,6 @@ extern boot_state_t g_boot_state;
 /* 外部API声明 */
 
 /**
- * 
- * 接收Bootloader传递的启动信息
- * 
- * 参数：
- *   boot_info - Bootloader传递的启动信息结构
- */
-void kernel_boot_info_init(hic_boot_info_t* boot_info);
-
-/**
  * 验证启动信息
  * 
  * 参数：
@@ -300,6 +291,14 @@ void boot_info_init_acpi(hic_boot_info_t* boot_info);
  *   cmdline - 命令行字符串
  */
 void boot_info_parse_cmdline(const char* cmdline);
+
+/**
+ * 从Bootloader复制硬件探测结果
+ * 
+ * 参数：
+ *   boot_info - 启动信息
+ */
+void boot_info_copy_hardware_info(hic_boot_info_t* boot_info);
 
 /**
  * 获取启动状态

@@ -13,6 +13,7 @@
 #include "hal.h"
 #include "pmm.h"
 #include "lib/mem.h"
+#include "atomic.h"
 
 /* 全局线程表 */
 thread_t g_threads[MAX_THREADS];
@@ -136,31 +137,57 @@ hic_status_t thread_terminate(thread_id_t thread_id)
 hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
                           priority_t priority, thread_id_t *out)
 {
-    if (out == NULL) {
+    if (out == NULL || domain_id >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
     }
     
-    /* 简化实现：查找空闲线程槽 */
-    for (thread_id_t i = 0; i < MAX_THREADS; i++) {
-        if (g_threads[i].state == THREAD_STATE_TERMINATED || g_threads[i].state == 0) {
-            /* 初始化线程结构 */
-            thread_t *thread = &g_threads[i];
-            memzero(thread, sizeof(thread_t));
-            thread->thread_id = i;
-            thread->domain_id = domain_id;
-            thread->state = THREAD_STATE_READY;
-            thread->priority = priority;
-            /* thread->entry_point = entry_point; */ (void)entry_point;
-            thread->stack_base = 0;  /* 暂不分配栈 */
-            thread->stack_size = 0;
-            thread->last_run_time = 0;
-            thread->cpu_time_used = 0;
-            thread->time_slice = 1000000;  /* 默认时间片 */
-            
-            *out = i;
-            return HIC_SUCCESS;
+    /* 使用位图快速查找空闲线程槽 */
+    static u64 g_thread_bitmap[(MAX_THREADS + 63) / 64] = {0};
+    
+    thread_id_t free_slot = MAX_THREADS;
+    bool irq = atomic_enter_critical();
+    
+    /* 在位图中查找空闲位 */
+    for (u32 i = 0; i < (MAX_THREADS + 63) / 64 && free_slot == MAX_THREADS; i++) {
+        if (g_thread_bitmap[i] != 0xFFFFFFFFFFFFFFFFULL) {
+            /* 找到有空闲位的块 */
+            for (u32 j = 0; j < 64; j++) {
+                u32 idx = i * 64 + j;
+                if (idx >= MAX_THREADS) break;
+                
+                if (!(g_thread_bitmap[i] & (1ULL << j))) {
+                    /* 找到空闲槽 */
+                    free_slot = idx;
+                    g_thread_bitmap[i] |= (1ULL << j);
+                    break;
+                }
+            }
         }
     }
     
-    return HIC_ERROR_NO_RESOURCE;
+    if (free_slot >= MAX_THREADS) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_RESOURCE;
+    }
+    
+    /* 初始化线程结构 */
+    thread_t *thread = &g_threads[free_slot];
+    memzero(thread, sizeof(thread_t));
+    
+    thread->thread_id = free_slot;
+    thread->domain_id = domain_id;
+    thread->state = THREAD_STATE_READY;
+    thread->priority = priority;
+    thread->stack_base = 0;  /* 栈由调用者分配或稍后分配 */
+    thread->stack_size = 0;
+    thread->last_run_time = 0;
+    thread->cpu_time_used = 0;
+    thread->time_slice = 1000000;  /* 默认时间片 1ms */
+    thread->wait_data = (void *)entry_point;  /* 暂存入口点 */
+    thread->wait_flags = 0;
+    
+    atomic_exit_critical(irq);
+    
+    *out = free_slot;
+    return HIC_SUCCESS;
 }

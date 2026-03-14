@@ -491,17 +491,17 @@ void hal_outl(u16 port, u32 value)
 
 void hal_trigger_exception(u32 exc_num)
 {
-    (void)exc_num;  /* 异常号暂时未使用 */
     /* 异常触发：通过软件中断或异常指令 */
 #if defined(__x86_64__)
-    /* x86_64: 使用INT指令触发异常 */
-    __asm__ volatile("int $3");  /* 触发断点异常 */
+    /* x86_64: INT指令需要立即数，使用UD2触发未定义指令异常 */
+    /* 对于特定的异常号，需要使用IDT门或中断控制器 */
+    (void)exc_num;
+    __asm__ volatile("ud2");  /* 触发未定义指令异常 */
 #elif defined(__aarch64__)
-    /* ARM64: 使用BRK指令触发异常 */
-    __asm__ volatile("brk #0");
+    /* ARM64: 使用BRK指令触发异常，编码异常号 */
+    __asm__ volatile("brk %0" : : "I"((u16)exc_num));
 #elif defined(__riscv)
-    /* RISC-V: 使用EBREAK指令触发异常 */
-    /* 对于特定异常，可能需要设置mcause寄存器 */
+    /* RISC-V: 使用EBREAK触发断点，异常号需要通过其他方式传递 */
     (void)exc_num;
     __asm__ volatile("ebreak");
 #endif
@@ -647,8 +647,18 @@ cpu_id_t hal_get_cpu_id(void)
 {
 #if defined(__x86_64__)
     return x86_64_get_cpu_id();
+#elif defined(__aarch64__)
+    /* ARM64: 读取MPIDR_EL1获取CPU ID */
+    u64 mpidr;
+    __asm__ volatile("mrs %0, mpidr_el1" : "=r"(mpidr));
+    return (cpu_id_t)(mpidr & 0xFF);  /* 取Aff0字段 */
+#elif defined(__riscv)
+    /* RISC-V: 读取mhartid获取硬件线程ID */
+    u64 hartid;
+    __asm__ volatile("csrr %0, mhartid" : "=r"(hartid));
+    return (cpu_id_t)hartid;
 #else
-    return 0; /* 其他架构暂不支持，返回默认值 */
+    return 0; /* 未知架构返回默认值 */
 #endif
 }
 
@@ -669,4 +679,99 @@ bool hal_is_bsp(void)
     cpu_id_t cpu_id = hal_get_cpu_id();
     /* 假设BSP的CPU ID为0 */
     return (cpu_id == 0);
+}
+
+/* ==================== UART 串口接口实现 ==================== */
+
+/*
+ * 架构分离设计：
+ * - 通用接口在 hal.h 中声明
+ * - 架构特定实现在 arch/<arch>/hal_uart.c 中
+ * - hal.c 只做函数调用转发，不包含架构特定常量
+ */
+
+/* 架构特定 UART 函数声明（在 arch/<arch>/hal_uart.c 中实现） */
+extern void arch_uart_init(phys_addr_t base, u32 baud);
+extern void arch_uart_putc(phys_addr_t base, char c);
+extern char arch_uart_getc(phys_addr_t base);
+extern bool arch_uart_rx_ready(phys_addr_t base);
+extern bool arch_uart_tx_ready(phys_addr_t base);
+extern phys_addr_t arch_uart_get_default_base(void);
+
+/* 默认 UART 配置 */
+static hal_uart_config_t g_hal_uart_config = {
+    .base_addr = 0,
+    .baud_rate = 115200,
+    .data_bits = 8,
+    .parity = 0,
+    .stop_bits = 1,
+};
+
+/**
+ * 获取默认 UART 基地址
+ */
+phys_addr_t hal_uart_get_default_base(void)
+{
+    return arch_uart_get_default_base();
+}
+
+/**
+ * 初始化 UART
+ */
+void hal_uart_init(const hal_uart_config_t *config)
+{
+    if (config) {
+        g_hal_uart_config = *config;
+    } else {
+        g_hal_uart_config.base_addr = arch_uart_get_default_base();
+        g_hal_uart_config.baud_rate = 115200;
+    }
+    
+    arch_uart_init(g_hal_uart_config.base_addr, g_hal_uart_config.baud_rate);
+}
+
+/**
+ * 发送单个字符
+ */
+void hal_uart_putc(char c)
+{
+    arch_uart_putc(g_hal_uart_config.base_addr, c);
+}
+
+/**
+ * 发送字符串
+ */
+void hal_uart_puts(const char *str)
+{
+    while (*str) {
+        if (*str == '\n') {
+            hal_uart_putc('\r');
+        }
+        hal_uart_putc(*str);
+        str++;
+    }
+}
+
+/**
+ * 接收单个字符（阻塞）
+ */
+char hal_uart_getc(void)
+{
+    return arch_uart_getc(g_hal_uart_config.base_addr);
+}
+
+/**
+ * 检查是否有数据可读
+ */
+bool hal_uart_rx_ready(void)
+{
+    return arch_uart_rx_ready(g_hal_uart_config.base_addr);
+}
+
+/**
+ * 检查是否可以发送
+ */
+bool hal_uart_tx_ready(void)
+{
+    return arch_uart_tx_ready(g_hal_uart_config.base_addr);
 }

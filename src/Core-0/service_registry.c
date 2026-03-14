@@ -74,7 +74,7 @@ hic_status_t service_register_endpoint(const char *name,
         console_puts("[REGISTRY] Service already exists: ");
         console_puts(name);
         console_puts("\n");
-        return HIC_ERROR_EXISTS;
+        return HIC_ERROR_ALREADY_EXISTS;
     }
     
     /* 查找空闲槽位 */

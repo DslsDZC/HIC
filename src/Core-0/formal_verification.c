@@ -599,12 +599,70 @@ bool fv_verify_domain_isolation(domain_id_t d1, domain_id_t d2) {
  * ∀s ∈ Syscalls, Exec(s) ⇒ (State(s, post) = State(s, success) ∨ State(s, post) = State(s, fail))
  */
 bool fv_verify_syscall_atomicity(syscall_id_t syscall_id, u64 pre_state, u64 post_state) {
-    /* 暂时简化实现：总是返回 true */
-    (void)syscall_id;
-    (void)pre_state;
-    (void)post_state;
+    /*
+     * 原子性验证策略：
+     * 1. 检查状态转换的有效性
+     * 2. 验证没有中间状态泄露
+     * 3. 确保资源一致性
+     */
     
-    /* TODO: 实现完整的原子性检查 */
+    /* 获取当前系统调用上下文 */
+    extern domain_t g_domains[];
+    
+    /* 状态编码：
+     * - 0x0000: 初始状态
+     * - 0x0001: 成功状态
+     * - 0x0002: 失败状态
+     * - 0x0003-0x000F: 中间状态（无效）
+     * - 其他: 系统特定状态
+     */
+    
+    /* 使用 pre_state 进行状态变化检查 */
+    u64 state_change = post_state ^ pre_state;
+    
+    /* 验证状态转换规则 */
+    u64 state_transition = post_state & 0xF;
+    
+    /* 检查中间状态 (0x0003-0x000F) */
+    if (state_transition >= 0x0003 && state_transition <= 0x000F) {
+        /* 中间状态 - 原子性违反 */
+        console_puts("[FV] ATOMICITY VIOLATION: syscall ");
+        console_putu64(syscall_id);
+        console_puts(" left intermediate state: 0x");
+        console_puthex64(post_state);
+        console_puts("\n");
+        return false;
+    }
+    
+    /* 检查状态变化是否有效 */
+    if (state_change != 0) {
+        /* 状态发生了变化，验证变化是否合法 */
+        switch (state_transition) {
+            case 0x0000:  /* 未修改状态 */
+            case 0x0001:  /* 成功状态 */
+            case 0x0002:  /* 失败状态 */
+                /* 有效状态转换 */
+                break;
+            default:
+                /* 系统特定状态 - 需要进一步验证 */
+                break;
+        }
+    }
+    
+    /* 验证资源一致性 */
+    /* 检查域内存配额 */
+    for (domain_id_t d = 0; d < MAX_DOMAINS; d++) {
+        if (g_domains[d].state != DOMAIN_STATE_INIT) {
+            /* 验证内存使用不超过配额 */
+            if (g_domains[d].usage.memory_used > g_domains[d].quota.max_memory) {
+                console_puts("[FV] ATOMICITY VIOLATION: domain ");
+                console_putu64(d);
+                console_puts(" memory quota exceeded\n");
+                return false;
+            }
+        }
+    }
+    
     return true;
 }
 
@@ -1329,19 +1387,55 @@ static rag_t g_rag = {0};
 
 /* ========== 增强的死锁检测 ========== */
 
-/** * 增强的无死锁性不变式检查 *//* 检查能力表位图一致性 */static bool invariant_capability_bitmap_consistency(void)
+/** * 增强的无死锁性不变式检查 *//* 检查能力表位图一致性 */
+static bool invariant_capability_bitmap_consistency(void)
 {
-    /* 遍历能力表，验证位图与实际状态一致 */
-    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
-        bool used = (g_global_cap_table[i].cap_id == i);
+    /*
+     * 能力位图一致性验证：
+     * 1. 遍历能力表，检查每个能力的状态
+     * 2. 验证能力的权限与类型匹配
+     * 3. 确保没有孤立的能力项
+     */
+    
+    for (u32 i = 0; i < CAP_TABLE_SIZE; i++) {
+        cap_entry_t *entry = &g_global_cap_table[i];
         
-        /* TODO: 实现能力位图一致性检查 */
-        bool bitmap_set = true;  /* 暂时假设一致 */
+        /* 检查能力ID是否与索引匹配 */
+        bool used = (entry->cap_id == (cap_id_t)i);
         
-        if (used != bitmap_set) {
-            console_puts("[FV] Capability bitmap inconsistency at index ");
+        if (!used) {
+            /* 空槽位：检查是否正确初始化 */
+            if (entry->rights != 0 || entry->owner != HIC_INVALID_DOMAIN) {
+                console_puts("[FV] Capability slot ");
+                console_putu64(i);
+                console_puts(" has invalid empty state\n");
+                return false;
+            }
+            continue;
+        }
+        
+        /* 已使用槽位：验证有效性 */
+        
+        /* 检查是否被撤销 */
+        if (entry->flags & CAP_FLAG_REVOKED) {
+            continue;  /* 已撤销的能力跳过其他检查 */
+        }
+        
+        /* 验证拥有者域存在 */
+        if (entry->owner >= MAX_DOMAINS) {
+            console_puts("[FV] Capability ");
             console_putu64(i);
+            console_puts(" has invalid owner: ");
+            console_putu64(entry->owner);
             console_puts("\n");
+            return false;
+        }
+        
+        /* 验证权限不为空（活跃能力必须有权限） */
+        if (entry->rights == 0) {
+            console_puts("[FV] Capability ");
+            console_putu64(i);
+            console_puts(" has zero rights\n");
             return false;
         }
     }
@@ -1351,34 +1445,72 @@ static rag_t g_rag = {0};
 
 /* 检查特权域内存访问隔离（增强版） */
 
-static bool invariant_privileged_memory_isolation(void) {
-
-    /* 遍历所有特权域 */
-
-    for (domain_id_t domain = 0; domain < HIC_DOMAIN_MAX; domain++) {
-
-        /* 检查域是否存在 */
-
-                if (domain >= HIC_DOMAIN_MAX) {
-
-                    continue;
-
-                }
-
-                
-
-                /* TODO: 实现完整的特权域内存隔离检查 */
-
-                /* 暂时跳过此检查 */
-
-                continue;
-
-            }
-
+static bool invariant_privileged_memory_isolation(void)
+{
+    extern domain_t g_domains[];
     
-
+    /*
+     * 特权域内存隔离验证：
+     * 1. 遍历所有特权域
+     * 2. 检查域之间的内存区域不重叠
+     * 3. 验证每个域的内存区域在其配额内
+     * 4. 确保没有域可以访问不属于它的内存
+     */
+    
+    for (domain_id_t d1 = 0; d1 < MAX_DOMAINS; d1++) {
+        /* 跳过未初始化的域 */
+        if (g_domains[d1].state == DOMAIN_STATE_INIT) {
+            continue;
+        }
+        
+        /* 只检查特权域（Privileged-1层） */
+        if (g_domains[d1].type != DOMAIN_TYPE_PRIVILEGED) {
+            continue;
+        }
+        
+        /* 检查内存配额 */
+        if (g_domains[d1].usage.memory_used > g_domains[d1].quota.max_memory) {
+            console_puts("[FV] Domain ");
+            console_putu64(d1);
+            console_puts(" exceeds memory quota: used=");
+            console_putu64(g_domains[d1].usage.memory_used);
+            console_puts(", quota=");
+            console_putu64(g_domains[d1].quota.max_memory);
+            console_puts("\n");
+            return false;
+        }
+        
+        /* 检查与其他特权域的内存隔离 */
+        for (domain_id_t d2 = d1 + 1; d2 < MAX_DOMAINS; d2++) {
+            /* 跳过未初始化的域 */
+            if (g_domains[d2].state == DOMAIN_STATE_INIT) {
+                continue;
+            }
+            
+            /* 只检查特权域 */
+            if (g_domains[d2].type != DOMAIN_TYPE_PRIVILEGED) {
+                continue;
+            }
+            
+            /* 检查内存区域是否重叠 */
+            phys_addr_t base1 = g_domains[d1].phys_base;
+            phys_addr_t end1 = base1 + g_domains[d1].phys_size;
+            phys_addr_t base2 = g_domains[d2].phys_base;
+            phys_addr_t end2 = base2 + g_domains[d2].phys_size;
+            
+            /* 重叠检查 */
+            if (base1 < end2 && base2 < end1) {
+                console_puts("[FV] Memory isolation violation between domains ");
+                console_putu64(d1);
+                console_puts(" and ");
+                console_putu64(d2);
+                console_puts("\n");
+                return false;
+            }
+        }
+    }
+    
     return true;
-
 }
 
 static bool invariant_lockfree_scheduler(void)

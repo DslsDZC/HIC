@@ -336,4 +336,192 @@ cap_handle_t logical_core_allocate_to_domain(logical_core_id_t logical_core_id,
 bool logical_core_perform_migration(logical_core_id_t logical_core_id,
                                    physical_core_id_t target_physical_core_id);
 
+/* ==================== 借用机制相关定义 ==================== */
+
+/* 借用状态 */
+typedef enum {
+    BORROW_STATE_NONE,           /* 未被借用 */
+    BORROW_STATE_BORROWED,       /* 已被借用 */
+    BORROW_STATE_RETURNING,      /* 正在归还 */
+} borrow_state_t;
+
+/* 借用信息结构 */
+typedef struct logical_core_borrow_info {
+    borrow_state_t state;               /* 借用状态 */
+    domain_id_t original_owner;          /* 原始拥有者域ID */
+    domain_id_t borrower_domain;         /* 借用者域ID */
+    cap_handle_t original_cap_handle;    /* 原始能力句柄 */
+    cap_handle_t derived_cap_handle;     /* 派生能力句柄 */
+    u64 borrow_start_time;               /* 借用开始时间 */
+    u64 borrow_duration;                 /* 借用时长（纳秒） */
+    u64 borrow_deadline;                 /* 借用截止时间 */
+    u32 borrow_quota_used;               /* 借用期间使用的配额 */
+} logical_core_borrow_info_t;
+
+/* 物理核心负载详细信息 */
+typedef struct {
+    u32 logical_core_count;        /* 逻辑核心数量 */
+    u32 active_thread_count;       /* 活跃线程数 */
+    u64 total_cpu_time;            /* 累计CPU时间 */
+    u64 idle_time;                 /* 空闲时间 */
+    u32 load_percentage;           /* 负载百分比 (0-100) */
+    u32 cache_pressure;            /* 缓存压力指标 */
+    u32 memory_bandwidth_usage;    /* 内存带宽使用率 */
+} physical_core_load_info_t;
+
+/* 迁移候选评估结果 */
+typedef struct {
+    logical_core_id_t logical_core_id;
+    physical_core_id_t source_core;
+    physical_core_id_t target_core;
+    u32 migration_benefit;         /* 迁移收益评分 */
+    u32 migration_cost;            /* 迁移成本评分 */
+    bool recommended;              /* 是否推荐迁移 */
+} migration_candidate_t;
+
+/* 迁移决策配置 */
+typedef struct {
+    u32 load_balance_threshold;     /* 负载均衡阈值（百分比差异） */
+    u32 migration_cooldown_ms;      /* 迁移冷却时间（毫秒） */
+    u32 max_migrations_per_cycle;   /* 每周期最大迁移数 */
+    u32 cache_affinity_weight;      /* 缓存亲和性权重 */
+    u32 memory_locality_weight;     /* 内存局部性权重 */
+    bool enable_predictive;         /* 启用预测性迁移 */
+} migration_config_t;
+
+/* 默认迁移配置 */
+#define DEFAULT_MIGRATION_CONFIG { \
+    .load_balance_threshold = 20, \
+    .migration_cooldown_ms = 100, \
+    .max_migrations_per_cycle = 2, \
+    .cache_affinity_weight = 30, \
+    .memory_locality_weight = 20, \
+    .enable_predictive = false \
+}
+
+/* ==================== 借用机制API ==================== */
+
+/**
+ * @brief 借用逻辑核心
+ * 
+ * 域A可以通过能力派生临时借用域B空闲的逻辑核心。
+ * 借用期间，核心的控制权转移给借用者，但所有权仍归原持有者。
+ * 
+ * @param borrower_domain 借用者域ID
+ * @param source_domain 出借者域ID
+ * @param duration 借用时长（纳秒）
+ * @param quota 借用期间的配额限制
+ * @param affinity 要求的亲和性掩码（可选）
+ * @param out_handle 输出的派生能力句柄
+ * @return 状态码
+ */
+hic_status_t hic_logical_core_borrow(domain_id_t borrower_domain,
+                                    domain_id_t source_domain,
+                                    u64 duration,
+                                    u32 quota,
+                                    const logical_core_affinity_t *affinity,
+                                    cap_handle_t *out_handle);
+
+/**
+ * @brief 归还借用的逻辑核心
+ * 
+ * 借用到期或主动归还逻辑核心。
+ * 
+ * @param borrower_domain 借用者域ID
+ * @param borrowed_handle 借用期间获得的能力句柄
+ * @return 状态码
+ */
+hic_status_t hic_logical_core_return(domain_id_t borrower_domain,
+                                     cap_handle_t borrowed_handle);
+
+/**
+ * @brief 查询逻辑核心借用状态
+ * 
+ * @param logical_core_handle 逻辑核心能力句柄
+ * @param borrow_info 输出的借用信息
+ * @return 状态码
+ */
+hic_status_t hic_logical_core_get_borrow_info(cap_handle_t logical_core_handle,
+                                              logical_core_borrow_info_t *borrow_info);
+
+/**
+ * @brief 检查借用是否到期
+ * 
+ * 检查所有借用的逻辑核心，自动归还已到期的借用。
+ * 由监控服务定期调用。
+ */
+void logical_core_check_borrow_expiry(void);
+
+/**
+ * @brief 获取可用于借用的逻辑核心列表
+ * 
+ * @param source_domain 出借者域ID
+ * @param out_ids 输出的逻辑核心ID数组
+ * @param max_count 数组最大容量
+ * @param out_actual_count 实际返回的数量
+ * @return 状态码
+ */
+hic_status_t hic_logical_core_get_borrowable(domain_id_t source_domain,
+                                             logical_core_id_t out_ids[],
+                                             u32 max_count,
+                                             u32 *out_actual_count);
+
+/* ==================== 增强的迁移决策API ==================== */
+
+/**
+ * @brief 增强的迁移决策
+ * 
+ * 基于实时负载、缓存亲和性、内存局部性等因素，
+ * 计算最优迁移方案并执行。
+ * 
+ * @param config 迁移配置参数
+ * @param migrations_executed 输出实际执行的迁移数
+ * @return 状态码
+ */
+hic_status_t logical_core_enhanced_migration_decision(
+    const migration_config_t *config,
+    u32 *migrations_executed);
+
+/**
+ * @brief 计算物理核心负载详情
+ * 
+ * @param physical_core_id 物理核心ID
+ * @param load_info 输出的负载信息
+ * @return 状态码
+ */
+hic_status_t logical_core_calculate_load(physical_core_id_t physical_core_id,
+                                         physical_core_load_info_t *load_info);
+
+/**
+ * @brief 评估迁移候选
+ * 
+ * 综合考虑负载均衡、缓存亲和性、迁移成本等因素，
+ * 评估是否应该迁移某个逻辑核心。
+ * 
+ * @param logical_core_id 待评估的逻辑核心ID
+ * @param target_physical_core 目标物理核心ID
+ * @param config 迁移配置
+ * @param candidate 输出的评估结果
+ * @return 状态码
+ */
+hic_status_t logical_core_evaluate_migration(logical_core_id_t logical_core_id,
+                                             physical_core_id_t target_physical_core,
+                                             const migration_config_t *config,
+                                             migration_candidate_t *candidate);
+
+/**
+ * @brief 获取系统整体利用率
+ * 
+ * @return 系统利用率百分比 (0-100)
+ */
+u32 logical_core_get_system_utilization(void);
+
+/**
+ * @brief 获取指定域的核心利用率
+ * 
+ * @param domain_id 域ID
+ * @return 域的核心利用率百分比 (0-100)
+ */
+u32 logical_core_get_domain_utilization(domain_id_t domain_id);
+
 #endif /* HIC_KERNEL_LOGICAL_CORE_H */

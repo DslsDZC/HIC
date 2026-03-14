@@ -230,3 +230,134 @@ cpu_id_t x86_64_get_cpu_id(void)
     /* APIC ID在EBX的高8位（bits 24-31） */
     return (cpu_id_t)(ebx >> 24);
 }
+
+/* ==================== UART 串口实现 ==================== */
+
+/* UART 寄存器偏移 (8250/16550 兼容) */
+#define UART_RBR    0x00    /* 接收缓冲寄存器 */
+#define UART_THR    0x00    /* 发送保持寄存器 */
+#define UART_IER    0x01    /* 中断使能寄存器 */
+#define UART_FCR    0x02    /* FIFO控制寄存器 */
+#define UART_LCR    0x03    /* 线路控制寄存器 */
+#define UART_MCR    0x04    /* 调制解调控制寄存器 */
+#define UART_LSR    0x05    /* 线路状态寄存器 */
+#define UART_DLL    0x00    /* 波特率除数低字节 (DLAB=1) */
+#define UART_DLM    0x01    /* 波特率除数高字节 (DLAB=1) */
+
+/* 线路状态寄存器位 */
+#define UART_LSR_DR     (1 << 0)    /* 数据就绪 */
+#define UART_LSR_THRE   (1 << 5)    /* 发送保持寄存器空 */
+
+/* 线路控制寄存器位 */
+#define UART_LCR_DLAB   (1 << 7)    /* 除数锁存访问位 */
+#define UART_LCR_8N1    0x03        /* 8数据位，无校验，1停止位 */
+
+/**
+ * 初始化 UART (x86_64 使用 8250/16550 兼容 UART)
+ */
+void x86_64_uart_init(phys_addr_t base, uint32_t baud)
+{
+    /* 计算波特率除数：115200 = 1843200 / (16 * 1) */
+    uint16_t divisor = 1;  /* 默认 115200 */
+    if (baud > 0 && baud != 115200) {
+        divisor = (uint16_t)(1843200 / (16 * baud));
+    }
+    
+    /* 禁用中断 */
+    x86_64_outb((uint16_t)(base + UART_IER), 0x00);
+    
+    /* 启用 DLAB，设置波特率 */
+    x86_64_outb((uint16_t)(base + UART_LCR), UART_LCR_DLAB);
+    x86_64_outb((uint16_t)(base + UART_DLL), (uint8_t)(divisor & 0xFF));
+    x86_64_outb((uint16_t)(base + UART_DLM), (uint8_t)((divisor >> 8) & 0xFF));
+    
+    /* 8N1 配置（同时清除 DLAB） */
+    x86_64_outb((uint16_t)(base + UART_LCR), UART_LCR_8N1);
+    
+    /* 禁用 FIFO */
+    x86_64_outb((uint16_t)(base + UART_FCR), 0x00);
+    
+    /* 禁用 RTS/DTR */
+    x86_64_outb((uint16_t)(base + UART_MCR), 0x00);
+}
+
+/**
+ * 发送单个字符
+ */
+void x86_64_uart_putc(phys_addr_t base, char c)
+{
+    /* 等待发送保持寄存器空 */
+    while ((x86_64_inb((uint16_t)(base + UART_LSR)) & UART_LSR_THRE) == 0) {
+        x86_64_idle();
+    }
+    x86_64_outb((uint16_t)(base + UART_THR), (uint8_t)c);
+}
+
+/**
+ * 接收单个字符（阻塞）
+ */
+char x86_64_uart_getc(phys_addr_t base)
+{
+    /* 等待数据就绪 */
+    while ((x86_64_inb((uint16_t)(base + UART_LSR)) & UART_LSR_DR) == 0) {
+        x86_64_idle();
+    }
+    return (char)x86_64_inb((uint16_t)(base + UART_RBR));
+}
+
+/**
+ * 检查是否有数据可读
+ */
+bool x86_64_uart_rx_ready(phys_addr_t base)
+{
+    return (x86_64_inb((uint16_t)(base + UART_LSR)) & UART_LSR_DR) != 0;
+}
+
+/**
+ * 检查是否可以发送
+ */
+bool x86_64_uart_tx_ready(phys_addr_t base)
+{
+    return (x86_64_inb((uint16_t)(base + UART_LSR)) & UART_LSR_THRE) != 0;
+}
+
+/**
+ * 获取默认 UART 基地址
+ */
+phys_addr_t x86_64_uart_get_default_base(void)
+{
+    return 0x3F8;  /* COM1 */
+}
+
+/* ==================== 通用接口别名 ==================== */
+/* 这些函数供 hal.c 调用，实现架构无关接口 */
+
+void arch_uart_init(phys_addr_t base, uint32_t baud)
+{
+    x86_64_uart_init(base, baud);
+}
+
+void arch_uart_putc(phys_addr_t base, char c)
+{
+    x86_64_uart_putc(base, c);
+}
+
+char arch_uart_getc(phys_addr_t base)
+{
+    return x86_64_uart_getc(base);
+}
+
+bool arch_uart_rx_ready(phys_addr_t base)
+{
+    return x86_64_uart_rx_ready(base);
+}
+
+bool arch_uart_tx_ready(phys_addr_t base)
+{
+    return x86_64_uart_tx_ready(base);
+}
+
+phys_addr_t arch_uart_get_default_base(void)
+{
+    return x86_64_uart_get_default_base();
+}
