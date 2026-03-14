@@ -74,6 +74,22 @@ typedef struct {
         char name[64];
     } modules[16];
     uint64_t module_count;
+
+    // 磁盘信息（用于 FAT32 文件系统）
+    struct {
+        void *disk_base;         // 磁盘镜像基地址
+        uint64_t disk_size;      // 磁盘镜像大小
+        uint32_t sector_size;    // 扇区大小（通常为 512）
+    } disk;
+
+    // 已加载驱动信息（由引导层加载的扩展文件系统驱动）
+    struct {
+        void *base;              // 驱动内存基地址
+        uint64_t size;           // 驱动大小
+        char name[64];           // 驱动名称
+        uint32_t partition_index; // 所属 FAT32 分区索引
+    } loaded_drivers[8];
+    uint64_t loaded_drivers_count;
     
     // 系统信息
     struct {

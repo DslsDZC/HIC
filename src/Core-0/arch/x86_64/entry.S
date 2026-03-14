@@ -14,7 +14,7 @@
 .extern kernel_start
 
 /* boot_info 结构体偏移常量 */
-.set BOOT_INFO_OFFSET_STACK_TOP, 0x698
+.set BOOT_INFO_OFFSET_STACK_TOP, 0x978
 
 /* UART 寄存器常量 */
 .set UART_LSR, 0x3FD        /* 线路状态寄存器 */

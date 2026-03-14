@@ -231,6 +231,139 @@ static EFI_STATUS find_file_system_handle(EFI_HANDLE *result_handle) {
     return EFI_SUCCESS;
 }
 
+/**
+ * 直接查找 Block I/O 设备句柄
+ * 当无法通过 LoadedImageProtocol 获取设备句柄时使用
+ */
+static EFI_STATUS find_block_io_handle(EFI_HANDLE *result_handle, EFI_BLOCK_IO_PROTOCOL **out_block_io) {
+    EFI_STATUS status;
+    UINTN buffer_size;
+    EFI_HANDLE *buffer;
+    UINTN i;
+    
+    console_puts("[BOOTLOADER] Finding Block I/O device...\n");
+    
+    /* 首先尝试通过 Simple File System 协议找到设备 */
+    buffer_size = 0;
+    status = gBS->LocateHandle(ByProtocol, &gEfiSimpleFileSystemProtocolGuid, 
+                               NULL, &buffer_size, NULL);
+    
+    if (status == EFI_BUFFER_TOO_SMALL || status == EFI_SUCCESS) {
+        buffer = allocate_pool(buffer_size);
+        if (buffer == NULL) {
+            console_puts("[BOOTLOADER] Failed to allocate buffer for FS handles\n");
+        } else {
+            status = gBS->LocateHandle(ByProtocol, &gEfiSimpleFileSystemProtocolGuid,
+                                       NULL, &buffer_size, buffer);
+            
+            if (!EFI_ERROR(status)) {
+                UINTN handle_count = buffer_size / sizeof(EFI_HANDLE);
+                console_printf("[BOOTLOADER] Found %d Simple File System handles\n", (int)handle_count);
+                
+                /* 遍历文件系统句柄，尝试获取 Block I/O */
+                for (i = 0; i < handle_count; i++) {
+                    EFI_BLOCK_IO_PROTOCOL *block_io;
+                    
+                    /* 尝试从文件系统句柄获取 Block I/O */
+                    status = gBS->HandleProtocol(buffer[i], &gEfiBlockIoProtocolGuid, (void**)&block_io);
+                    
+                    if (!EFI_ERROR(status) && block_io != NULL) {
+                        console_printf("[BOOTLOADER] Found Block I/O via FS handle %d\n", (int)i);
+                        console_printf("[BOOTLOADER] Block size: %d, LastBlock: 0x%x\n", 
+                                       block_io->Media.BlockSize, (unsigned int)block_io->Media.LastBlock);
+                        
+                        *result_handle = buffer[i];
+                        if (out_block_io) {
+                            *out_block_io = block_io;
+                        }
+                        free_pool(buffer);
+                        return EFI_SUCCESS;
+                    }
+                }
+            }
+            free_pool(buffer);
+        }
+    }
+    
+    /* 回退方法：直接查找 Block I/O 设备 */
+    buffer_size = 0;
+    status = gBS->LocateHandle(ByProtocol, &gEfiBlockIoProtocolGuid, 
+                               NULL, &buffer_size, NULL);
+    
+    if (status != EFI_BUFFER_TOO_SMALL && status != EFI_SUCCESS) {
+        console_printf("[BOOTLOADER] LocateHandle for Block I/O failed: 0x%x\n", (unsigned int)status);
+        return status;
+    }
+    
+    buffer = allocate_pool(buffer_size);
+    if (buffer == NULL) {
+        console_puts("[BOOTLOADER] Failed to allocate buffer\n");
+        return EFI_OUT_OF_RESOURCES;
+    }
+    
+    status = gBS->LocateHandle(ByProtocol, &gEfiBlockIoProtocolGuid,
+                               NULL, &buffer_size, buffer);
+    
+    if (EFI_ERROR(status)) {
+        console_puts("[BOOTLOADER] Failed to get Block I/O handles\n");
+        free_pool(buffer);
+        return status;
+    }
+    
+    UINTN handle_count = buffer_size / sizeof(EFI_HANDLE);
+    console_printf("[BOOTLOADER] Found %d Block I/O handles\n", (int)handle_count);
+    
+    /* 遍历句柄，找到可用的硬盘设备 */
+    for (i = 0; i < handle_count; i++) {
+        EFI_BLOCK_IO_PROTOCOL *block_io;
+        
+        status = gBS->HandleProtocol(buffer[i], &gEfiBlockIoProtocolGuid, (void**)&block_io);
+        
+        if (EFI_ERROR(status) || block_io == NULL) {
+            continue;
+        }
+        
+        /* 检查是否为硬盘（非可移动介质，非只读） */
+        if (!block_io->Media.RemovableMedia && 
+            !block_io->Media.ReadOnly &&
+            block_io->Media.BlockSize == 512 &&
+            block_io->Media.LastBlock > 0) {
+            
+            UINT64 disk_size = (block_io->Media.LastBlock + 1) * block_io->Media.BlockSize;
+            console_printf("[BOOTLOADER] Found usable hard disk, size: %d MB\n", 
+                           (int)(disk_size / (1024 * 1024)));
+            
+            *result_handle = buffer[i];
+            if (out_block_io) {
+                *out_block_io = block_io;
+            }
+            free_pool(buffer);
+            return EFI_SUCCESS;
+        }
+    }
+    
+    /* 如果没有找到硬盘，尝试使用第一个可用的 Block I/O 设备 */
+    for (i = 0; i < handle_count; i++) {
+        EFI_BLOCK_IO_PROTOCOL *block_io;
+        
+        status = gBS->HandleProtocol(buffer[i], &gEfiBlockIoProtocolGuid, (void**)&block_io);
+        
+        if (!EFI_ERROR(status) && block_io != NULL && block_io->Media.BlockSize > 0) {
+            console_puts("[BOOTLOADER] Using first available Block I/O device\n");
+            *result_handle = buffer[i];
+            if (out_block_io) {
+                *out_block_io = block_io;
+            }
+            free_pool(buffer);
+            return EFI_SUCCESS;
+        }
+    }
+    
+    free_pool(buffer);
+    console_puts("[BOOTLOADER] No usable Block I/O device found\n");
+    return EFI_NOT_FOUND;
+}
+
 // allocate_pool_aligned定义
 
 /* 预定义公钥（实际应从安全存储加载） */
@@ -407,24 +540,17 @@ EFI_STATUS load_platform_config(void)
 {
     EFI_STATUS status;
     EFI_HANDLE device_handle_to_use;
+    EFI_BLOCK_IO_PROTOCOL *block_io = NULL;
     void *config_buffer = NULL;
     uint64_t config_size = 0;
     
     console_puts("[BOOTLOADER] Loading platform configuration...\n");
     
-    /* 确定要使用的device_handle */
-    if (gLoadedImage != NULL && gLoadedImage->device_handle != NULL) {
-        device_handle_to_use = gLoadedImage->device_handle;
-    } else {
-        device_handle_to_use = gImageHandle;
-    }
-    
-    if (device_handle_to_use == NULL) {
-        status = find_file_system_handle(&device_handle_to_use);
-        if (EFI_ERROR(status)) {
-            console_puts("[BOOTLOADER] No filesystem found, using embedded config\n");
-            goto use_embedded_config;
-        }
+    /* 尝试直接获取 Block I/O 设备 */
+    status = find_block_io_handle(&device_handle_to_use, &block_io);
+    if (EFI_ERROR(status)) {
+        console_puts("[BOOTLOADER] Failed to find Block I/O device\n");
+        goto use_embedded_config;
     }
     
     /* 尝试从FAT32文件系统加载platform.yaml */

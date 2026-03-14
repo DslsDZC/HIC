@@ -80,7 +80,9 @@ static char* read_scalar(yaml_parser_t* parser)
 /* 创建节点 */
 static yaml_node_t* create_node(yaml_node_type_t type)
 {
-    static yaml_node_t node_buffer[16];  /* 静态节点池 */
+    /* 静态节点池 - 增大到 512 以支持大型 YAML 配置文件 */
+    #define YAML_NODE_POOL_SIZE 512
+    static yaml_node_t node_buffer[YAML_NODE_POOL_SIZE];
     static u32 node_index = 0;
     
     if (node_index >= 16) {
