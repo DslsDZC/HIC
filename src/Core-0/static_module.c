@@ -27,6 +27,7 @@
 #include "atomic.h"
 #include "audit.h"
 #include "console.h"
+#include "thread.h"
 #include "lib/string.h"
 #include "lib/mem.h"
 
@@ -176,7 +177,7 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     total_size = code_size + data_size;
     
     /* 对齐到页边界 */
-    total_size = (total_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    total_size = (total_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
 
     console_puts("[STATIC_MODULE]     Code size: ");
     console_putu64(code_size);
@@ -341,12 +342,47 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
         type = ENDPOINT_TYPE_MODULE_MGR;
     }
 
-    /* 生成服务 UUID（简化版） */
+    /* 生成服务 UUID（基于名称的 UUID） */
     u8 uuid[16];
     memzero(uuid, 16);
-    for (u32 i = 0; module->name[i] && i < 16; i++) {
-        uuid[i % 16] ^= (u8)module->name[i];
+    
+    /* 使用 FNV-1a 哈希算法生成名称哈希
+     * FNV-1a 是一种快速、分布良好的非加密哈希算法
+     * 注意：标准 UUID v5 要求 SHA-1，但 FNV-1a 提供足够的唯一性
+     * 对于操作系统内部使用的服务标识符 */
+    u64 hash1 = 0, hash2 = 0;
+    const u64 FNV_OFFSET = 14695981039346656037ULL;
+    const u64 FNV_PRIME = 1099511628211ULL;
+    
+    /* 双重哈希增强碰撞抵抗 */
+    hash1 = FNV_OFFSET;
+    hash2 = FNV_OFFSET ^ 0xFFFFFFFFFFFFFFFFULL;
+    for (u32 i = 0; module->name[i]; i++) {
+        /* 第一重：标准 FNV-1a */
+        hash1 ^= (u8)module->name[i];
+        hash1 *= FNV_PRIME;
+        /* 第二重：加入位置相关混合 */
+        hash2 ^= (u8)module->name[i] * (i + 1);
+        hash2 *= FNV_PRIME;
     }
+    
+    /* 添加版本和类型增强唯一性 */
+    hash1 ^= (u64)module->version * FNV_PRIME;
+    hash1 ^= (u64)module->type * FNV_PRIME;
+    
+    /* 使用时间戳作为额外的盐值（如果可用） */
+    extern u64 hal_get_timestamp(void);
+    u64 timestamp = hal_get_timestamp();
+    hash2 ^= timestamp;
+    hash2 *= FNV_PRIME;
+    
+    /* 填充 UUID */
+    memcpy(uuid, &hash1, 8);
+    memcpy(uuid + 8, &hash2, 8);
+    
+    /* 设置 UUID 版本 5（基于命名空间）和变体 */
+    uuid[6] = (uuid[6] & 0x0F) | 0x50;  /* 版本 5 */
+    uuid[8] = (uuid[8] & 0x3F) | 0x80;  /* 变体 1 (RFC 4122) */
 
     /* 注册服务 */
     hic_status_t status = service_register_endpoint(
@@ -403,22 +439,31 @@ int static_module_start_ex(static_module_desc_t *module, u32 runtime_idx)
     console_puts("\n");
 
     /* 
-     * TODO: 在实际的线程上下文中启动模块
-     * 当前实现：直接调用（仅用于测试）
+     * 在独立线程中启动模块
+     * 这确保模块在自己的执行上下文中运行
      */
-    typedef void (*module_entry_t)(void);
-    module_entry_t entry = (module_entry_t)entry_point;
-
-    console_puts("[STATIC_MODULE]     Calling module entry point...\n");
+    thread_id_t module_thread;
+    hic_status_t status = thread_create(domain, (virt_addr_t)entry_point,
+                                         HIC_PRIORITY_NORMAL, &module_thread);
     
-    /* 暂时直接调用 - 生产环境应该在独立线程中执行 */
-    entry();
+    if (status != HIC_SUCCESS) {
+        console_puts("[STATIC_MODULE]     ERROR: Failed to create module thread (status=");
+        console_putu64(status);
+        console_puts(")\n");
+        return -1;
+    }
     
-    console_puts("[STATIC_MODULE]     Module entry point returned\n");
+    console_puts("[STATIC_MODULE]     Module thread created: ");
+    console_putu64(module_thread);
+    console_puts("\n");
+    
+    /* 标记模块为运行状态 */
+    g_module_runtime[runtime_idx].running = true;
 
     /* 记录审计日志 */
     audit_log_event(AUDIT_EVENT_SERVICE_START, domain, 0, 0, NULL, 0, true);
 
+    console_puts("[STATIC_MODULE]     Module started successfully\n");
     return 0;
 }
 

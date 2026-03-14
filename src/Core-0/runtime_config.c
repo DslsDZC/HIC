@@ -156,7 +156,8 @@ void runtime_config_load_from_bootinfo(void)
     }
     
     g_runtime_config.config_source = CONFIG_SOURCE_BOOTLOADER;
-    g_runtime_config.config_timestamp = 0;  /* TODO: 从其他地方获取时间戳 */
+    extern u64 hal_get_timestamp(void);
+    g_runtime_config.config_timestamp = hal_get_timestamp();
     
     console_puts("[CONFIG] Configuration loaded successfully\n");
 }

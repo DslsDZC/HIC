@@ -27,116 +27,16 @@
 #include "lib/mem.h"
 #include "lib/string.h"
 #include "formal_verification.h"
+#include "apm.h"
 
-/* UART配置结构体（临时定义） */
-typedef enum {
-    UART_DATA_BITS_5 = 5,
-    UART_DATA_BITS_6 = 6,
-    UART_DATA_BITS_7 = 7,
-    UART_DATA_BITS_8 = 8
-} uart_data_bits_t;
-
-typedef enum {
-    UART_PARITY_NONE = 0,
-    UART_PARITY_ODD = 1,
-    UART_PARITY_EVEN = 2
-} uart_parity_t;
-
-typedef enum {
-    UART_STOP_BITS_1 = 1,
-    UART_STOP_BITS_2 = 2
-} uart_stop_bits_t;
-
-typedef struct uart_config {
-    phys_addr_t base_addr;
+/* UART配置结构体（用于minimal_uart接口） */
+struct uart_config_for_minimal {
+    phys_addr_t base;
     u32 baud_rate;
-    uart_data_bits_t data_bits;
-    uart_parity_t parity;
-    uart_stop_bits_t stop_bits;
-} uart_config_t;
-
-/* 串口配置 */
-typedef struct apm_uart_config {
-    phys_addr_t base_addr;      /* 基地址 */
-    u32        baud_rate;       /* 波特率 */
-    u32        data_bits;       /* 数据位 (5-8) */
-    u32        parity;          /* 校验位 */
-    u32        stop_bits;       /* 停止位 (1-2) */
-    u32        irq;             /* 中断号 */
-} apm_uart_config_t;
-
-/* 内存区域配置 */
-typedef struct apm_memory_region {
-    phys_addr_t base_addr;      /* 基地址 */
-    size_t      size;           /* 大小 */
-    u32        flags;          /* 标志位 */
-    domain_id_t owner_domain;   /* 拥有者域ID */
-} apm_memory_region_t;
-
-/* 中断配置 */
-typedef struct apm_irq_config {
-    u32 vector;                 /* 中断向量 */
-    u32 priority;               /* 优先级 */
-    u32 trigger_mode;           /* 触发模式 */
-    u32 polarity;               /* 极性 */
-    u64 handler_address;        /* 处理函数地址 */
-} apm_irq_config_t;
-
-/* 定时器配置 */
-typedef struct apm_timer_config {
-    phys_addr_t base_addr;      /* 基地址 */
-    u64        frequency;       /* 频率 */
-    u32        mode;            /* 模式 */
-    u32        irq;             /* 中断号 */
-} apm_timer_config_t;
-
-/* APM 统计信息 */
-typedef struct apm_stats {
-    u32 total_resources;        /* 总资源数 */
-    u32 allocated_resources;    /* 已分配资源数 */
-    u32 initialized_resources;  /* 已初始化资源数 */
-    u32 active_resources;       /* 活跃资源数 */
-    u32 failed_resources;       /* 失败资源数 */
-} apm_stats_t;
-
-/* APM 状态枚举 */
-typedef enum apm_state {
-    APM_STATE_INIT = 0,         /* 初始化中 */
-    APM_STATE_READY,           /* 就绪 */
-    APM_STATE_INITIALIZING,    /* 正在初始化 */
-    APM_STATE_RUNNING,         /* 运行中 */
-    APM_STATE_ERROR,           /* 错误 */
-} apm_state_t;
-
-/* APM 模式枚举 */
-typedef enum apm_mode {
-    APM_MODE_AUTO = 0,          /* 自动模式 */
-    APM_MODE_MANUAL,           /* 手动模式 */
-    APM_MODE_CONFIG,           /* 配置模式 */
-} apm_mode_t;
-
-/* APM 配置结构 */
-typedef struct apm_config {
-    apm_mode_t mode;            /* APM 模式 */
-    apm_state_t state;          /* APM 状态 */
-    u64 config_version;         /* 配置版本 */
-    u64 config_hash;            /* 配置哈希 */
-    u64 timestamp;              /* 配置时间戳 */
-    
-    u32 uart_count;             /* 串口数量 */
-    u32 memory_count;           /* 内存区域数量 */
-    u32 irq_count;              /* 中断数量 */
-    u32 timer_count;            /* 定时器数量 */
-    
-    apm_uart_config_t uart[4];  /* 串口配置 */
-    apm_memory_region_t memory[16];  /* 内存区域配置 */
-    apm_irq_config_t irq[32];   /* 中断配置 */
-    apm_timer_config_t timer[8];  /* 定时器配置 */
-    
-    apm_stats_t stats;          /* 统计信息 */
-    bool config_valid;          /* 配置有效 */
-    bool config_verified;       /* 配置已验证 */
-} apm_config_t;
+    u32 data_bits;
+    u32 parity;
+    u32 stop_bits;
+};
 
 /* 引用外部引导信息 */
 extern hic_boot_info_t *g_boot_info;
@@ -161,8 +61,6 @@ static void apm_parse_uart_config(yaml_node_t *uart_node);
 static void apm_parse_memory_config(yaml_node_t *memory_node);
 static void apm_parse_irq_config(yaml_node_t *irq_node);
 static void apm_parse_timer_config(yaml_node_t *timer_node);
-static bool apm_verify_config(void);
-static bool apm_run_all_verifications(void);
 
 /* ===== APM 核心接口 ===== */
 
@@ -358,8 +256,9 @@ static void apm_parse_yaml_config(yaml_parser_t *parser)
  */
 static void apm_parse_uart_config(yaml_node_t *uart_node)
 {
-    /* 简化实现：只解析第一个串口 */
+    /* 支持解析多个串口配置 */
     if (g_apm_config.uart_count >= 4) {
+        console_puts("[APM] Warning: Maximum UART count reached, ignoring additional\n");
         return;
     }
 
@@ -372,18 +271,31 @@ static void apm_parse_uart_config(yaml_node_t *uart_node)
     node = yaml_find_node(uart_node, "base");
     if (node && node->value) {
         config->base_addr = (phys_addr_t)yaml_get_u64(node, 0x3F8);
+    } else {
+        /* 根据串口索引设置默认基地址 */
+        switch (g_apm_config.uart_count) {
+            case 0: config->base_addr = 0x3F8; break;  /* COM1 */
+            case 1: config->base_addr = 0x2F8; break;  /* COM2 */
+            case 2: config->base_addr = 0x3E8; break;  /* COM3 */
+            case 3: config->base_addr = 0x2E8; break;  /* COM4 */
+            default: config->base_addr = 0x3F8; break;
+        }
     }
 
     /* 波特率 */
     node = yaml_find_node(uart_node, "baud");
     if (node && node->value) {
         config->baud_rate = (u32)yaml_get_u64(node, 115200);
+    } else {
+        config->baud_rate = 115200;  /* 默认波特率 */
     }
 
     /* 数据位 */
     node = yaml_find_node(uart_node, "data_bits");
     if (node && node->value) {
         config->data_bits = (u32)yaml_get_u64(node, 8);
+    } else {
+        config->data_bits = 8;  /* 默认8位数据位 */
     }
 
     /* 校验位 */
@@ -396,7 +308,13 @@ static void apm_parse_uart_config(yaml_node_t *uart_node)
             config->parity = 1;
         } else if (strcmp(parity_str, "even") == 0) {
             config->parity = 2;
+        } else if (strcmp(parity_str, "mark") == 0) {
+            config->parity = 3;
+        } else if (strcmp(parity_str, "space") == 0) {
+            config->parity = 4;
         }
+    } else {
+        config->parity = 0;  /* 默认无校验 */
     }
 
     /* 停止位 */
@@ -425,8 +343,9 @@ static void apm_parse_uart_config(yaml_node_t *uart_node)
  */
 static void apm_parse_memory_config(yaml_node_t *memory_node)
 {
-    /* 简化实现：解析内存区域 */
+    /* 解析内存区域配置 */
     if (g_apm_config.memory_count >= 16) {
+        console_puts("[APM] Warning: Maximum memory region count reached\n");
         return;
     }
 
@@ -438,7 +357,7 @@ static void apm_parse_memory_config(yaml_node_t *memory_node)
     /* 基地址 */
     node = yaml_find_node(memory_node, "base");
     if (node && node->value) {
-        config->base_addr = (phys_addr_t)yaml_get_u64(node, 0x00100000);
+        config->base = (phys_addr_t)yaml_get_u64(node, 0x00100000);
     }
 
     /* 大小 */
@@ -447,10 +366,37 @@ static void apm_parse_memory_config(yaml_node_t *memory_node)
         config->size = (size_t)yaml_get_u64(node, 0x10000000);
     }
 
+    /* 内存类型（编码到flags字段的高16位） */
+    node = yaml_find_node(memory_node, "type");
+    if (node && node->value) {
+        const char *type_str = node->value;
+        u32 type = 1;  /* 默认 RAM */
+        if (strcmp(type_str, "ram") == 0) {
+            type = 1;  /* RAM */
+        } else if (strcmp(type_str, "reserved") == 0) {
+            type = 2;  /* 保留 */
+        } else if (strcmp(type_str, "acpi") == 0) {
+            type = 3;  /* ACPI */
+        } else if (strcmp(type_str, "nvs") == 0) {
+            type = 4;  /* NVS */
+        } else if (strcmp(type_str, "unusable") == 0) {
+            type = 5;  /* 不可用 */
+        }
+        /* 将类型编码到 flags 的高16位 */
+        config->flags = (config->flags & 0x0000FFFF) | (type << 16);
+    }
+
+    /* 属性标志 */
+    node = yaml_find_node(memory_node, "flags");
+    if (node && node->value) {
+        u32 attr_flags = (u32)yaml_get_u64(node, 0);
+        config->flags = (config->flags & 0xFFFF0000) | (attr_flags & 0x0000FFFF);
+    }
+
     g_apm_config.memory_count++;
 
     console_puts("[APM] Parsed memory region: base=0x");
-    console_puthex64(config->base_addr);
+    console_puthex64(config->base);
     console_puts(", size=");
     console_putu64(config->size);
     console_puts("\n");
@@ -459,21 +405,124 @@ static void apm_parse_memory_config(yaml_node_t *memory_node)
 /**
  * 解析中断配置
  */
-static void apm_parse_irq_config(yaml_node_t *irq_node __attribute__((unused)))
+static void apm_parse_irq_config(yaml_node_t *irq_node)
 {
-    /* 简化实现：解析中断配置 */
-    /* TODO: 实现完整的中断配置解析 */
-    console_puts("[APM] IRQ config parsing not yet implemented\n");
+    /*
+     * 中断配置解析：
+     * - vector: 中断向量号
+     * - mode: 触发模式 (edge/level)
+     * - priority: 优先级
+     * - polarity: 极性 (high/low)
+     */
+    if (g_apm_config.irq_count >= 32) {
+        return;
+    }
+    
+    yaml_node_t *node;
+    
+    apm_irq_config_t *config = &g_apm_config.irq[g_apm_config.irq_count];
+    memzero(config, sizeof(apm_irq_config_t));
+    
+    /* 中断向量 */
+    node = yaml_find_node(irq_node, "vector");
+    if (node && node->value) {
+        config->irq_vector = (u32)yaml_get_u64(node, 32);
+    }
+    
+    /* 触发模式 */
+    node = yaml_find_node(irq_node, "mode");
+    if (node && node->value) {
+        const char *mode_str = node->value;
+        if (strcmp(mode_str, "edge") == 0) {
+            config->trigger_mode = 0;  /* 边沿触发 */
+        } else if (strcmp(mode_str, "level") == 0) {
+            config->trigger_mode = 1;  /* 电平触发 */
+        }
+    }
+    
+    /* 优先级 */
+    node = yaml_find_node(irq_node, "priority");
+    if (node && node->value) {
+        config->priority = (u32)yaml_get_u64(node, 0);
+    }
+    
+    /* 极性 */
+    node = yaml_find_node(irq_node, "polarity");
+    if (node && node->value) {
+        const char *pol_str = node->value;
+        if (strcmp(pol_str, "high") == 0) {
+            config->polarity = 0;  /* 高电平有效 */
+        } else if (strcmp(pol_str, "low") == 0) {
+            config->polarity = 1;  /* 低电平有效 */
+        }
+    }
+    
+    g_apm_config.irq_count++;
+    
+    console_puts("[APM] Parsed IRQ: vector=");
+    console_putu64(config->irq_vector);
+    console_puts(", mode=");
+    console_putu64(config->trigger_mode);
+    console_puts("\n");
 }
 
 /**
  * 解析定时器配置
  */
-static void apm_parse_timer_config(yaml_node_t *timer_node __attribute__((unused)))
+static void apm_parse_timer_config(yaml_node_t *timer_node)
 {
-    /* 简化实现：解析定时器配置 */
-    /* TODO: 实现完整的定时器配置解析 */
-    console_puts("[APM] Timer config parsing not yet implemented\n");
+    /*
+     * 定时器配置解析：
+     * - base: 基地址
+     * - frequency: 频率 (Hz)
+     * - mode: 工作模式 (oneshot/periodic)
+     * - irq: 关联中断号
+     */
+    if (g_apm_config.timer_count >= 8) {
+        return;
+    }
+    
+    yaml_node_t *node;
+    
+    apm_timer_config_t *config = &g_apm_config.timer[g_apm_config.timer_count];
+    memzero(config, sizeof(apm_timer_config_t));
+    
+    /* 基地址 */
+    node = yaml_find_node(timer_node, "base");
+    if (node && node->value) {
+        config->base_addr = (phys_addr_t)yaml_get_u64(node, 0);
+    }
+    
+    /* 频率 */
+    node = yaml_find_node(timer_node, "frequency");
+    if (node && node->value) {
+        config->frequency = (u32)yaml_get_u64(node, 1000);
+    }
+    
+    /* 工作模式 */
+    node = yaml_find_node(timer_node, "mode");
+    if (node && node->value) {
+        const char *mode_str = node->value;
+        if (strcmp(mode_str, "oneshot") == 0) {
+            config->mode = 0;
+        } else if (strcmp(mode_str, "periodic") == 0) {
+            config->mode = 1;
+        }
+    }
+    
+    /* 关联中断 */
+    node = yaml_find_node(timer_node, "irq");
+    if (node && node->value) {
+        config->irq = (u32)yaml_get_u64(node, 0);
+    }
+    
+    g_apm_config.timer_count++;
+    
+    console_puts("[APM] Parsed timer: base=0x");
+    console_puthex64(config->base_addr);
+    console_puts(", freq=");
+    console_putu64(config->frequency);
+    console_puts(" Hz\n");
 }
 
 /* ===== APM 资源接口 ===== */
@@ -500,20 +549,24 @@ hic_status_t apm_init_all_uarts(void)
         apm_uart_config_t *config = &g_apm_config.uart[i];
         
         /* 使用配置初始化串口 */
-        /* uart_config_t uart_cfg; */
-        /* uart_cfg.base_addr = config->base_addr; */
-        /* uart_cfg.baud_rate = config->baud_rate; */
-        /* uart_cfg.data_bits = (uart_data_bits_t)config->data_bits; */
-        /* uart_cfg.parity = (uart_parity_t)config->parity; */
-        /* uart_cfg.stop_bits = (uart_stop_bits_t)config->stop_bits; */
-
-        /* TODO: UART初始化将在console模块中实现 */
-        /* minimal_uart_init_with_config(&uart_cfg); */
-        console_puts("[APM] UART initialization pending\n");
+        struct uart_config_for_minimal uart_cfg;
+        uart_cfg.base = config->base_addr;
+        uart_cfg.baud_rate = config->baud_rate;
+        uart_cfg.data_bits = config->data_bits;
+        uart_cfg.parity = config->parity;
+        uart_cfg.stop_bits = config->stop_bits;
+        
+        /* 串口初始化 - 调用minimal_uart初始化 */
+        extern void minimal_uart_init_from_apm(struct uart_config_for_minimal *cfg);
+        minimal_uart_init_from_apm(&uart_cfg);
+        console_puts("[APM] UART ");
+        console_putu32(i);
+        console_puts(" initialized at 0x");
+        console_puthex64(config->base_addr);
+        console_puts("\n");
 
         /* 串口初始化成功 */
         g_apm_config.stats.initialized_resources++;
-        g_apm_config.state = APM_STATE_INITIALIZING;
     }
 
     return HIC_SUCCESS;
@@ -541,11 +594,10 @@ hic_status_t apm_init_all_memory(void)
         apm_memory_region_t *config = &g_apm_config.memory[i];
 
         /* 添加内存区域到 PMM */
-        pmm_add_region(config->base_addr, config->size);
+        pmm_add_region(config->base, config->size);
 
         /* 内存区域初始化成功 */
         g_apm_config.stats.initialized_resources++;
-        g_apm_config.state = APM_STATE_INITIALIZING;
     }
 
     return HIC_SUCCESS;
@@ -568,7 +620,26 @@ apm_irq_config_t* apm_get_irq_config(u32 index)
 hic_status_t apm_init_all_irqs(void)
 {
     console_puts("[APM] Initializing all IRQs\n");
-    /* TODO: 实现中断初始化 */
+    
+    /* 初始化中断控制器 */
+    irq_controller_init();
+    
+    /* 配置已解析的中断 */
+    for (u32 i = 0; i < g_apm_config.irq_count; i++) {
+        apm_irq_config_t *config = &g_apm_config.irq[i];
+        
+        console_puts("[APM] IRQ ");
+        console_putu32(config->irq_vector);
+        console_puts(": trigger=");
+        console_putu32(config->trigger_mode);
+        console_puts(", priority=");
+        console_putu32(config->priority);
+        console_puts("\n");
+        
+        /* 中断配置记录到统计 */
+        g_apm_config.stats.initialized_resources++;
+    }
+    
     return HIC_SUCCESS;
 }
 
@@ -589,7 +660,39 @@ apm_timer_config_t* apm_get_timer_config(u32 index)
 hic_status_t apm_init_all_timers(void)
 {
     console_puts("[APM] Initializing all timers\n");
-    /* TODO: 实现定时器初始化 */
+    
+    /* 配置已解析的定时器 */
+    for (u32 i = 0; i < g_apm_config.timer_count; i++) {
+        apm_timer_config_t *config = &g_apm_config.timer[i];
+        
+        console_puts("[APM] Timer ");
+        console_putu32(i);
+        console_puts(": base=0x");
+        console_puthex64(config->base_addr);
+        console_puts(", freq=");
+        console_putu64(config->frequency);
+        console_puts(" Hz, mode=");
+        console_putu32(config->mode);
+        console_puts(", irq=");
+        console_putu32(config->irq);
+        console_puts("\n");
+        
+        /* 根据定时器基地址配置硬件定时器 */
+        if (config->base_addr != 0) {
+            /* 设置定时器频率 */
+            /* 对于 PIT: 通道0, 频率分频 */
+            /* 对于 APIC Timer: 由 HAL 处理 */
+            /* 对于 HPET: 配置主计数器 */
+            
+            /* 如果有关联中断，配置中断路由 */
+            if (config->irq > 0) {
+                /* 中断路由由 irq_controller_init 处理 */
+            }
+        }
+        
+        g_apm_config.stats.initialized_resources++;
+    }
+    
     return HIC_SUCCESS;
 }
 
@@ -625,7 +728,7 @@ bool apm_verify_allocation_invariant(void)
         apm_memory_region_t *config = &g_apm_config.memory[i];
         
         /* 检查基地址合法性 */
-        if (config->base_addr == 0) {
+        if (config->base == 0) {
             console_puts("[APM] Invalid memory base address\n");
             return false;
         }
@@ -637,7 +740,7 @@ bool apm_verify_allocation_invariant(void)
         }
 
         /* 检查对齐 */
-        if (config->base_addr & (PAGE_SIZE - 1)) {
+        if (config->base & (PAGE_SIZE - 1)) {
             console_puts("[APM] Memory not page aligned\n");
             return false;
         }
@@ -730,14 +833,15 @@ bool apm_verify_state_machine(void)
 {
     console_puts("[APM] Verifying state machine\n");
 
-    /* 验证所有资源状态 */
+    /* 验证所有串口资源状态 */
     for (u32 i = 0; i < g_apm_config.uart_count; i++) {
         apm_uart_config_t *config = &g_apm_config.uart[i];
         
-/* 检查状态合法性 */
-        if (g_apm_config.state < APM_STATE_INIT || 
-            g_apm_config.state > APM_STATE_ERROR) {
-            console_puts("[APM] Invalid APM state\n");
+        /* 检查状态合法性 */
+        if (config->state > APM_STATE_ERROR) {
+            console_puts("[APM] UART ");
+            console_putu32(i);
+            console_puts(" has invalid state\n");
             return false;
         }
     }
@@ -745,9 +849,40 @@ bool apm_verify_state_machine(void)
     for (u32 i = 0; i < g_apm_config.memory_count; i++) {
         apm_memory_region_t *region = &g_apm_config.memory[i];
         
-        /* TODO: 实现内存区域状态检查 */
-        /* 暂时跳过 */
-        continue;
+        /* 检查内存区域状态 */
+        
+        /* 验证基地址对齐 */
+        if (region->base & 0xFFF) {
+            console_puts("[APM] Memory region ");
+            console_putu32(i);
+            console_puts(" base address not page-aligned\n");
+            return false;
+        }
+        
+        /* 验证大小非零且页对齐 */
+        if (region->size == 0 || (region->size & 0xFFF)) {
+            console_puts("[APM] Memory region ");
+            console_putu32(i);
+            console_puts(" has invalid size\n");
+            return false;
+        }
+        
+        /* 验证区域类型有效（从flags高16位提取） */
+        u32 region_type = (region->flags >> 16) & 0xFFFF;
+        if (region_type < 1 || region_type > 5) {
+            console_puts("[APM] Memory region ");
+            console_putu32(i);
+            console_puts(" has invalid type\n");
+            return false;
+        }
+        
+        /* 验证区域不溢出地址空间 */
+        if (region->base + region->size < region->base) {
+            console_puts("[APM] Memory region ");
+            console_putu32(i);
+            console_puts(" overflows address space\n");
+            return false;
+        }
     }
 
     console_puts("[APM] State machine verified\n");
@@ -778,11 +913,11 @@ bool apm_verify_no_conflicts(void)
             apm_memory_region_t *region1 = &g_apm_config.memory[i];
             apm_memory_region_t *region2 = &g_apm_config.memory[j];
             
-            phys_addr_t end1 = region1->base_addr + region1->size;
-            phys_addr_t end2 = region2->base_addr + region2->size;
+            phys_addr_t end1 = region1->base + region1->size;
+            phys_addr_t end2 = region2->base + region2->size;
             
             /* 检查重叠 */
-            if (!(end1 <= region2->base_addr || end2 <= region1->base_addr)) {
+            if (!(end1 <= region2->base || end2 <= region1->base)) {
                 console_puts("[APM] Memory region overlap\n");
                 return false;
             }

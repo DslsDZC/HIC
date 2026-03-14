@@ -104,13 +104,16 @@ typedef u32 physical_core_id_t;
 
 /* 逻辑核心属性标志 */
 typedef u32 logical_core_flags_t;
-#define LOGICAL_CORE_FLAG_EXCLUSIVE     (1U << 0)  /* 独占物理核心 */
-#define LOGICAL_CORE_FLAG_REALTIME      (1U << 1)  /* 实时优先级 */
-#define LOGICAL_CORE_FLAG_BACKGROUND    (1U << 2)  /* 后台优先级 */
-#define LOGICAL_CORE_FLAG_MIGRATABLE    (1U << 3)  /* 允许迁移 */
-#define LOGICAL_CORE_FLAG_PINNED        (1U << 4)  /* 固定到特定物理核心 */
-#define LOGICAL_CORE_FLAG_HIGH_PERF     (1U << 5)  /* 高性能偏好 */
-#define LOGICAL_CORE_FLAG_POWER_SAVE    (1U << 6)  /* 节能偏好 */
+#define LOGICAL_CORE_FLAG_EXCLUSIVE       (1U << 0)  /* 独占物理核心 */
+#define LOGICAL_CORE_FLAG_REALTIME        (1U << 1)  /* 实时优先级 */
+#define LOGICAL_CORE_FLAG_BACKGROUND      (1U << 2)  /* 后台优先级 */
+#define LOGICAL_CORE_FLAG_MIGRATABLE      (1U << 3)  /* 允许迁移 */
+#define LOGICAL_CORE_FLAG_PINNED          (1U << 4)  /* 固定到特定物理核心 */
+#define LOGICAL_CORE_FLAG_HIGH_PERF       (1U << 5)  /* 高性能偏好 */
+#define LOGICAL_CORE_FLAG_POWER_SAVE      (1U << 6)  /* 节能偏好 */
+#define LOGICAL_CORE_FLAG_QUOTA_WARNING   (1U << 7)  /* 配额轻微超限警告 */
+#define LOGICAL_CORE_FLAG_QUOTA_THROTTLED (1U << 8)  /* 配额限制中 */
+#define LOGICAL_CORE_FLAG_QUOTA_EXCEEDED  (1U << 9)  /* 配额严重超限 */
 
 /* 逻辑核心配额（CPU时间百分比，0-100） */
 typedef u8 logical_core_quota_t;

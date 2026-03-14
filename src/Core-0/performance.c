@@ -12,6 +12,7 @@
 #include "lib/console.h"
 #include "lib/mem.h"
 #include "hal.h"
+#include "hardware_probe.h"
 
 /* 全局定时器计数 */
 extern u64 g_timer_ticks;
@@ -22,9 +23,33 @@ u64 get_system_time_ns(void)
     /* 使用HAL接口获取时间戳 */
     u64 timestamp = hal_get_timestamp();
     
-    /* 假设时间戳是纳秒级，如果是其他单位需要转换 */
-    /* 这里假设TSC频率约为3GHz，转换为纳秒 */
-    return timestamp / 3;  /* 简化：TSC周期/3 ≈ 纳秒 */
+    /* 获取CPU频率（Hz），从硬件探测结果获取 */
+    extern cpu_info_t g_cpu_info;
+    u64 cpu_freq_hz = g_cpu_info.clock_frequency;
+    
+    if (cpu_freq_hz == 0) {
+        /* 如果CPU频率未知，使用默认值3GHz */
+        cpu_freq_hz = 3000000000ULL;
+    }
+    
+    /* 计算纳秒：timestamp * 1e9 / cpu_freq_hz
+     * 使用整数运算避免浮点数
+     * 分解为：timestamp * (1000000000 / cpu_freq_hz)
+     * 但为了精度，使用：timestamp * 1000 / (cpu_freq_hz / 1000000)
+     */
+    
+    /* 方法1：如果频率是GHz的整数倍 */
+    u64 ghz = cpu_freq_hz / 1000000000ULL;
+    if (ghz > 0 && cpu_freq_hz % 1000000000ULL == 0) {
+        return timestamp / ghz;
+    }
+    
+    /* 方法2：精确计算，避免溢出 */
+    /* 将时间戳分成高位和低位分别计算 */
+    u64 ns_per_cycle_x1000 = (1000000000ULL * 1000) / cpu_freq_hz;
+    u64 ns = (timestamp * ns_per_cycle_x1000) / 1000;
+    
+    return ns;
 }
 
 /* 定时器更新函数 */

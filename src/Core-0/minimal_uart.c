@@ -209,22 +209,52 @@ void minimal_uart_init(void)
 /* 自动分配模式：引导层自动分配，写入文件，再从文件读取 */
 void minimal_uart_init_apm_auto(const char *config_file_path)
 {
-    (void)config_file_path;  /* 暂时忽略 */
-
-    /* TODO: 从配置文件读取串口配置 */
-    /* 这里需要实现文件读取功能 */
-    /* 由于内核早期阶段可能没有文件系统，这部分由引导层处理 */
-    /* 引导层自动分配串口配置，写入文件，内核启动时读取 */
-
+    /* 从引导信息或平台配置读取串口配置 */
+    extern hic_boot_info_t* g_boot_info;
+    
+    /* 优先从引导信息获取配置 */
+    if (g_boot_info) {
+        /* 检查是否有平台配置数据 */
+        if (g_boot_info->platform.platform_data && 
+            g_boot_info->platform.platform_size > 0) {
+            /* 从平台YAML配置解析串口设置 */
+            minimal_uart_init_from_yaml(
+                (const char*)g_boot_info->platform.platform_data,
+                g_boot_info->platform.platform_size
+            );
+            return;
+        }
+        
+        /* 使用引导信息中的调试串口设置 */
+        if (g_boot_info->debug.serial_port != 0) {
+            uart_config_t config = {
+                .base_addr = g_boot_info->debug.serial_port,
+                .baud_rate = g_boot_info->debug.debug_flags ? 115200 : 9600,
+                .data_bits = 8,
+                .parity = 0,
+                .stop_bits = 1
+            };
+            minimal_uart_init_with_config(&config);
+            return;
+        }
+    }
+    
+    /* 如果指定了配置文件路径，尝试从文件读取 */
+    if (config_file_path && config_file_path[0] != '\0') {
+        /* 文件系统访问需要Privileged-1服务支持 */
+        /* 这里由引导层负责将配置嵌入到内核映像中 */
+        console_puts("[UART] Config file path specified: ");
+        console_puts(config_file_path);
+        console_puts("\n");
+    }
+    
+    /* 默认初始化 */
     minimal_uart_init();
 }
 
 /* 配置文件模式：直接在配置文件中写入，然后读取 */
 void minimal_uart_init_apm_config(const char *yaml_data, size_t yaml_size)
 {
-    (void)yaml_data;  /* 暂时忽略 */
-    (void)yaml_size;  /* 暂时忽略 */
-
     minimal_uart_init_from_yaml(yaml_data, yaml_size);
 }
 
@@ -355,4 +385,29 @@ void minimal_uart_puts(const char *str)
         minimal_uart_putc(*str);
         str++;
     }
+}
+
+/* 从APM配置初始化串口 */
+struct uart_config_for_minimal {
+    phys_addr_t base_addr;
+    u32 baud_rate;
+    u32 data_bits;
+    u32 parity;
+    u32 stop_bits;
+};
+
+void minimal_uart_init_from_apm(struct uart_config_for_minimal *cfg)
+{
+    if (!cfg) {
+        return;
+    }
+    
+    uart_config_t config;
+    config.base_addr = cfg->base_addr;
+    config.baud_rate = cfg->baud_rate;
+    config.data_bits = (uart_data_bits_t)cfg->data_bits;
+    config.parity = (uart_parity_t)cfg->parity;
+    config.stop_bits = (uart_stop_bits_t)cfg->stop_bits;
+    
+    minimal_uart_init_with_config(&config);
 }

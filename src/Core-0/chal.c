@@ -10,6 +10,7 @@
 
 #include "include/chal.h"
 #include "lib/console.h"
+#include "hardware_probe.h"
 #include <stddef.h>
 
 /* ==================== 错误处理 ==================== */
@@ -403,6 +404,8 @@ typedef struct {
     u64 total_time_ns;
     u64 max_time_ns;
     u64 min_time_ns;
+    u64 start_time;     /* 测量开始时间戳 */
+    bool active;        /* 是否正在测量 */
 } chal_perf_counter_t;
 
 static chal_perf_counter_t g_perf_counters[32];
@@ -418,9 +421,9 @@ static inline void chal_perf_start(u32 counter_id)
         return;
     }
     
-    /* 简化实现：只调用开始时间 */
-    (void)counter_id;
-    chal_time_now();
+    chal_perf_counter_t* counter = &g_perf_counters[counter_id];
+    counter->start_time = chal_time_now();
+    counter->active = true;
 }
 
 /**
@@ -434,9 +437,36 @@ static inline void chal_perf_end(u32 counter_id)
         return;
     }
     
-    /* 简化实现：只调用结束时间 */
-    (void)counter_id;
-    chal_time_now();
+    chal_perf_counter_t* counter = &g_perf_counters[counter_id];
+    if (!counter->active) {
+        return;
+    }
+    
+    u64 end_time = chal_time_now();
+    u64 elapsed = 0;
+    
+    /* 计算经过的时间（转换为纳秒） */
+    if (end_time >= counter->start_time) {
+        u64 cycles = end_time - counter->start_time;
+        /* 从CPU信息获取频率（Hz），转换为纳秒 */
+        u64 cpu_freq_hz = g_cpu_info.clock_frequency;
+        if (cpu_freq_hz == 0) {
+            cpu_freq_hz = 2000000000ULL;  /* 默认2GHz */
+        }
+        elapsed = (cycles * 1000000000ULL) / cpu_freq_hz;  /* 转换为纳秒 */
+    }
+    
+    counter->total_calls++;
+    counter->total_time_ns += elapsed;
+    
+    if (elapsed > counter->max_time_ns) {
+        counter->max_time_ns = elapsed;
+    }
+    if (elapsed < counter->min_time_ns) {
+        counter->min_time_ns = elapsed;
+    }
+    
+    counter->active = false;
 }
 
 /**

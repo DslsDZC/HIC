@@ -290,4 +290,53 @@ u64 hal_get_page_size(void);
  */
 bool hal_supports_io_ports(void);
 
+/* ==================== UART 串口接口 ==================== */
+
+/**
+ * UART 配置结构
+ */
+typedef struct hal_uart_config {
+    phys_addr_t base_addr;      /* 基地址 */
+    u32 baud_rate;              /* 波特率 */
+    u32 data_bits;              /* 数据位 (5-8) */
+    u32 parity;                 /* 校验位 (0=无, 1=奇, 2=偶) */
+    u32 stop_bits;              /* 停止位 (1或2) */
+} hal_uart_config_t;
+
+/**
+ * 初始化 UART
+ * @param config UART 配置，NULL 使用默认配置
+ */
+void hal_uart_init(const hal_uart_config_t *config);
+
+/**
+ * 发送单个字符
+ */
+void hal_uart_putc(char c);
+
+/**
+ * 发送字符串
+ */
+void hal_uart_puts(const char *str);
+
+/**
+ * 接收单个字符（阻塞）
+ */
+char hal_uart_getc(void);
+
+/**
+ * 检查是否有数据可读
+ */
+bool hal_uart_rx_ready(void);
+
+/**
+ * 检查是否可以发送
+ */
+bool hal_uart_tx_ready(void);
+
+/**
+ * 获取默认 UART 基地址
+ */
+phys_addr_t hal_uart_get_default_base(void);
+
 #endif /* HIC_HAL_H */
