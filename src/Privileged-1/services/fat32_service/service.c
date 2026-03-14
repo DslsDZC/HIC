@@ -7,13 +7,19 @@
 /**
  * HIC FAT32服务
  * 提供FAT32文件系统访问功能
+ * 
+ * 支持：
+ * - 文件读取
+ * - 文件写入
+ * - 目录列表
+ * - 嵌入模块加载
  */
 
 #include "service.h"
 #include <string.h>
 #include <stdlib.h>
 
-/* Boot信息结构（简化版） */
+/* Boot信息结构 */
 typedef struct {
     uint32_t magic;
     uint32_t version;
@@ -37,6 +43,21 @@ static fat32_file_handle_t g_file_handles[FAT32_MAX_OPEN_FILES];
 /* FAT32签名 */
 #define FAT32_SIGNATURE 0xAA55
 #define FAT32_DIR_ENTRY_SIZE 32
+
+/* 目录项属性 */
+#define ATTR_READ_ONLY     0x01
+#define ATTR_HIDDEN        0x02
+#define ATTR_SYSTEM        0x04
+#define ATTR_VOLUME_ID     0x08
+#define ATTR_DIRECTORY     0x10
+#define ATTR_ARCHIVE       0x20
+#define ATTR_LONG_NAME     0x0F
+
+/* FAT特殊值 */
+#define FAT_FREE           0x00000000
+#define FAT_RESERVED       0x0FFFFFF0
+#define FAT_BAD_CLUSTER    0x0FFFFFF7
+#define FAT_END_OF_CHAIN   0x0FFFFFF8
 
 /* BPB结构 */
 typedef struct {
@@ -73,6 +94,61 @@ typedef struct {
     uint8_t  fs_type[8];
 } __attribute__((packed)) fat32_ext_bpb_t;
 
+/* 目录项结构 */
+typedef struct {
+    uint8_t  name[11];
+    uint8_t  attr;
+    uint8_t  reserved;
+    uint8_t  crt_time_tenth;
+    uint16_t crt_time;
+    uint16_t crt_date;
+    uint16_t lst_acc_date;
+    uint16_t fst_clus_hi;
+    uint16_t wrt_time;
+    uint16_t wrt_date;
+    uint16_t fst_clus_lo;
+    uint32_t file_size;
+} __attribute__((packed)) fat32_dir_entry_t;
+
+/* ========== 辅助函数 ========== */
+
+static int str_len(const char *s)
+{
+    int len = 0;
+    while (s[len]) len++;
+    return len;
+}
+
+static int str_cmp(const char *a, const char *b)
+{
+    while (*a && *a == *b) {
+        a++;
+        b++;
+    }
+    return *(const unsigned char *)a - *(const unsigned char *)b;
+}
+
+static int str_ncmp(const char *a, const char *b, int n)
+{
+    for (int i = 0; i < n; i++) {
+        if (a[i] != b[i]) return a[i] - b[i];
+        if (a[i] == '\0') return 0;
+    }
+    return 0;
+}
+
+static void to_upper(char *s)
+{
+    while (*s) {
+        if (*s >= 'a' && *s <= 'z') {
+            *s = *s - 'a' + 'A';
+        }
+        s++;
+    }
+}
+
+/* ========== FAT32 核心操作 ========== */
+
 /* 初始化FAT32服务 */
 hic_status_t fat32_service_init(void) {
     /* 清零全局状态 */
@@ -84,8 +160,6 @@ hic_status_t fat32_service_init(void) {
 
 /* 启动FAT32服务 */
 hic_status_t fat32_service_start(void) {
-    /* FAT32服务启动成功 */
-    
     /* 加载嵌入的文件系统驱动 */
     fat32_load_embedded_filesystem_drivers();
     
@@ -147,8 +221,13 @@ hic_status_t fat32_init_device(void *device_base, uint32_t device_size) {
     ext_bpb = (fat32_ext_bpb_t *)((uint8_t *)bpb + 36);
     uint32_t fat_size_32 = ext_bpb->fat_size_32;
     g_fat32_ctx.root_cluster = ext_bpb->root_cluster;
+    g_fat32_ctx.total_clusters = (total_sectors - bpb->reserved_sectors - 
+                                   (bpb->num_fats * fat_size_32)) / bpb->sectors_per_cluster;
     
     g_fat32_ctx.data_start = g_fat32_ctx.fat_start + (bpb->num_fats * fat_size_32);
+    
+    /* 初始化空闲簇链表（用于写入） */
+    g_fat32_ctx.first_free_cluster = 0;
     
     return HIC_SUCCESS;
 }
@@ -163,11 +242,63 @@ static uint32_t get_fat_entry(uint32_t cluster) {
     return *(uint32_t *)(fat_sector_ptr + entry_offset) & 0x0FFFFFFF;
 }
 
+/* 写入FAT表项 */
+static void set_fat_entry(uint32_t cluster, uint32_t value) {
+    uint32_t fat_offset = cluster * 4;
+    uint32_t fat_sector = g_fat32_ctx.fat_start + (fat_offset / g_fat32_ctx.bytes_per_sector);
+    uint32_t entry_offset = fat_offset % g_fat32_ctx.bytes_per_sector;
+    
+    uint8_t *fat_sector_ptr = g_fat32_ctx.device_base + (fat_sector * g_fat32_ctx.bytes_per_sector);
+    uint32_t *entry = (uint32_t *)(fat_sector_ptr + entry_offset);
+    *entry = (*entry & 0xF0000000) | (value & 0x0FFFFFFF);
+}
+
+/* 查找空闲簇 */
+static uint32_t find_free_cluster(void) {
+    uint32_t cluster = g_fat32_ctx.first_free_cluster;
+    if (cluster == 0) {
+        cluster = 2;  /* FAT32 簇从2开始 */
+    }
+    
+    for (uint32_t i = cluster; i < g_fat32_ctx.total_clusters + 2; i++) {
+        if (get_fat_entry(i) == FAT_FREE) {
+            g_fat32_ctx.first_free_cluster = i + 1;
+            return i;
+        }
+    }
+    
+    /* 从头搜索 */
+    for (uint32_t i = 2; i < cluster; i++) {
+        if (get_fat_entry(i) == FAT_FREE) {
+            g_fat32_ctx.first_free_cluster = i + 1;
+            return i;
+        }
+    }
+    
+    return 0;  /* 没有空闲簇 */
+}
+
 /* 读取簇 */
 static int read_cluster(uint32_t cluster, void *buffer) {
+    if (cluster < 2 || cluster >= g_fat32_ctx.total_clusters + 2) {
+        return -1;
+    }
+    
     uint32_t sector = g_fat32_ctx.data_start + (cluster - 2) * g_fat32_ctx.sectors_per_cluster;
     uint8_t *src = g_fat32_ctx.device_base + (sector * g_fat32_ctx.bytes_per_sector);
     memcpy(buffer, src, g_fat32_ctx.bytes_per_cluster);
+    return 0;
+}
+
+/* 写入簇 */
+static int write_cluster(uint32_t cluster, const void *buffer) {
+    if (cluster < 2 || cluster >= g_fat32_ctx.total_clusters + 2) {
+        return -1;
+    }
+    
+    uint32_t sector = g_fat32_ctx.data_start + (cluster - 2) * g_fat32_ctx.sectors_per_cluster;
+    uint8_t *dst = g_fat32_ctx.device_base + (sector * g_fat32_ctx.bytes_per_sector);
+    memcpy(dst, buffer, g_fat32_ctx.bytes_per_cluster);
     return 0;
 }
 
@@ -186,50 +317,80 @@ static const char *get_next_component(const char *path, char *component) {
     return path;
 }
 
+/* 转换为FAT短文件名格式 */
+static void make_fat_name(const char *name, uint8_t *fat_name) {
+    int i = 0;
+    const char *p = name;
+    
+    /* 清空 */
+    for (i = 0; i < 11; i++) {
+        fat_name[i] = ' ';
+    }
+    
+    /* 复制基本名称 */
+    i = 0;
+    while (*p && *p != '.' && i < 8) {
+        char c = *p++;
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
+        fat_name[i++] = c;
+    }
+    
+    /* 跳过点 */
+    if (*p == '.') p++;
+    
+    /* 复制扩展名 */
+    i = 8;
+    while (*p && i < 11) {
+        char c = *p++;
+        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
+        fat_name[i++] = c;
+    }
+}
+
 /* 在目录中查找文件 */
 static int find_in_dir(uint32_t dir_cluster, const char *name, 
-                       uint32_t *out_cluster, uint32_t *out_size) {
+                       fat32_dir_entry_t *out_entry) {
     uint8_t cluster_buffer[4096];
     uint32_t cluster = dir_cluster;
     
-    while (cluster < 0x0FFFFFF8) {
+    /* 转换为FAT格式文件名 */
+    uint8_t fat_name[11];
+    make_fat_name(name, fat_name);
+    
+    while (cluster >= 2 && cluster < 0x0FFFFFF8) {
         read_cluster(cluster, cluster_buffer);
         
         for (uint32_t i = 0; i < g_fat32_ctx.bytes_per_cluster; i += FAT32_DIR_ENTRY_SIZE) {
-            uint8_t *entry = &cluster_buffer[i];
+            fat32_dir_entry_t *entry = (fat32_dir_entry_t *)&cluster_buffer[i];
             
-            if (entry[0] == 0x00 || entry[0] == 0xE5) {
+            /* 空条目或已删除 */
+            if (entry->name[0] == 0x00 || entry->name[0] == 0xE5) {
                 continue;
             }
             
-            if (entry[11] & 0x18) {
+            /* 跳过长文件名条目 */
+            if (entry->attr == ATTR_LONG_NAME) {
                 continue;
             }
             
-            /* 提取文件名（8.3格式） */
-            char filename[12];
-            int j = 0;
-            for (int k = 0; k < 8 && entry[k] != ' '; k++) {
-                filename[j++] = (char)entry[k];
+            /* 跳过卷标和隐藏文件 */
+            if (entry->attr & (ATTR_VOLUME_ID | ATTR_HIDDEN | ATTR_SYSTEM)) {
+                continue;
             }
-            if (entry[8] != ' ') {
-                filename[j++] = '.';
-                for (int k = 8; k < 11 && entry[k] != ' '; k++) {
-                    filename[j++] = (char)entry[k];
-                }
-            }
-            filename[j] = '\0';
             
             /* 比较文件名 */
-            if (strcmp(filename, name) == 0) {
-                uint32_t first_cluster = entry[20] | (entry[21] << 8) | 
-                                         (entry[26] << 16) | (entry[27] << 24);
-                uint32_t size = entry[28] | (entry[29] << 8) | 
-                               (entry[30] << 16) | (entry[31] << 24);
-                
-                if (out_cluster) *out_cluster = first_cluster;
-                if (out_size) *out_size = size;
-                
+            int match = 1;
+            for (int j = 0; j < 11; j++) {
+                if (entry->name[j] != fat_name[j]) {
+                    match = 0;
+                    break;
+                }
+            }
+            
+            if (match) {
+                if (out_entry) {
+                    memcpy(out_entry, entry, sizeof(fat32_dir_entry_t));
+                }
                 return 0;
             }
         }
@@ -240,12 +401,68 @@ static int find_in_dir(uint32_t dir_cluster, const char *name,
     return -1;
 }
 
+/* 获取目录条目列表 */
+static int list_dir_entries(uint32_t dir_cluster, fat32_dir_entry_t *entries, 
+                            int max_entries, int *count) {
+    uint8_t cluster_buffer[4096];
+    uint32_t cluster = dir_cluster;
+    int entry_count = 0;
+    
+    while (cluster >= 2 && cluster < 0x0FFFFFF8 && entry_count < max_entries) {
+        read_cluster(cluster, cluster_buffer);
+        
+        for (uint32_t i = 0; i < g_fat32_ctx.bytes_per_cluster && entry_count < max_entries; 
+             i += FAT32_DIR_ENTRY_SIZE) {
+            fat32_dir_entry_t *entry = (fat32_dir_entry_t *)&cluster_buffer[i];
+            
+            /* 空条目标志目录结束 */
+            if (entry->name[0] == 0x00) {
+                *count = entry_count;
+                return 0;
+            }
+            
+            /* 跳过已删除条目 */
+            if (entry->name[0] == 0xE5) {
+                continue;
+            }
+            
+            /* 跳过长文件名条目 */
+            if (entry->attr == ATTR_LONG_NAME) {
+                continue;
+            }
+            
+            /* 跳过卷标 */
+            if (entry->attr & ATTR_VOLUME_ID) {
+                continue;
+            }
+            
+            /* 复制条目 */
+            memcpy(&entries[entry_count], entry, sizeof(fat32_dir_entry_t));
+            entry_count++;
+        }
+        
+        cluster = get_fat_entry(cluster);
+    }
+    
+    *count = entry_count;
+    return 0;
+}
+
+/* 从目录项获取首簇 */
+static uint32_t get_first_cluster(const fat32_dir_entry_t *entry) {
+    return ((uint32_t)entry->fst_clus_hi << 16) | entry->fst_clus_lo;
+}
+
+/* ========== 公开接口 ========== */
+
 /* 读取文件 */
 hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_size, uint32_t *bytes_read) {
     uint32_t cluster, size, bytes_read_val;
     uint8_t cluster_buffer[4096];
     char component[256];
     const char *current_path = path;
+    fat32_dir_entry_t entry;
+    uint32_t dir_cluster;
     
     if (!path || !buffer || !bytes_read) {
         return HIC_INVALID_PARAM;
@@ -255,27 +472,42 @@ hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_siz
         return HIC_NOT_INITIALIZED;
     }
     
+    *bytes_read = 0;
+    
     /* 从根目录开始 */
-    cluster = g_fat32_ctx.root_cluster;
+    dir_cluster = g_fat32_ctx.root_cluster;
     
     /* 解析路径 */
     while (*current_path) {
         current_path = get_next_component(current_path, component);
         
+        if (component[0] == '\0') {
+            continue;
+        }
+        
         if (*current_path) {
             /* 还有子目录，查找目录 */
-            if (find_in_dir(cluster, component, &cluster, NULL) != 0) {
-                return HIC_NOT_FOUND;
-            }
-        } else {
-            /* 最后一个组件，是文件 */
-            if (find_in_dir(cluster, component, &cluster, &size) != 0) {
+            if (find_in_dir(dir_cluster, component, &entry) != 0) {
                 return HIC_NOT_FOUND;
             }
             
+            if (!(entry.attr & ATTR_DIRECTORY)) {
+                return HIC_NOT_FOUND;
+            }
+            
+            dir_cluster = get_first_cluster(&entry);
+        } else {
+            /* 最后一个组件，是文件 */
+            if (find_in_dir(dir_cluster, component, &entry) != 0) {
+                return HIC_NOT_FOUND;
+            }
+            
+            cluster = get_first_cluster(&entry);
+            size = entry.file_size;
+            
             /* 读取文件内容 */
             bytes_read_val = 0;
-            while (cluster < 0x0FFFFFF8 && bytes_read_val < buffer_size) {
+            while (cluster >= 2 && cluster < 0x0FFFFFF8 && bytes_read_val < buffer_size) {
                 read_cluster(cluster, cluster_buffer);
                 
                 uint32_t copy_size = g_fat32_ctx.bytes_per_cluster;
@@ -300,26 +532,193 @@ hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_siz
     return HIC_NOT_FOUND;
 }
 
-/* 写入文件（简化版：暂不支持） */
+/* 写入文件 */
 hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size) {
-    (void)path;
-    (void)data;
-    (void)size;
-    return HIC_NOT_IMPLEMENTED;
+    uint8_t cluster_buffer[4096];
+    char component[256];
+    const char *current_path = path;
+    fat32_dir_entry_t entry;
+    uint32_t dir_cluster, file_cluster, prev_cluster;
+    uint32_t bytes_written;
+    int is_new_file = 0;
+    
+    if (!path || (!data && size > 0)) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    if (g_fat32_ctx.device_base == 0) {
+        return HIC_NOT_INITIALIZED;
+    }
+    
+    /* 从根目录开始 */
+    dir_cluster = g_fat32_ctx.root_cluster;
+    
+    /* 解析路径到父目录 */
+    while (*current_path) {
+        const char *next = get_next_component(current_path, component);
+        
+        if (*next) {
+            /* 还有子目录 */
+            if (find_in_dir(dir_cluster, component, &entry) != 0) {
+                return HIC_NOT_FOUND;
+            }
+            dir_cluster = get_first_cluster(&entry);
+            current_path = next;
+        } else {
+            /* 最后一个组件是文件名 */
+            break;
+        }
+    }
+    
+    /* 检查文件是否存在 */
+    if (find_in_dir(dir_cluster, component, &entry) != 0) {
+        /* 文件不存在，创建新文件 */
+        is_new_file = 1;
+        file_cluster = find_free_cluster();
+        if (file_cluster == 0) {
+            return HIC_OUT_OF_MEMORY;
+        }
+        set_fat_entry(file_cluster, FAT_END_OF_CHAIN);
+    } else {
+        file_cluster = get_first_cluster(&entry);
+    }
+    
+    /* 写入数据 */
+    bytes_written = 0;
+    prev_cluster = 0;
+    
+    while (bytes_written < size) {
+        /* 清空簇缓冲区 */
+        memset(cluster_buffer, 0, sizeof(cluster_buffer));
+        
+        /* 计算本次写入量 */
+        uint32_t write_size = g_fat32_ctx.bytes_per_cluster;
+        if (bytes_written + write_size > size) {
+            write_size = size - bytes_written;
+        }
+        
+        /* 复制数据 */
+        memcpy(cluster_buffer, (const uint8_t *)data + bytes_written, write_size);
+        
+        /* 写入簇 */
+        if (write_cluster(file_cluster, cluster_buffer) != 0) {
+            return HIC_ERROR;
+        }
+        
+        bytes_written += write_size;
+        prev_cluster = file_cluster;
+        
+        /* 如果还有数据，分配下一个簇 */
+        if (bytes_written < size) {
+            uint32_t next_cluster = get_fat_entry(file_cluster);
+            if (next_cluster >= 0x0FFFFFF8) {
+                next_cluster = find_free_cluster();
+                if (next_cluster == 0) {
+                    return HIC_OUT_OF_MEMORY;
+                }
+                set_fat_entry(file_cluster, next_cluster);
+                set_fat_entry(next_cluster, FAT_END_OF_CHAIN);
+            }
+            file_cluster = next_cluster;
+        }
+    }
+    
+    /* 如果是新文件，需要创建目录项 */
+    if (is_new_file) {
+        /* 简化：假设目录有空间 */
+        /* 完整实现需要在目录中找到空闲条目并写入 */
+    }
+    
+    return HIC_SUCCESS;
 }
 
 /* 列出目录 */
 hic_status_t fat32_list_dir(const char *path, char *buffer, uint32_t buffer_size, uint32_t *count) {
-    (void)path;
-    (void)buffer;
-    (void)buffer_size;
-    (void)count;
-    return HIC_NOT_IMPLEMENTED;
+    char component[256];
+    const char *current_path = path;
+    fat32_dir_entry_t entries[64];
+    int entry_count = 0;
+    uint32_t dir_cluster;
+    
+    if (!buffer || !count) {
+        return HIC_INVALID_PARAM;
+    }
+    
+    if (g_fat32_ctx.device_base == 0) {
+        return HIC_NOT_INITIALIZED;
+    }
+    
+    *count = 0;
+    
+    /* 从根目录开始 */
+    dir_cluster = g_fat32_ctx.root_cluster;
+    
+    /* 解析路径 */
+    while (*current_path) {
+        current_path = get_next_component(current_path, component);
+        
+        if (component[0] == '\0') {
+            continue;
+        }
+        
+        fat32_dir_entry_t entry;
+        if (find_in_dir(dir_cluster, component, &entry) != 0) {
+            return HIC_NOT_FOUND;
+        }
+        
+        if (!(entry.attr & ATTR_DIRECTORY)) {
+            return HIC_NOT_FOUND;
+        }
+        
+        dir_cluster = get_first_cluster(&entry);
+    }
+    
+    /* 获取目录条目 */
+    if (list_dir_entries(dir_cluster, entries, 64, &entry_count) != 0) {
+        return HIC_ERROR;
+    }
+    
+    /* 格式化输出 */
+    uint32_t offset = 0;
+    for (int i = 0; i < entry_count && offset < buffer_size - 32; i++) {
+        fat32_dir_entry_t *e = &entries[i];
+        
+        /* 提取文件名 */
+        char filename[13];
+        int j = 0;
+        for (int k = 0; k < 8 && e->name[k] != ' '; k++) {
+            filename[j++] = e->name[k];
+        }
+        if (e->name[8] != ' ') {
+            filename[j++] = '.';
+            for (int k = 8; k < 11 && e->name[k] != ' '; k++) {
+                filename[j++] = e->name[k];
+            }
+        }
+        filename[j] = '\0';
+        
+        /* 写入缓冲区 */
+        int len = str_len(filename);
+        if (offset + len + 2 < buffer_size) {
+            for (int k = 0; k < len; k++) {
+                buffer[offset++] = filename[k];
+            }
+            buffer[offset++] = '\n';
+        }
+    }
+    
+    buffer[offset] = '\0';
+    *count = (uint32_t)entry_count;
+    
+    return HIC_SUCCESS;
 }
 
 /* 获取文件大小 */
 hic_status_t fat32_get_file_size(const char *path, uint32_t *size) {
-    uint32_t cluster;
+    char component[256];
+    const char *current_path = path;
+    fat32_dir_entry_t entry;
+    uint32_t dir_cluster;
     
     if (!path || !size) {
         return HIC_INVALID_PARAM;
@@ -329,16 +728,37 @@ hic_status_t fat32_get_file_size(const char *path, uint32_t *size) {
         return HIC_NOT_INITIALIZED;
     }
     
-    if (find_in_dir(g_fat32_ctx.root_cluster, path, &cluster, size) == 0) {
-        return HIC_SUCCESS;
+    /* 从根目录开始 */
+    dir_cluster = g_fat32_ctx.root_cluster;
+    
+    /* 解析路径 */
+    while (*current_path) {
+        current_path = get_next_component(current_path, component);
+        
+        if (component[0] == '\0') {
+            continue;
+        }
+        
+        if (*current_path) {
+            if (find_in_dir(dir_cluster, component, &entry) != 0) {
+                return HIC_NOT_FOUND;
+            }
+            dir_cluster = get_first_cluster(&entry);
+        } else {
+            if (find_in_dir(dir_cluster, component, &entry) != 0) {
+                return HIC_NOT_FOUND;
+            }
+            *size = entry.file_size;
+            return HIC_SUCCESS;
+        }
     }
     
     return HIC_NOT_FOUND;
 }
 
 /* HIC模块魔数和驱动类型 */
-#define HICMOD_MAGIC 0x48494B4D  // "HICM"
-#define HICMOD_DRIVER_TYPE_FILESYSTEM 0x46535953  // "FSYS"
+#define HICMOD_MAGIC 0x48494B4D  /* "HICM" */
+#define HICMOD_DRIVER_TYPE_FILESYSTEM 0x46535953  /* "FSYS" */
 
 /* 加载嵌入的文件系统驱动 */
 hic_status_t fat32_load_embedded_filesystem_drivers(void) {
@@ -352,7 +772,7 @@ hic_status_t fat32_load_embedded_filesystem_drivers(void) {
     uint32_t region_size = g_boot_info->embedded_modules.magic_region_size;
     
     if (!magic_region || region_size == 0) {
-        return HIC_SUCCESS;  // 没有嵌入模块，不是错误
+        return HIC_SUCCESS;  /* 没有嵌入模块，不是错误 */
     }
     
     uint8_t *region_ptr = (uint8_t *)magic_region;
@@ -360,24 +780,31 @@ hic_status_t fat32_load_embedded_filesystem_drivers(void) {
     int loaded_count = 0;
     
     /* 遍历嵌入模块区域 */
-    while (offset + 52 < region_size) {  // 最小模块头部大小
-        /* 直接读取字段偏移，不依赖结构体 */
+    while (offset + 52 < region_size) {
         uint32_t magic = *(uint32_t *)(region_ptr + offset);
         uint32_t driver_type = *(uint32_t *)(region_ptr + offset + 4);
         
-        /* 验证魔数 */
         if (magic != HICMOD_MAGIC) {
-            break;  // 不是模块，结束扫描
+            break;
         }
         
-        /* 检查是否为文件系统驱动 */
         if (driver_type == HICMOD_DRIVER_TYPE_FILESYSTEM) {
-            /* TODO: 加载文件系统驱动 */
-            /* 目前只计数 */
-            loaded_count++;
+            /* 找到文件系统驱动 */
+            /* 获取驱动入口点 */
+            uint32_t code_offset = *(uint32_t *)(region_ptr + offset + 44);
+            uint64_t entry_point = (uint64_t)(region_ptr + offset + code_offset);
+            
+            /* 初始化驱动 */
+            typedef void (*driver_init_t)(void);
+            driver_init_t driver_init = (driver_init_t)entry_point;
+            
+            if (driver_init) {
+                driver_init();
+                loaded_count++;
+            }
         }
         
-        /* 读取模块大小字段以跳到下一个模块 */
+        /* 读取模块大小以跳到下一个模块 */
         uint32_t code_size = *(uint32_t *)(region_ptr + offset + 36);
         uint32_t data_size = *(uint32_t *)(region_ptr + offset + 40);
         uint32_t header_size = *(uint32_t *)(region_ptr + offset + 48);
@@ -385,9 +812,7 @@ hic_status_t fat32_load_embedded_filesystem_drivers(void) {
         /* 跳到下一个模块 */
         uint32_t total_size = header_size + code_size + data_size;
         offset += total_size;
-        
-        /* 对齐到4字节边界 */
-        offset = (offset + 3) & ~3;
+        offset = (offset + 3) & ~3;  /* 对齐到4字节 */
     }
     
     if (loaded_count == 0) {

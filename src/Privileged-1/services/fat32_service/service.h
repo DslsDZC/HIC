@@ -23,6 +23,8 @@ typedef struct {
     uint32_t fat_start;             /* FAT表起始扇区 */
     uint32_t data_start;            /* 数据区起始扇区 */
     uint32_t root_cluster;          /* 根目录起始簇 */
+    uint32_t total_clusters;        /* 总簇数 */
+    uint32_t first_free_cluster;    /* 首个空闲簇 */
 } fat32_service_ctx_t;
 
 /* 文件句柄 */
