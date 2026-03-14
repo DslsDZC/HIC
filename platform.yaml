@@ -45,7 +45,7 @@ core_services:
 
 # ==================== 静态模块配置 ====================
 # 这些模块将静态链接到内核中，在启动时自动加载
-# 必须在动态模块之前加载，用于提供基础功能（如文件系统）
+# 设计原则：极小化 TCB，只包含必需的引导服务
 # 
 # 配置说明：
 # - name: 模块名称（对应 src/Privileged-1/services/<name>/ 目录）
@@ -56,41 +56,49 @@ core_services:
 # - capabilities: 初始能力列表
 #
 # 加载顺序：按列表顺序依次加载
+#
+# 信任链架构：
+# 内核信任根 → verifier → init_launcher → fat32_service → 动态加载 module_manager
+#
+# 静态服务总计：<1000 行代码，TCB 极小化
+#
+# verifier: 固化验证服务，包含所有签名验证逻辑
+# init_launcher: 引导器，使用 verifier 验证后加载模块
+# fat32_service: 文件系统，提供模块读取能力
+#
+# 动态服务（从磁盘加载）：
+# module_manager: 由 init_launcher 从 /boot/module_manager.hicmod 加载
 
 static_modules:
-  # FAT32 文件系统服务（必需：用于读取磁盘）
-  # 提供文件访问能力，module_manager_service 依赖此服务
+  # 1. 固化验证服务（必需：信任链起点）
+  # 包含所有签名验证逻辑（从内核迁移）
+  # SHA-384、RSA-3072 PSS、Ed25519 等
+  - name: verifier
+    type: service
+    auto_start: true
+    critical: true
+    privileged: true
+
+  # 2. FAT32 文件系统驱动（必需：提供磁盘读取能力）
+  # 必须在 init_launcher 之前加载，因为 init_launcher 需要它读取模块文件
   - name: fat32_service
-    type: service
+    type: driver
     auto_start: true
     critical: true
     privileged: true
-    capabilities:
-      - disk_access
-      - memory_alloc
 
-  # 模块签名验证服务（必需：用于验证动态模块签名）
-  # 提供模块签名验证能力，确保加载的模块可信
-  - name: module_signer
+  # 3. 初始服务启动器（必需：引导动态模块）
+  # 依赖 fat32_service 来读取 /boot/module_manager.hicmod
+  # 使用 verifier 服务验证模块签名后加载模块管理器
+  - name: init_launcher
     type: service
     auto_start: true
     critical: true
     privileged: true
     capabilities:
-      - crypto_access
-      - signature_verify
-
-  # 模块管理器服务（必需：加载和管理动态模块）
-  # 读取 /modules.list 并加载磁盘上的动态模块
-  - name: module_manager_service
-    type: service
-    auto_start: true
-    critical: true
-    privileged: true
-    capabilities:
-      - filesystem_access
-      - module_load
-      - module_unload
+      - storage_access
+      - domain_create
+      - verifier_access
 
 # ==================== CPU特性配置 ====================
 cpu_features:

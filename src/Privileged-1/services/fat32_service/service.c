@@ -331,8 +331,8 @@ static void make_fat_name(const char *name, uint8_t *fat_name) {
     i = 0;
     while (*p && *p != '.' && i < 8) {
         char c = *p++;
-        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
-        fat_name[i++] = c;
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        fat_name[i++] = (uint8_t)c;
     }
     
     /* 跳过点 */
@@ -342,8 +342,8 @@ static void make_fat_name(const char *name, uint8_t *fat_name) {
     i = 8;
     while (*p && i < 11) {
         char c = *p++;
-        if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
-        fat_name[i++] = c;
+        if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        fat_name[i++] = (uint8_t)c;
     }
 }
 
@@ -538,7 +538,7 @@ hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size)
     char component[256];
     const char *current_path = path;
     fat32_dir_entry_t entry;
-    uint32_t dir_cluster, file_cluster, prev_cluster;
+    uint32_t dir_cluster, file_cluster;
     uint32_t bytes_written;
     int is_new_file = 0;
     
@@ -585,7 +585,6 @@ hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size)
     
     /* 写入数据 */
     bytes_written = 0;
-    prev_cluster = 0;
     
     while (bytes_written < size) {
         /* 清空簇缓冲区 */
@@ -606,7 +605,6 @@ hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size)
         }
         
         bytes_written += write_size;
-        prev_cluster = file_cluster;
         
         /* 如果还有数据，分配下一个簇 */
         if (bytes_written < size) {
@@ -687,20 +685,20 @@ hic_status_t fat32_list_dir(const char *path, char *buffer, uint32_t buffer_size
         char filename[13];
         int j = 0;
         for (int k = 0; k < 8 && e->name[k] != ' '; k++) {
-            filename[j++] = e->name[k];
+            filename[j++] = (char)e->name[k];
         }
         if (e->name[8] != ' ') {
             filename[j++] = '.';
             for (int k = 8; k < 11 && e->name[k] != ' '; k++) {
-                filename[j++] = e->name[k];
+                filename[j++] = (char)e->name[k];
             }
         }
         filename[j] = '\0';
         
         /* 写入缓冲区 */
-        int len = str_len(filename);
+        uint32_t len = (uint32_t)str_len(filename);
         if (offset + len + 2 < buffer_size) {
-            for (int k = 0; k < len; k++) {
+            for (uint32_t k = 0; k < len; k++) {
                 buffer[offset++] = filename[k];
             }
             buffer[offset++] = '\n';
@@ -769,7 +767,7 @@ hic_status_t fat32_load_embedded_filesystem_drivers(void) {
     }
     
     void *magic_region = g_boot_info->embedded_modules.magic_region_base;
-    uint32_t region_size = g_boot_info->embedded_modules.magic_region_size;
+    uint32_t region_size = (uint32_t)g_boot_info->embedded_modules.magic_region_size;
     
     if (!magic_region || region_size == 0) {
         return HIC_SUCCESS;  /* 没有嵌入模块，不是错误 */
@@ -812,7 +810,7 @@ hic_status_t fat32_load_embedded_filesystem_drivers(void) {
         /* 跳到下一个模块 */
         uint32_t total_size = header_size + code_size + data_size;
         offset += total_size;
-        offset = (offset + 3) & ~3;  /* 对齐到4字节 */
+        offset = (offset + 3) & ~3U;  /* 对齐到4字节 */
     }
     
     if (loaded_count == 0) {

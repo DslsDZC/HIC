@@ -17,14 +17,14 @@
 typedef struct {
     uint8_t  *device_base;          /* 存储设备基地址 */
     uint32_t  device_size;          /* 存储设备大小 */
-    uint8_t  bytes_per_sector;      /* 每扇区字节数 */
-    uint8_t  sectors_per_cluster;   /* 每簇扇区数 */
-    uint16_t bytes_per_cluster;     /* 每簇字节数 */
-    uint32_t fat_start;             /* FAT表起始扇区 */
-    uint32_t data_start;            /* 数据区起始扇区 */
-    uint32_t root_cluster;          /* 根目录起始簇 */
-    uint32_t total_clusters;        /* 总簇数 */
-    uint32_t first_free_cluster;    /* 首个空闲簇 */
+    uint16_t  bytes_per_sector;     /* 每扇区字节数 (512-4096) */
+    uint8_t   sectors_per_cluster;  /* 每簇扇区数 */
+    uint32_t  bytes_per_cluster;    /* 每簇字节数 */
+    uint32_t  fat_start;            /* FAT表起始扇区 */
+    uint32_t  data_start;           /* 数据区起始扇区 */
+    uint32_t  root_cluster;         /* 根目录起始簇 */
+    uint32_t  total_clusters;       /* 总簇数 */
+    uint32_t  first_free_cluster;   /* 首个空闲簇 */
 } fat32_service_ctx_t;
 
 /* 文件句柄 */

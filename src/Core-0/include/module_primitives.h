@@ -196,4 +196,31 @@ hic_status_t module_audit_log(u32 event_type,
  */
 void module_primitives_init(void);
 
+/* ==================== 便捷函数（兼容层） ==================== */
+
+/**
+ * @brief 创建域并返回域ID（简化版）
+ */
+uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain);
+
+/**
+ * @brief 创建端点能力（简化版）
+ */
+uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id);
+
+/**
+ * @brief 启动域
+ */
+uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point);
+
+/**
+ * @brief 内存拷贝
+ */
+void module_memcpy(void *dest, const void *src, size_t size);
+
+/**
+ * @brief 内存设置
+ */
+void module_memset(void *dest, int value, size_t size);
+
 #endif /* HIC_MODULE_PRIMITIVES_H */

@@ -132,6 +132,21 @@ void minimal_uart_putc(char c);
 /* 发送字符串 */
 void minimal_uart_puts(const char *str);
 
+/* 串口打印（兼容别名） */
+void serial_print(const char *msg);
+
+/* 检查是否有数据可读 */
+bool minimal_uart_readable(void);
+
+/* 接收单个字符（阻塞） */
+char minimal_uart_getc(void);
+
+/* 接收单个字符（非阻塞），返回是否成功 */
+bool minimal_uart_try_getc(char *c);
+
+/* 接收一行（带回显） */
+int minimal_uart_getline(char *buf, int max_len);
+
 /* 配置UART */
 void minimal_uart_configure(const uart_config_t *config);
 

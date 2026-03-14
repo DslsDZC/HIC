@@ -633,3 +633,75 @@ hic_status_t module_audit_log(u32 event_type,
     audit_log_event(event_type, domain_id, 0, 0, mutable_data, data_count, true);
     return HIC_SUCCESS;
 }
+
+/* ==================== 便捷函数（兼容层） ==================== */
+
+/**
+ * @brief 创建域并返回域ID
+ * 用于动态模块加载器
+ */
+uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain)
+{
+    domain_quota_t quota = {
+        .max_memory = 16 * 1024 * 1024,  /* 16MB */
+        .max_threads = 4,
+        .max_caps = 32,
+        .cpu_quota_percent = 10
+    };
+    
+    domain_id_t domain_id;
+    hic_status_t status = domain_create(DOMAIN_TYPE_PRIVILEGED, parent_domain, &quota, &domain_id);
+    
+    if (status == HIC_SUCCESS && new_domain) {
+        *new_domain = (uint32_t)domain_id;
+    }
+    
+    return (uint64_t)status;
+}
+
+/**
+ * @brief 创建端点能力
+ * 用于动态模块加载器
+ */
+uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id)
+{
+    cap_id_t endpoint_cap;
+    hic_status_t status = module_endpoint_create((domain_id_t)domain_id, "module_ep", &endpoint_cap);
+    
+    if (status == HIC_SUCCESS && endpoint_id) {
+        *endpoint_id = (uint32_t)endpoint_cap;
+    }
+    
+    return (uint64_t)status;
+}
+
+/**
+ * @brief 启动域
+ * 用于动态模块加载器
+ * 注意：入口点需要通过其他机制设置（如加载时指定）
+ */
+uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point)
+{
+    (void)entry_point;  /* 暂时忽略入口点，由加载器设置 */
+    
+    /* 恢复域运行 */
+    return (uint64_t)domain_resume((domain_id_t)domain_id);
+}
+
+/**
+ * @brief 内存拷贝
+ * 用于模块数据加载
+ */
+void module_memcpy(void *dest, const void *src, size_t size)
+{
+    memcopy(dest, src, size);
+}
+
+/**
+ * @brief 内存设置
+ * 用于模块初始化
+ */
+void module_memset(void *dest, int value, size_t size)
+{
+    memset(dest, value, size);
+}

@@ -1,0 +1,29 @@
+# Init Launcher 服务模块定义
+name: init_launcher
+version: 1
+type: service
+description: 初始服务启动器 - 系统引导锚点
+author: DslsDZC
+
+# 服务入口点
+entry: init_launcher_init
+
+# 能力要求（启动时授予）
+capabilities:
+  - storage_access
+  - domain_create
+  - serial_output
+
+# 服务特性
+flags:
+  auto_start: true
+  critical: true    # 关键服务，启动失败会导致系统 panic
+  static: true      # 静态链接到内核
+  privileged: true  # 特权层服务
+
+# 启动优先级（最高优先级）
+priority: 0
+
+# 依赖（fat32_service 必须先启动）
+depends:
+  - fat32_service
