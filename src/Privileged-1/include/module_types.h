@@ -81,6 +81,8 @@ typedef struct {
     u32                 version;          /* 语义版本 */
     module_state_t      state;            /* 模块状态 */
     u32                 flags;            /* 模块标志 */
+    u32                 code_size;        /* 代码大小 */
+    u32                 data_size;        /* 数据大小 */
 } module_info_t;
 
 /* 模块依赖 */

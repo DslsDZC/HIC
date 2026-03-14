@@ -168,16 +168,60 @@ void cmd_version(const char *args) {
     console_puts("\n");
 }
 
+/* 整数转字符串 */
+static void int_to_str(uint64_t value, char *buf) {
+    char temp[24];
+    int i = 0;
+    
+    if (value == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    
+    while (value > 0) {
+        temp[i++] = '0' + (value % 10);
+        value /= 10;
+    }
+    
+    int j = 0;
+    while (i > 0) {
+        buf[j++] = temp[--i];
+    }
+    buf[j] = '\0';
+}
+
 /* 显示内存信息 */
 void cmd_mem(const char *args) {
-    (void)args;  /* 未使用 */
+    (void)args;
     
-    /* TODO: 获取并显示内存信息 */
-    /* 需要通过系统调用从内核获取内存状态 */
+    /* 通过 Core-0 原语获取内存信息 */
+    extern uint64_t module_get_total_memory(void);
+    extern uint64_t module_get_used_memory(void);
+    extern uint64_t module_get_free_memory(void);
+    
+    uint64_t total = module_get_total_memory();
+    uint64_t used = module_get_used_memory();
+    uint64_t free = module_get_free_memory();
+    
+    char buf[24];
+    
     console_puts("Memory Information:\n");
-    console_puts("  Total: 2048 MB\n");
-    console_puts("  Used:  512 MB\n");
-    console_puts("  Free:  1536 MB\n");
+    
+    console_puts("  Total: ");
+    int_to_str(total / (1024 * 1024), buf);
+    console_puts(buf);
+    console_puts(" MB\n");
+    
+    console_puts("  Used:  ");
+    int_to_str(used / (1024 * 1024), buf);
+    console_puts(buf);
+    console_puts(" MB\n");
+    
+    console_puts("  Free:  ");
+    int_to_str(free / (1024 * 1024), buf);
+    console_puts(buf);
+    console_puts(" MB\n");
 }
 
 /* 清空屏幕 */
@@ -241,11 +285,14 @@ void cmd_modload(const char *args) {
         case HIC_PARSE_FAILED:
             console_puts("Error: Invalid module format\n");
             break;
-        default:
+        default: {
             console_puts("Error: Failed to load module (status: ");
-            /* TODO: 显示状态码 */
+            char status_buf[16];
+            int_to_str((uint64_t)status, status_buf);
+            console_puts(status_buf);
             console_puts(")\n");
             break;
+        }
     }
 }
 
@@ -285,11 +332,14 @@ void cmd_modunload(const char *args) {
             console_puts(name);
             console_puts("\n");
             break;
-        default:
+        default: {
             console_puts("Error: Failed to unload module (status: ");
-            /* TODO: 显示状态码 */
+            char status_buf[16];
+            int_to_str((uint64_t)status, status_buf);
+            console_puts(status_buf);
             console_puts(")\n");
             break;
+        }
     }
 }
 
@@ -314,7 +364,9 @@ void cmd_modlist(const char *args) {
     }
     
     console_puts("Loaded modules (");
-    /* TODO: 显示数量 */
+    char count_buf[16];
+    int_to_str((uint64_t)count, count_buf);
+    console_puts(count_buf);
     console_puts("):\n");
     console_puts("  Name               Version  State\n");
     console_puts("  -----------------------------------\n");
@@ -441,7 +493,9 @@ void cmd_modinfo(const char *args) {
     
     console_puts("\n");
     console_puts("  Size:    ");
-    /* TODO: 显示大小 */
+    char size_buf[24];
+    int_to_str(info.code_size + info.data_size, size_buf);
+    console_puts(size_buf);
     console_puts(" bytes\n");
     console_puts("  Flags:   ");
     if (info.flags & 0x01) {
@@ -489,11 +543,14 @@ void cmd_modverify(const char *args) {
         case HIC_PARSE_FAILED:
             console_puts("Error: Invalid module format or corrupted\n");
             break;
-        default:
+        default: {
             console_puts("Error: Failed to verify module (status: ");
-            /* TODO: 显示状态码 */
+            char status_buf[16];
+            int_to_str((uint64_t)status, status_buf);
+            console_puts(status_buf);
             console_puts(")\n");
             break;
+        }
     }
 }
 
@@ -533,11 +590,14 @@ void cmd_modrestart(const char *args) {
             console_puts(name);
             console_puts("\n");
             break;
-        default:
+        default: {
             console_puts("Error: Failed to restart module (status: ");
-            /* TODO: 显示状态码 */
+            char status_buf[16];
+            int_to_str((uint64_t)status, status_buf);
+            console_puts(status_buf);
             console_puts(")\n");
             break;
+        }
     }
 }
 
@@ -602,10 +662,13 @@ void cmd_modupdate(const char *args) {
         case HIC_NOT_IMPLEMENTED:
             console_puts("Error: Rolling update not implemented yet\n");
             break;
-        default:
+        default: {
             console_puts("Error: Failed to update module (status: ");
-            /* TODO: 显示状态码 */
+            char status_buf[16];
+            int_to_str((uint64_t)status, status_buf);
+            console_puts(status_buf);
             console_puts(")\n");
             break;
+        }
     }
 }
