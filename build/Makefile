@@ -13,6 +13,7 @@ ROOT_DIR = $(shell pwd)/..
 SRC_DIR = $(ROOT_DIR)/src
 CORE0_DIR = $(SRC_DIR)/Core-0
 PRIVILEGED1_DIR = $(SRC_DIR)/Privileged-1
+SERVICES_DIR = $(PRIVILEGED1_DIR)/services
 BOOTLOADER_DIR = $(SRC_DIR)/bootloader
 
 BUILD_DIR = $(ROOT_DIR)/build
@@ -48,6 +49,25 @@ endif
 # 链接标志
 LDFLAGS = -nostdlib -m elf_x86_64 -T $(LD_SCRIPT)
 
+# ==================== 静态模块配置（全自动） ====================
+# 使用 Python 单行命令解析 platform.yaml 中的静态模块列表
+STATIC_MODULE_NAMES := $(shell python3 -c "import yaml; c=yaml.safe_load(open('$(ROOT_DIR)/platform.yaml')); print(' '.join([m['name'] for m in c.get('static_modules',[]) if 'name' in m]))" 2>/dev/null || echo "")
+
+# 验证静态模块目录存在，只保留实际存在的服务
+STATIC_MODULES_VALID := $(foreach mod,$(STATIC_MODULE_NAMES),$(if $(wildcard $(SERVICES_DIR)/$(mod)/service.c),$(mod)))
+
+# 静态服务源文件（自动扫描所有 .c 文件，但排除与 Core-0 重复的文件）
+# 排除列表：service_registry.c 等在 Core-0 中已存在的文件
+STATIC_SERVICES_EXCLUDE = service_registry.c
+STATIC_SERVICES_SRCS = $(foreach mod,$(STATIC_MODULES_VALID),\
+    $(filter-out $(foreach excl,$(STATIC_SERVICES_EXCLUDE),$(SERVICES_DIR)/$(mod)/$(excl)),\
+    $(wildcard $(SERVICES_DIR)/$(mod)/*.c)))
+STATIC_SERVICES_OBJS = $(patsubst $(SERVICES_DIR)/%.c,$(OBJ_DIR)/static_services/%.o,$(STATIC_SERVICES_SRCS))
+
+# 调试输出
+$(info 静态模块: $(STATIC_MODULE_NAMES))
+$(info 有效模块: $(STATIC_MODULES_VALID))
+
 # ==================== 源文件自动扫描 ====================
 
 # Core-0 核心文件（必须包含）
@@ -82,16 +102,35 @@ CORE0_ARCH_ASM_OBJS = $(patsubst $(CORE0_DIR)/arch/x86_64/%.S,$(OBJ_DIR)/core0/a
 
 PRIVILEGED1_OBJS = $(patsubst $(PRIVILEGED1_DIR)/%.c,$(OBJ_DIR)/privileged1/%.o,$(PRIVILEGED1_SRCS))
 
-# 所有目标文件（包含生成的静态模块）
-ALL_OBJS = $(STATIC_MODULES_GEN_O) $(CORE0_OBJS) $(CORE0_LIB_OBJS) $(CORE0_ARCH_OBJS) $(CORE0_ARCH_ASM_OBJS) $(PRIVILEGED1_OBJS)
+# 所有目标文件（包含静态服务）
+ALL_OBJS = $(STATIC_MODULES_GEN_O) $(CORE0_OBJS) $(CORE0_LIB_OBJS) $(CORE0_ARCH_OBJS) $(CORE0_ARCH_ASM_OBJS) $(PRIVILEGED1_OBJS) $(STATIC_SERVICES_OBJS)
 
 # ==================== 头文件路径 ====================
-INCLUDES = -I$(CORE0_DIR) \
-           -I$(CORE0_DIR)/include \
-           -I$(CORE0_DIR)/lib \
-           -I$(CORE0_DIR)/arch/x86_64 \
-           -I$(PRIVILEGED1_DIR) \
-           -I$(PRIVILEGED1_DIR)/include
+# 基础包含路径
+BASE_INCLUDES = -I$(CORE0_DIR) \
+                -I$(CORE0_DIR)/include \
+                -I$(CORE0_DIR)/lib \
+                -I$(CORE0_DIR)/arch/x86_64 \
+                -I$(PRIVILEGED1_DIR) \
+                -I$(PRIVILEGED1_DIR)/include
+
+# 自动生成静态服务包含路径
+STATIC_SERVICE_INCLUDES = $(foreach mod,$(STATIC_MODULE_NAMES),-I$(SERVICES_DIR)/$(mod))
+
+# 合并包含路径
+INCLUDES = $(BASE_INCLUDES) $(STATIC_SERVICE_INCLUDES)
+
+# 服务编译标志（使用特定段属性）
+SERVICE_CFLAGS = $(CFLAGS) -Wno-error \
+    -ffunction-sections \
+    -fdata-sections
+
+# 静态服务链接器标志（将代码放入静态服务段）
+STATIC_SERVICE_LDFLAGS = -r \
+    --section-start=.text=0 \
+    --section-start=.rodata=0 \
+    --section-start=.data=0 \
+    --section-start=.bss=0
 
 # ==================== 链接脚本 ====================
 LD_SCRIPT = $(CORE0_DIR)/arch/x86_64/linker.ld
@@ -171,6 +210,23 @@ $(OBJ_DIR)/privileged1/%.o: $(PRIVILEGED1_DIR)/%.c | $(OBJ_DIR)/privileged1
 	@echo "编译 Privileged-1: $<"
 	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
+# 静态服务编译（自动重命名段到 .static_service.*）
+# 匹配格式: $(OBJ_DIR)/static_services/服务名/文件名.o
+$(OBJ_DIR)/static_services/%.o: $(SERVICES_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@echo "编译静态服务: $*"
+	@$(CC) $(SERVICE_CFLAGS) $(INCLUDES) -I$(dir $<) -c $< -o $@.tmp
+	@echo "  重命名段到静态服务段..."
+	@$(OBJCOPY) \
+		--rename-section .text=.static_service.text \
+		--rename-section .rodata=.static_service.rodata \
+		--rename-section .data=.static_service.data \
+		--rename-section .bss=.static_service.bss \
+		--rename-section .data.rel=.static_service.data.rel \
+		--rename-section .data.rel.local=.static_service.data.rel.local \
+		$@.tmp $@
+	@rm -f $@.tmp
+
 # ==================== 目录创建 ====================
 $(OBJ_DIR):
 	@mkdir -p $@
@@ -185,6 +241,9 @@ $(OBJ_DIR)/core0/arch:
 	@mkdir -p $@
 
 $(OBJ_DIR)/privileged1:
+	@mkdir -p $@
+
+$(OBJ_DIR)/static_services:
 	@mkdir -p $@
 
 $(BIN_DIR):

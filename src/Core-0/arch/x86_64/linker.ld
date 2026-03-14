@@ -67,15 +67,43 @@ SECTIONS
         __stack_end = .;
     }
 
-    /* 内核结束 */
-    _kernel_end = .;
+    /* ==================== 静态服务代码段（全自动） ==================== */
+    /* 所有静态服务代码统一放在此段，按 platform.yaml 配置自动链接 */
+    .static_services ALIGN(4K) : AT(ADDR(.static_services)) {
+        __static_services_start = .;
+        /* 包含所有静态服务的代码和只读数据 */
+        KEEP(*(.static_service.code))
+        KEEP(*(.static_service.text))
+        KEEP(*(.static_service.rodata))
+        *(.static_service.*)
+        __static_services_end = .;
+    }
 
-    /* 静态服务模块段 */
+    /* 静态服务数据段 */
+    .static_services_data ALIGN(4K) : AT(ADDR(.static_services_data)) {
+        __static_services_data_start = .;
+        KEEP(*(.static_service.data))
+        *(.static_service.data.*)
+        __static_services_data_end = .;
+    }
+
+    /* 静态服务 BSS 段 */
+    .static_services_bss ALIGN(4K) : AT(ADDR(.static_services_bss)) {
+        __static_services_bss_start = .;
+        KEEP(*(.static_service.bss))
+        *(.static_service.bss.*)
+        __static_services_bss_end = .;
+    }
+
+    /* 静态服务模块描述符段 */
     .static_modules ALIGN(4K) : AT(ADDR(.static_modules)) {
         __static_modules_start = .;
         KEEP(*(.static_modules))
         __static_modules_end = .;
     }
+
+    /* 内核结束 */
+    _kernel_end = .;
 
     /* 内核结束（在添加AP启动代码之前） */
     _kernel_end_before_ap = .;

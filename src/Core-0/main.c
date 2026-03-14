@@ -182,7 +182,7 @@ void kernel_main(void *info)
     module_auto_load_drivers(&g_boot_state.hw.devices);
     console_puts("[BOOT] Driver auto-loading completed\n");
     
-    /* ==================== 第六阶段：命令行和模块 ==================== */
+    /* ==================== 第六阶段：模块加载 ==================== */
     
     /* 【步骤8：解析命令行】 */
     console_puts("\n[BOOT] STEP 8: Parsing Command Line\n");
@@ -199,28 +199,48 @@ void kernel_main(void *info)
     module_loader_init();
     console_puts("[BOOT] Module loader initialization completed\n");
     
-    /* 【步骤10：启动初始模块】 */
-    console_puts("\n[BOOT] STEP 10: Starting Initial Modules\n");
-    if (boot_info->module_count > 0 && boot_info->modules[0].base != 0) {
-        console_puts("[BOOT] Loading initial module from boot info...\n");
-        u64 instance_id;
-        hic_status_t status = (hic_status_t)module_load_from_memory(
-            boot_info->modules[0].base,
-            (u32)boot_info->modules[0].size, &instance_id);
-        if (status == HIC_SUCCESS) {
-            console_puts("[BOOT] Initial module loaded successfully (instance_id=");
-            console_puthex64(instance_id);
-            console_puts(")\n");
-        } else {
-            console_puts("[BOOT] Failed to load initial module\n");
+    /* 【步骤10：加载Bootloader嵌入的模块】 */
+    console_puts("\n[BOOT] STEP 10: Loading Embedded Modules\n");
+    console_puts("[BOOT] Module count in boot info: ");
+    console_putu64(boot_info->module_count);
+    console_puts("\n");
+    
+    if (boot_info->module_count > 0) {
+        for (u64 i = 0; i < boot_info->module_count; i++) {
+            if (boot_info->modules[i].base != 0) {
+                console_puts("[BOOT] Loading module ");
+                console_putu64(i);
+                console_puts(": ");
+                console_puts(boot_info->modules[i].name);
+                console_puts(" at 0x");
+                console_puthex64((u64)boot_info->modules[i].base);
+                console_puts(" (");
+                console_putu64(boot_info->modules[i].size);
+                console_puts(" bytes)\n");
+                
+                u64 instance_id;
+                hic_status_t status = (hic_status_t)module_load_from_memory(
+                    boot_info->modules[i].base,
+                    (u32)boot_info->modules[i].size, &instance_id);
+                    
+                if (status == HIC_SUCCESS) {
+                    console_puts("[BOOT]   -> Loaded successfully (instance_id=");
+                    console_puthex64(instance_id);
+                    console_puts(")\n");
+                } else {
+                    console_puts("[BOOT]   -> Failed to load (status=");
+                    console_putu64(status);
+                    console_puts(")\n");
+                }
+            }
         }
     } else {
-        console_puts("[BOOT] No initial modules in boot info\n");
+        console_puts("[BOOT] No embedded modules found\n");
     }
     
     /* 【步骤11：加载静态模块】 */
     console_puts("\n[BOOT] STEP 11: Loading Static Modules\n");
-    console_puts("[BOOT] Loading static modules from configuration (platform.yaml)...\n");
+    console_puts("[BOOT] Loading static modules from configuration...\n");
     static_module_system_init();
     int static_loaded = static_module_load_all();
     console_puts("[BOOT] Static modules loaded: ");
@@ -232,7 +252,6 @@ void kernel_main(void *info)
     console_puts("[BOOT] Initializing Core-0 module primitives for Privileged-1...\n");
     module_primitives_init();
     console_puts("[BOOT] Module primitives initialized\n");
-    console_puts("[BOOT] Dynamic module loading will be handled by Privileged-1 services\n");
     
     /* ==================== 第七阶段：最终化 ==================== */
     
@@ -251,9 +270,9 @@ void kernel_main(void *info)
     console_puts("[BOOT]   - Capability system: READY\n");
     console_puts("[BOOT]   - Domain system: READY\n");
     console_puts("[BOOT]   - Scheduler: READY\n");
-    console_puts("[BOOT]   - Privileged services: ACTIVE\n");
     console_puts("[BOOT]========================================\n");
     console_puts("[BOOT] Entering kernel main loop...\n");
+    console_puts("[BOOT] Privileged-1 services should start via scheduler\n");
     console_puts("\n");
     
     /* ==================== 第八阶段：主循环 ==================== */

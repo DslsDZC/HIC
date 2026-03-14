@@ -144,6 +144,15 @@ hic_status_t service_unregister_endpoint(const char *name)
     return HIC_SUCCESS;
 }
 
+/* 简化版服务注册（兼容接口） */
+hic_status_t service_register(const char *name, domain_id_t owner, cap_id_t endpoint_cap)
+{
+    /* 使用默认 UUID (全零) 和类型 */
+    static const u8 default_uuid[16] = {0};
+    return service_register_endpoint(name, default_uuid, owner, endpoint_cap, 
+                                      ENDPOINT_TYPE_GENERIC, 1);
+}
+
 /* ==================== 查找 ==================== */
 
 service_endpoint_t* service_find_by_name(const char *name)

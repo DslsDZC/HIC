@@ -63,6 +63,12 @@ hic_status_t service_register_endpoint(const char *name,
                                         endpoint_type_t type,
                                         u32 version);
 
+/**
+ * @brief 简化版服务注册（兼容接口）
+ * 用于动态模块加载器
+ */
+hic_status_t service_register(const char *name, domain_id_t owner, cap_id_t endpoint_cap);
+
 hic_status_t service_unregister_endpoint(const char *name);
 
 /* ==================== 查找 ==================== */

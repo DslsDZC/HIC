@@ -387,6 +387,72 @@ void minimal_uart_puts(const char *str)
     }
 }
 
+/* 串口打印（兼容别名） */
+void serial_print(const char *msg)
+{
+    minimal_uart_puts(msg);
+}
+
+/* 检查是否有数据可读 */
+bool minimal_uart_readable(void)
+{
+    u8 lsr = hal_inb((u16)(g_uart_config.base_addr + UART_LSR));
+    return (lsr & UART_LSR_DR) != 0;
+}
+
+/* 接收单个字符（阻塞） */
+char minimal_uart_getc(void)
+{
+    /* 等待数据就绪 */
+    while (!minimal_uart_readable()) {
+        hal_halt();
+    }
+    return (char)hal_inb((u16)(g_uart_config.base_addr + UART_RBR));
+}
+
+/* 接收单个字符（非阻塞），返回是否成功 */
+bool minimal_uart_try_getc(char *c)
+{
+    if (minimal_uart_readable()) {
+        *c = (char)hal_inb((u16)(g_uart_config.base_addr + UART_RBR));
+        return true;
+    }
+    return false;
+}
+
+/* 接收一行（带回显） */
+int minimal_uart_getline(char *buf, int max_len)
+{
+    int i = 0;
+    char c;
+    
+    while (i < max_len - 1) {
+        c = minimal_uart_getc();
+        
+        if (c == '\r' || c == '\n') {
+            /* 回车或换行：结束输入 */
+            minimal_uart_putc('\r');
+            minimal_uart_putc('\n');
+            break;
+        } else if (c == 0x7F || c == '\b') {
+            /* 退格或删除：删除最后一个字符 */
+            if (i > 0) {
+                i--;
+                minimal_uart_putc('\b');
+                minimal_uart_putc(' ');
+                minimal_uart_putc('\b');
+            }
+        } else if (c >= ' ' && c <= '~') {
+            /* 可打印字符 */
+            buf[i++] = c;
+            minimal_uart_putc(c);
+        }
+    }
+    
+    buf[i] = '\0';
+    return i;
+}
+
 /* 从APM配置初始化串口 */
 struct uart_config_for_minimal {
     phys_addr_t base_addr;
