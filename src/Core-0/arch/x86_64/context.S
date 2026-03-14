@@ -116,15 +116,16 @@ x86_64_restore_context:
 /* 上下文切换函数（多核支持）
  * 参数: rdi = prev线程指针(thread_t*), rsi = next线程指针(thread_t*)
  *
- * thread_t 结构体偏移:
- *   0:  thread_id
- *   8:  domain_id
- *   16: state
- *   24: priority
- *   32: stack_base
- *   40: stack_size
- *   48: stack_ptr     <-- 这是我们要保存/恢复的
- *   56: arch_context
+ * thread_t 结构体偏移 (实际计算):
+ *   0:  thread_id (u32, 4字节)
+ *   4:  domain_id (u32, 4字节)
+ *   8:  state (enum, 4字节)
+ *   12: priority (u8, 1字节) + 3字节填充
+ *   16: stack_base (8字节)
+ *   24: stack_size (8字节)
+ *   32: stack_ptr (8字节)     <-- 这是我们要保存/恢复的
+ *   40: arch_context (8字节)
+ *   48: time_slice (8字节)
  */
 context_switch:
     /* 检查 prev 是否为 NULL */
@@ -141,14 +142,14 @@ context_switch:
     pushq %r14
     pushq %r15
 
-    /* 保存栈指针到 prev->stack_ptr (偏移 48) */
-    movq %rsp, 48(%rdi)
+    /* 保存栈指针到 prev->stack_ptr (偏移 32) */
+    movq %rsp, 32(%rdi)
 
 .L_switch_to_new:
     /* 恢复next线程上下文 */
 
-    /* 恢复栈指针从 next->stack_ptr (偏移 48) */
-    movq 48(%rsi), %rsp
+    /* 恢复栈指针从 next->stack_ptr (偏移 32) */
+    movq 32(%rsi), %rsp
 
     /* 恢复调用者保存的寄存器 */
     popq %r15

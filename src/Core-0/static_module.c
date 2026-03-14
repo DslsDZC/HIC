@@ -160,12 +160,15 @@ int static_module_load_all(void)
 
 /**
  * 创建静态模块的沙箱（扩展版本）
+ * 
+ * 重要：静态模块直接在内核镜像中的原始位置执行（位置相关代码）
+ * 不复制代码到新内存，避免位置相关代码崩溃问题
  */
 int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain;
-    u64 code_size, data_size, total_size;
-    phys_addr_t code_phys, data_phys;
+    u64 code_size, data_size;
+    phys_addr_t code_phys;
     domain_quota_t quota;
     hic_status_t status;
 
@@ -175,10 +178,6 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     if (module->data_start && module->data_end) {
         data_size = (u64)((u8*)module->data_end - (u8*)module->data_start);
     }
-    total_size = code_size + data_size;
-    
-    /* 对齐到页边界 */
-    total_size = (total_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
 
     console_puts("[STATIC_MODULE]     Code size: ");
     console_putu64(code_size);
@@ -186,15 +185,12 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     console_puts("[STATIC_MODULE]     Data size: ");
     console_putu64(data_size);
     console_puts(" bytes\n");
-    console_puts("[STATIC_MODULE]     Total (aligned): ");
-    console_putu64(total_size);
-    console_puts(" bytes\n");
 
-    /* 设置资源配额 */
-    quota.max_memory = total_size + PAGE_SIZE;  /* 加一页栈 */
-    quota.max_threads = 4;                       /* 最多4个线程 */
-    quota.max_caps = 32;                         /* 最多32个能力 */
-    quota.cpu_quota_percent = 25;                /* 25% CPU 时间 */
+    /* 设置资源配额（只需栈空间，代码在内核中） */
+    quota.max_memory = PAGE_SIZE * 2;  /* 只需要栈空间 */
+    quota.max_threads = 4;             /* 最多4个线程 */
+    quota.max_caps = 32;               /* 最多32个能力 */
+    quota.cpu_quota_percent = 25;      /* 25% CPU 时间 */
 
     /* 创建域（沙箱） */
     domain_type_t domain_type = DOMAIN_TYPE_PRIVILEGED;
@@ -216,51 +212,22 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     console_putu64(domain);
     console_puts("\n");
 
-    /* 分配代码段内存 */
-    status = module_memory_alloc(domain, code_size, MODULE_PAGE_CODE, (u64*)&code_phys);
-    if (status != HIC_SUCCESS) {
-        console_puts("[STATIC_MODULE]     ERROR: Failed to allocate code memory\n");
-        domain_destroy(domain);
-        return -1;
-    }
-
-    /* 分配数据段内存 */
-    if (data_size > 0) {
-        status = module_memory_alloc(domain, data_size, MODULE_PAGE_DATA, (u64*)&data_phys);
-        if (status != HIC_SUCCESS) {
-            console_puts("[STATIC_MODULE]     ERROR: Failed to allocate data memory\n");
-            module_memory_free(domain, code_phys, code_size);
-            domain_destroy(domain);
-            return -1;
-        }
-    } else {
-        data_phys = 0;
-    }
-
-    /* 复制代码段到沙箱内存 */
-    void *code_virt = (void*)code_phys;  /* 恒等映射 */
-    memcopy(code_virt, module->code_start, (size_t)code_size);
+    /* 静态模块：直接使用内核中的原始地址
+     * 静态模块嵌入在内核镜像中，是受信任的代码
+     * 使用原始链接地址，避免位置相关代码问题
+     */
+    code_phys = (phys_addr_t)module->code_start;
     
-    console_puts("[STATIC_MODULE]     Code copied to 0x");
+    console_puts("[STATIC_MODULE]     Code at kernel addr 0x");
     console_puthex64(code_phys);
-    console_puts("\n");
-
-    /* 复制数据段到沙箱内存 */
-    if (data_size > 0 && data_phys != 0) {
-        void *data_virt = (void*)data_phys;
-        memcopy(data_virt, module->data_start, (size_t)data_size);
-        
-        console_puts("[STATIC_MODULE]     Data copied to 0x");
-        console_puthex64(data_phys);
-        console_puts("\n");
-    }
+    console_puts(" (execute in place)\n");
 
     /* 保存运行时状态 */
     g_module_runtime[runtime_idx].domain_id = domain;
     g_module_runtime[runtime_idx].code_phys = code_phys;
 
     /* 记录审计日志 */
-    u64 audit_data[4] = { domain, code_size, data_size, total_size };
+    u64 audit_data[4] = { domain, code_size, data_size, code_phys };
     audit_log_event(AUDIT_EVENT_MODULE_LOAD, domain, 0, 0, audit_data, 4, true);
 
     return 0;
