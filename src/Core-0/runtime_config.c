@@ -142,11 +142,24 @@ void runtime_config_load_from_bootinfo(void)
     }
     
     /* 从platform.yaml加载配置 */
-    if (g_boot_state.boot_info->config.config_data && g_boot_state.boot_info->config.config_size > 0) {
-        runtime_config_load_from_yaml(
-            (const char*)g_boot_state.boot_info->config.config_data,
-            g_boot_state.boot_info->config.config_size
-        );
+    void *platform_data = g_boot_state.boot_info->platform.platform_data;
+    u64 platform_size = g_boot_state.boot_info->platform.platform_size;
+    
+    /* 安全检查：验证指针有效性 */
+    if (platform_data != NULL && platform_size > 0 && platform_size < 1024*1024) {
+        /* 检查指针是否在合理的内存范围内 */
+        u64 addr = (u64)platform_data;
+        if (addr > 0x100000 && addr < 0x100000000ULL) {
+            console_puts("[CONFIG] Loading configuration from YAML...\n");
+            runtime_config_load_from_yaml(
+                (const char*)platform_data,
+                (size_t)platform_size
+            );
+        } else {
+            console_puts("[CONFIG] WARNING: Invalid platform_data address, skipping YAML\n");
+        }
+    } else {
+        console_puts("[CONFIG] No valid platform configuration, using defaults\n");
     }
     
     /* 验证配置 */

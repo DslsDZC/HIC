@@ -101,8 +101,11 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
     
     frame_bitmap = static_bitmap;
     
-    /* 清零位图 */
-    memzero(frame_bitmap, bitmap_size);
+    /* 初始化位图：所有帧标记为已使用（1），只有添加的区域才标记为空闲（0） */
+    /* 这样可以防止分配到未知的内存区域 */
+    for (u64 i = 0; i < bitmap_size; i++) {
+        frame_bitmap[i] = 0xFF;  /* 所有位设置为 1（已使用） */
+    }
     total_frames = max_frames;
     free_frames = 0;
     g_total_memory = 0;
@@ -220,12 +223,21 @@ hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     (void)type;
     if (count == 0 || out == NULL) {
         return HIC_ERROR_INVALID_PARAM;
-    }    
-    /* 查找连续的空闲页帧 */
+    }
+    
+    console_puts("[PMM] Allocating ");
+    console_putu64(count);
+    console_puts(" frames, max_frames=");
+    console_putu64(max_frames);
+    console_puts(", free_frames=");
+    console_putu64(free_frames);
+    console_puts("\n");
+    
+    /* 查找连续的空闲页帧 - 使用 max_frames 作为搜索范围 */
     u64 consecutive = 0;
     u64 start = 0;
     
-    for (u64 i = 0; i < total_frames && consecutive < count; i++) {
+    for (u64 i = 0; i < max_frames && consecutive < count; i++) {
         if (!test_bit(frame_bitmap, i)) {
             if (consecutive == 0) {
                 start = i;
@@ -236,8 +248,18 @@ hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
         }
     }
     
+    console_puts("[PMM] Found ");
+    console_putu64(consecutive);
+    console_puts(" consecutive frames starting at ");
+    console_putu64(start);
+    console_puts("\n");
+    
     if (consecutive < count) {
-        console_puts("[PMM] ERROR: Not enough free pages\n");
+        console_puts("[PMM] ERROR: Not enough free pages (need ");
+        console_putu64(count);
+        console_puts(", have ");
+        console_putu64(free_frames);
+        console_puts(" scattered)\n");
         return HIC_ERROR_NO_MEMORY;
     }
     

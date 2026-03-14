@@ -505,6 +505,9 @@ static const u64 num_invariants = sizeof(invariants) / sizeof(invariant_t);
 int fv_check_all_invariants(void) {
     invariant_check_count++;
     
+    // 设置状态为 CHECKING 以便状态机正确工作
+    fv_set_state(FV_STATE_CHECKING);
+    
     // 按照依赖关系拓扑排序检查不变式
     u64 check_order[] = {0, 1, 2, 3, 4, 5}; // 不变式ID - 1
     
@@ -1205,20 +1208,31 @@ static bool is_permission_subset(cap_id_t derived, cap_id_t source) {
 static bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type) {
 
     // 类型兼容性矩阵
+    // 扩展以支持所有能力类型
 
     static const bool compatibility_table[CAP_TYPE_COUNT][OBJ_TYPE_COUNT] = {
 
         // OBJ_MEMORY, OBJ_DEVICE, OBJ_IPC, OBJ_THREAD, OBJ_SHARED
 
-        [CAP_MEMORY] = {true, false, false, false, true},
+        [CAP_MEMORY]      = {true,  false, false, false, true },  // 内存能力
 
-        [CAP_DEVICE] = {false, true, false, false, false},
+        [CAP_DEVICE]      = {false, true,  false, false, false},  // 设备能力
 
-        [CAP_IPC] = {false, false, true, false, false},
+        [CAP_IPC]         = {false, false, true,  false, false},  // IPC能力
 
-        [CAP_THREAD] = {false, false, false, true, false},
+        [CAP_THREAD]      = {false, false, false, true,  false},  // 线程能力
 
-        [CAP_SHARED] = {true, false, false, false, true},
+        [CAP_SHARED]      = {true,  false, false, false, true },  // 共享内存能力
+
+        [CAP_CAP_DERIVE]  = {false, false, false, false, false},  // 派生能力（元能力）
+
+        [CAP_IRQ]         = {false, true,  false, false, false},  // 中断能力（设备相关）
+
+        [CAP_ENDPOINT]    = {false, false, true,  false, false},  // IPC端点
+
+        [CAP_SERVICE]     = {false, false, false, false, false},  // 服务能力
+
+        [CAP_MMIO]        = {true,  true,  false, false, false},  // MMIO区域（内存/设备）
 
     };
 

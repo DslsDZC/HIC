@@ -698,9 +698,9 @@ extern bool arch_uart_rx_ready(phys_addr_t base);
 extern bool arch_uart_tx_ready(phys_addr_t base);
 extern phys_addr_t arch_uart_get_default_base(void);
 
-/* 默认 UART 配置 */
+/* 默认 UART 配置 - base_addr 设为 0x3F8 (COM1) */
 static hal_uart_config_t g_hal_uart_config = {
-    .base_addr = 0,
+    .base_addr = 0x3F8,  /* COM1 默认基地址 */
     .baud_rate = 115200,
     .data_bits = 8,
     .parity = 0,
