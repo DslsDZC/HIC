@@ -39,6 +39,7 @@ typedef struct static_module_runtime {
     domain_id_t domain_id;          /* 分配的域 ID */
     cap_id_t endpoint_cap;          /* 服务端点能力 */
     bool running;                   /* 是否正在运行 */
+    phys_addr_t code_phys;          /* 代码段加载地址（物理） */
 } static_module_runtime_t;
 
 #define MAX_STATIC_MODULES 16
@@ -256,6 +257,7 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
 
     /* 保存运行时状态 */
     g_module_runtime[runtime_idx].domain_id = domain;
+    g_module_runtime[runtime_idx].code_phys = code_phys;
 
     /* 记录审计日志 */
     u64 audit_data[4] = { domain, code_size, data_size, total_size };
@@ -415,18 +417,20 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
 int static_module_start_ex(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain = g_module_runtime[runtime_idx].domain_id;
+    phys_addr_t code_phys = g_module_runtime[runtime_idx].code_phys;
     
     console_puts("[STATIC_MODULE]     Starting module in domain ");
     console_putu64(domain);
     console_puts("\n");
 
-    /* 计算入口点地址 */
+    /* 计算入口点地址 - 使用实际加载地址 */
     void *entry_point = NULL;
-    if (module->entry_offset != 0 && module->code_start != NULL) {
-        entry_point = (void*)((u8*)module->code_start + module->entry_offset);
+    if (code_phys != 0) {
+        /* 使用实际加载地址 + 入口偏移 */
+        entry_point = (void*)((u8*)code_phys + module->entry_offset);
     } else if (module->code_start != NULL) {
-        /* 默认入口点在代码段开始 */
-        entry_point = module->code_start;
+        /* 回退：使用链接地址（不应该发生） */
+        entry_point = (void*)((u8*)module->code_start + module->entry_offset);
     }
 
     if (entry_point == NULL) {

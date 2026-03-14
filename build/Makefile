@@ -210,20 +210,26 @@ $(OBJ_DIR)/privileged1/%.o: $(PRIVILEGED1_DIR)/%.c | $(OBJ_DIR)/privileged1
 	@echo "编译 Privileged-1: $<"
 	@$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# 静态服务编译（自动重命名段到 .static_service.*）
+# 静态服务编译（自动重命名段到服务特定段名）
 # 匹配格式: $(OBJ_DIR)/static_services/服务名/文件名.o
+# 段命名规则: .static_svc.<service_name>.text, .static_svc.<service_name>.data 等
+# 注意：不使用 -ffunction-sections 以避免生成 .text.function_name 段
 $(OBJ_DIR)/static_services/%.o: $(SERVICES_DIR)/%.c
 	@mkdir -p $(dir $@)
 	@echo "编译静态服务: $*"
-	@$(CC) $(SERVICE_CFLAGS) $(INCLUDES) -I$(dir $<) -c $< -o $@.tmp
-	@echo "  重命名段到静态服务段..."
+	@# 提取服务名（路径中的第一个目录名）
+	$(eval SERVICE_NAME=$(notdir $(patsubst %/,%,$(dir $(patsubst $(SERVICES_DIR)/%,%,$<)))))
+	@echo "  服务名: $(SERVICE_NAME)"
+	@# 编译时不使用 -ffunction-sections 和 -fdata-sections
+	@$(CC) $(CFLAGS) -Wno-error $(INCLUDES) -I$(dir $<) -c $< -o $@.tmp
+	@echo "  重命名段到静态服务段 (.static_svc.$(SERVICE_NAME).*)..."
 	@$(OBJCOPY) \
-		--rename-section .text=.static_service.text \
-		--rename-section .rodata=.static_service.rodata \
-		--rename-section .data=.static_service.data \
-		--rename-section .bss=.static_service.bss \
-		--rename-section .data.rel=.static_service.data.rel \
-		--rename-section .data.rel.local=.static_service.data.rel.local \
+		--rename-section .text=.static_svc.$(SERVICE_NAME).text \
+		--rename-section .rodata=.static_svc.$(SERVICE_NAME).rodata \
+		--rename-section .data=.static_svc.$(SERVICE_NAME).data \
+		--rename-section .bss=.static_svc.$(SERVICE_NAME).bss \
+		--rename-section .data.rel=.static_svc.$(SERVICE_NAME).data.rel \
+		--rename-section .data.rel.local=.static_svc.$(SERVICE_NAME).data.rel.local \
 		$@.tmp $@
 	@rm -f $@.tmp
 

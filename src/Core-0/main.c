@@ -283,11 +283,8 @@ void kernel_main(void *info)
             handle_pending_interrupts();
         }
         
-        /* 2. 调度器：选择下一个要运行的线程 */
-        thread_id_t next_thread = scheduler_pick_next();
-        if (next_thread != INVALID_THREAD) {
-            context_switch_to(next_thread);
-        }
+        /* 2. 调度器：执行上下文切换到下一个线程 */
+        schedule();
         
         /* 3. 处理定时器 */
         timer_update();

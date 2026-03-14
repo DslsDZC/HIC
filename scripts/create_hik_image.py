@@ -62,6 +62,8 @@ def create_hic_image(elf_path, output_path):
     rodata_section = sections.get('.rodata', {'size': 0x6e84, 'vma': 0x120000})
     data_section = sections.get('.data', {'size': 0xa22, 'vma': 0x127000})
     bss_section = sections.get('.bss', {'size': 0x32000, 'vma': 0x128000})
+    static_services_section = sections.get('.static_services', {'size': 0, 'vma': 0})
+    static_modules_section = sections.get('.static_modules', {'size': 0, 'vma': 0})
     
     # 计算段在binary文件中的偏移
     # binary文件是平铺的，从0x100000开始
@@ -86,6 +88,26 @@ def create_hic_image(elf_path, output_path):
     print(f"数据段(.data): VMA=0x{data_vma:x}, 大小=0x{data_size:x}, binary偏移=0x{data_offset:x}")
     print(f"BSS段: VMA=0x{bss_vma:x}, 大小=0x{bss_size:x}")
     
+    # 获取静态服务段信息
+    static_services_size = static_services_section['size']
+    static_services_vma = static_services_section['vma']
+    static_services_offset = static_services_vma - 0x100000 if static_services_size > 0 else 0
+    
+    static_modules_size = static_modules_section['size']
+    static_modules_vma = static_modules_section['vma']
+    static_modules_offset = static_modules_vma - 0x100000 if static_modules_size > 0 else 0
+    
+    # 计算需要的段数
+    num_segments = 3  # 基本段：代码、数据、BSS
+    if static_services_size > 0:
+        num_segments += 1
+    if static_modules_size > 0:
+        num_segments += 1
+    
+    print(f"静态服务段(.static_services): VMA=0x{static_services_vma:x}, 大小=0x{static_services_size:x}")
+    print(f"静态模块段(.static_modules): VMA=0x{static_modules_vma:x}, 大小=0x{static_modules_size:x}")
+    print(f"总段数: {num_segments}")
+    
     # 合并 .rodata 和 .data 作为一个数据段
     # 数据段从 .rodata 开始到 .data 结束
     combined_data_offset = rodata_offset
@@ -103,44 +125,76 @@ def create_hic_image(elf_path, output_path):
     total_size = 160 + len(binary_code)
     struct.pack_into('<Q', header, 20, total_size)
     struct.pack_into('<Q', header, 28, 120)
-    struct.pack_into('<Q', header, 36, 3)  # 3个段：代码段、数据段、BSS段
+    struct.pack_into('<Q', header, 36, num_segments)  # 动态段数
     struct.pack_into('<Q', header, 44, 0)
     struct.pack_into('<Q', header, 52, 0)
     struct.pack_into('<Q', header, 60, 0)
     struct.pack_into('<Q', header, 68, 0)
     
-    # 段表 (240字节, 3个段项，每个40字节)
-    segment_table = bytearray(240)
+    # 段表 (每个段40字节)
+    segment_table_size = num_segments * 40
+    segment_table = bytearray(segment_table_size)
+    seg_idx = 0
     
-    # 段1: 代码段（.text）
-    struct.pack_into('<I', segment_table, 0, 1)  # CODE
-    struct.pack_into('<I', segment_table, 4, 7)  # READABLE | WRITABLE | EXECUTABLE
-    struct.pack_into('<Q', segment_table, 8, 360)  # file_offset = 360 = 头部(120) + 段表(240)
-    struct.pack_into('<Q', segment_table, 16, text_vma)  # memory_offset
-    struct.pack_into('<Q', segment_table, 24, text_size)  # file_size
-    struct.pack_into('<Q', segment_table, 32, text_size)  # memory_size
+    # 段0: 代码段（.text）
+    seg_offset = seg_idx * 40
+    struct.pack_into('<I', segment_table, seg_offset, 1)  # CODE
+    struct.pack_into('<I', segment_table, seg_offset + 4, 7)  # READABLE | WRITABLE | EXECUTABLE
+    struct.pack_into('<Q', segment_table, seg_offset + 8, 120 + segment_table_size)  # file_offset
+    struct.pack_into('<Q', segment_table, seg_offset + 16, text_vma)  # memory_offset
+    struct.pack_into('<Q', segment_table, seg_offset + 24, text_size)  # file_size
+    struct.pack_into('<Q', segment_table, seg_offset + 32, text_size)  # memory_size
+    seg_idx += 1
     
-    # 段2: 数据段（.rodata + .data 合并）
-    struct.pack_into('<I', segment_table, 40, 2)  # DATA
-    struct.pack_into('<I', segment_table, 44, 3)  # READABLE | WRITABLE
-    struct.pack_into('<Q', segment_table, 48, 360 + combined_data_offset)  # file_offset
-    struct.pack_into('<Q', segment_table, 56, combined_data_vma)  # memory_offset
-    struct.pack_into('<Q', segment_table, 64, combined_data_size)  # file_size
-    struct.pack_into('<Q', segment_table, 72, combined_data_size)  # memory_size
+    # 段1: 数据段（.rodata + .data 合并）
+    seg_offset = seg_idx * 40
+    struct.pack_into('<I', segment_table, seg_offset, 2)  # DATA
+    struct.pack_into('<I', segment_table, seg_offset + 4, 3)  # READABLE | WRITABLE
+    struct.pack_into('<Q', segment_table, seg_offset + 8, 120 + segment_table_size + combined_data_offset)  # file_offset
+    struct.pack_into('<Q', segment_table, seg_offset + 16, combined_data_vma)  # memory_offset
+    struct.pack_into('<Q', segment_table, seg_offset + 24, combined_data_size)  # file_size
+    struct.pack_into('<Q', segment_table, seg_offset + 32, combined_data_size)  # memory_size
+    seg_idx += 1
     
-    # 段3: BSS 段
-    struct.pack_into('<I', segment_table, 80, 4)  # BSS
-    struct.pack_into('<I', segment_table, 84, 3)  # READABLE | WRITABLE
-    struct.pack_into('<Q', segment_table, 88, 0)  # file_offset = 0 (BSS无文件数据)
-    struct.pack_into('<Q', segment_table, 96, bss_vma)  # memory_offset
-    struct.pack_into('<Q', segment_table, 104, 0)  # file_size = 0
-    struct.pack_into('<Q', segment_table, 112, bss_size)  # memory_size
+    # 段2: BSS 段
+    seg_offset = seg_idx * 40
+    struct.pack_into('<I', segment_table, seg_offset, 4)  # BSS
+    struct.pack_into('<I', segment_table, seg_offset + 4, 3)  # READABLE | WRITABLE
+    struct.pack_into('<Q', segment_table, seg_offset + 8, 0)  # file_offset = 0 (BSS无文件数据)
+    struct.pack_into('<Q', segment_table, seg_offset + 16, bss_vma)  # memory_offset
+    struct.pack_into('<Q', segment_table, seg_offset + 24, 0)  # file_size = 0
+    struct.pack_into('<Q', segment_table, seg_offset + 32, bss_size)  # memory_size
+    seg_idx += 1
+    
+    # 段3: 静态服务段（如果有）
+    if static_services_size > 0:
+        seg_offset = seg_idx * 40
+        struct.pack_into('<I', segment_table, seg_offset, 5)  # STATIC_SERVICES
+        struct.pack_into('<I', segment_table, seg_offset + 4, 7)  # READABLE | WRITABLE | EXECUTABLE
+        struct.pack_into('<Q', segment_table, seg_offset + 8, 120 + segment_table_size + static_services_offset)  # file_offset
+        struct.pack_into('<Q', segment_table, seg_offset + 16, static_services_vma)  # memory_offset
+        struct.pack_into('<Q', segment_table, seg_offset + 24, static_services_size)  # file_size
+        struct.pack_into('<Q', segment_table, seg_offset + 32, static_services_size)  # memory_size
+        seg_idx += 1
+        print(f"段{seg_idx-1} (STATIC_SERVICES): VMA=0x{static_services_vma:x}, 大小=0x{static_services_size:x}")
+    
+    # 段4: 静态模块段（如果有）
+    if static_modules_size > 0:
+        seg_offset = seg_idx * 40
+        struct.pack_into('<I', segment_table, seg_offset, 6)  # STATIC_MODULES
+        struct.pack_into('<I', segment_table, seg_offset + 4, 3)  # READABLE | WRITABLE
+        struct.pack_into('<Q', segment_table, seg_offset + 8, 120 + segment_table_size + static_modules_offset)  # file_offset
+        struct.pack_into('<Q', segment_table, seg_offset + 16, static_modules_vma)  # memory_offset
+        struct.pack_into('<Q', segment_table, seg_offset + 24, static_modules_size)  # file_size
+        struct.pack_into('<Q', segment_table, seg_offset + 32, static_modules_size)  # memory_size
+        seg_idx += 1
+        print(f"段{seg_idx-1} (STATIC_MODULES): VMA=0x{static_modules_vma:x}, 大小=0x{static_modules_size:x}")
     
     # 调试输出
     print(f"段表字节: {len(segment_table)} bytes")
-    print(f"段0 (CODE): type={struct.unpack('<I', segment_table[0:4])[0]}, file_off=0x{struct.unpack('<Q', segment_table[8:16])[0]:x}, mem_off=0x{struct.unpack('<Q', segment_table[16:24])[0]:x}, size=0x{struct.unpack('<Q', segment_table[24:32])[0]:x}")
-    print(f"段1 (DATA): type={struct.unpack('<I', segment_table[40:44])[0]}, file_off=0x{struct.unpack('<Q', segment_table[48:56])[0]:x}, mem_off=0x{struct.unpack('<Q', segment_table[56:64])[0]:x}, size=0x{struct.unpack('<Q', segment_table[64:72])[0]:x}")
-    print(f"段2 (BSS): type={struct.unpack('<I', segment_table[80:84])[0]}, mem_off=0x{struct.unpack('<Q', segment_table[96:104])[0]:x}, size=0x{struct.unpack('<Q', segment_table[112:120])[0]:x}")
+    print(f"段0 (CODE): VMA=0x{text_vma:x}, 大小=0x{text_size:x}")
+    print(f"段1 (DATA): VMA=0x{combined_data_vma:x}, 大小=0x{combined_data_size:x}")
+    print(f"段2 (BSS): VMA=0x{bss_vma:x}, 大小=0x{bss_size:x}")
     
     # 写入文件
     fd = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
@@ -160,7 +214,7 @@ def create_hic_image(elf_path, output_path):
     
     print(f"✓ HIC映像创建成功: {output_path}")
     print(f"  总大小: {total_size} bytes")
-    print(f"  段数: 3 (代码段 + 数据段 + BSS段)")
+    print(f"  段数: {num_segments}")
     return True
 
 if __name__ == '__main__':

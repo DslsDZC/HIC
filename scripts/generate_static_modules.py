@@ -83,15 +83,45 @@ def generate_static_modules_c(config_path, output_path, services_dir):
  * - 所有服务支持动态卸载/重载
  * - Core-0 通过此表直接访问服务
  *
+ * 段命名规则：
+ * - 代码段: .static_svc.<name>.text
+ * - 只读数据: .static_svc.<name>.rodata
+ * - 数据段: .static_svc.<name>.data
+ * - BSS段: .static_svc.<name>.bss
+ *
+ * 链接器自动生成符号：
+ * - __start_static_svc_<name>_text / __stop_static_svc_<name>_text
+ *
  * 不要手动修改此文件！请修改 platform.yaml 后重新生成
  */
 
+#include <stddef.h>
+#include <stdint.h>
 #include "include/static_module.h"
 
 /* 模块类型映射 */
 #define STATIC_MODULE_TYPE_DRIVER      1
 #define STATIC_MODULE_TYPE_SERVICE     2
 #define STATIC_MODULE_TYPE_SYSTEM      3
+
+/* ==================== 外部段符号声明 ==================== */
+/* 链接器会为每个段自动生成这些符号 */
+
+'''
+
+    # 生成外部符号声明
+    for module in valid_modules:
+        name = module['name']
+        safe_name = sanitize_name(name)
+        
+        # 声明链接器生成的段符号
+        c_code += f'''/* {name} 段符号（链接器自动生成） */
+extern char __start_static_svc_{safe_name}_text[];
+extern char __stop_static_svc_{safe_name}_text[];
+extern char __start_static_svc_{safe_name}_data[];
+extern char __stop_static_svc_{safe_name}_data[];
+extern char __start_static_svc_{safe_name}_bss[];
+extern char __stop_static_svc_{safe_name}_bss[];
 
 '''
 
@@ -126,22 +156,24 @@ def generate_static_modules_c(config_path, output_path, services_dir):
 
         # 填充 name 字段（固定 32 字符）
         name_field = name[:31]  # 最多 31 字符
-        name_padded = name_field + '\\0' * (32 - len(name_field))
 
         safe_name = sanitize_name(name)
+        
+        # 使用链接器生成的段符号
         c_code += f'''/* {name} 静态模块描述符 */
 __attribute__((section(".static_modules"), used))
 static static_module_desc_t g_static_module_{safe_name} = {{
     .name = "{name_field}",
     .type = {type_num},
     .version = 1,
-    .code_start = NULL,          /* 运行时填充 */
-    .code_end = NULL,
-    .data_start = NULL,
-    .data_end = NULL,
-    .entry_offset = 0,           /* 运行时填充 */
+    .code_start = (void*)__start_static_svc_{safe_name}_text,
+    .code_end = (void*)__stop_static_svc_{safe_name}_text,
+    .data_start = (void*)__start_static_svc_{safe_name}_data,
+    .data_end = (void*)__stop_static_svc_{safe_name}_data,
+    .entry_offset = 0,           /* 默认入口点在代码段起始 */
     .capabilities = {{0}},       /* 运行时填充 */
     .flags = {flags}ULL,  /* STATIC_MODULE_FLAG_* */
+    ._reserved = 0,              /* 保留字段 */
 }};
 
 '''
@@ -150,7 +182,7 @@ static static_module_desc_t g_static_module_{safe_name} = {{
     c_code += f'''/* 模块表结束标记 */
 __attribute__((section(".static_modules"), used))
 static static_module_desc_t g_static_modules_end = {{
-    .name = {{0}},  /* 空名称表示结束 */
+    .name = "",  /* 空名称表示结束 */
     .type = 0,
     .version = 0,
     .code_start = NULL,
@@ -160,6 +192,7 @@ static static_module_desc_t g_static_modules_end = {{
     .entry_offset = 0,
     .capabilities = {{0}},
     .flags = 0,
+    ._reserved = 0,
 }};
 '''
 

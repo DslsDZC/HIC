@@ -36,6 +36,7 @@ typedef struct static_module_desc {
     u64      entry_offset;       /* 入口点偏移（相对于代码起始） */
     u64      capabilities[8];    /* 需要授予的初始能力 */
     u64      flags;              /* 标志位 */
+    u64      _reserved;          /* 保留字段，确保 16 字节对齐 */
 } static_module_desc_t;
 
 /* 模块类型 */
