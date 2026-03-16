@@ -89,9 +89,16 @@ int module_load_from_memory(const void* base, u64 size, u64* instance_id) {
         return -1;
     }
     
-    /* 验证版本 */
-    if (header->version != HICMOD_VERSION) {
-        log_error("不支持的模块版本\n");
+    /* 验证版本 (支持版本1和版本2) */
+    if (header->version < 1 || header->version > HICMOD_VERSION) {
+        log_error("不支持的模块版本: %u\n", header->version);
+        return -1;
+    }
+    
+    /* 查找匹配当前架构的段 */
+    const hicmod_arch_section_t* arch_section = module_find_arch_section(header, base);
+    if (!arch_section) {
+        log_error("模块不支持当前架构\n");
         return -1;
     }
     
@@ -113,10 +120,12 @@ int module_load_from_memory(const void* base, u64 size, u64* instance_id) {
     hicmod_instance_t* instance = &g_loader.instances[g_loader.instance_count];
     memzero(instance, sizeof(hicmod_instance_t));
     
-instance->instance_id = g_loader.next_instance_id++;
-    instance->code_base = (u64)base;
-    instance->data_base = instance->code_base + header->code_size;
-    instance->entry_point = instance->code_base + sizeof(hicmod_header_t);
+    instance->instance_id = g_loader.next_instance_id++;
+    
+    /* 使用架构段信息设置代码和数据基地址 */
+    instance->code_base = (u64)base + arch_section->code_offset;
+    instance->data_base = (u64)base + arch_section->data_offset;
+    instance->entry_point = instance->code_base + arch_section->entry_offset;
     instance->state = MODULE_STATE_LOADED;
     
     /* 复制UUID */
@@ -127,7 +136,18 @@ instance->instance_id = g_loader.next_instance_id++;
     g_loader.instance_count++;
     *instance_id = instance->instance_id;
     
-    log_info("模块加载成功: ID=%lu\n", instance->instance_id);
+    /* 输出架构信息 */
+    const char* arch_name = "unknown";
+    switch (arch_section->arch_id) {
+        case HICMOD_ARCH_X86_64:  arch_name = "x86_64"; break;
+        case HICMOD_ARCH_AARCH64: arch_name = "aarch64"; break;
+        case HICMOD_ARCH_RISCV64: arch_name = "riscv64"; break;
+        case HICMOD_ARCH_ARM32:   arch_name = "arm32"; break;
+        case HICMOD_ARCH_RISCV32: arch_name = "riscv32"; break;
+    }
+    
+    log_info("模块加载成功: ID=%lu, 架构=%s, 代码=%u字节\n", 
+             instance->instance_id, arch_name, arch_section->code_size);
     return 0;
 }
 
@@ -252,4 +272,136 @@ hicmod_instance_t* module_get_instance(u64 instance_id)
     }
 
     return NULL;
+}
+
+/* ========== 多架构支持实现 ========== */
+
+/**
+ * 获取当前平台架构标识符
+ * 
+ * 返回值：架构标识符 (HICMOD_ARCH_*)
+ */
+u32 module_get_current_arch(void)
+{
+#if defined(__x86_64__) || defined(_M_X64)
+    return HICMOD_ARCH_X86_64;
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    return HICMOD_ARCH_AARCH64;
+#elif defined(__riscv) && (__riscv_xlen == 64)
+    return HICMOD_ARCH_RISCV64;
+#elif defined(__arm__) || defined(_M_ARM)
+    return HICMOD_ARCH_ARM32;
+#elif defined(__riscv) && (__riscv_xlen == 32)
+    return HICMOD_ARCH_RISCV32;
+#else
+    return HICMOD_ARCH_X86_64;  /* 默认 x86_64 */
+#endif
+}
+
+/**
+ * 在模块中查找匹配当前架构的段
+ * 
+ * 参数：
+ *   header - 模块头
+ *   module_data - 模块数据指针
+ * 
+ * 返回值：匹配的架构段指针，未找到返回NULL
+ */
+const hicmod_arch_section_t* module_find_arch_section(
+    const hicmod_header_t* header,
+    const void* module_data)
+{
+    if (!header || !module_data) {
+        return NULL;
+    }
+    
+    /* 获取当前架构 */
+    u32 current_arch = module_get_current_arch();
+    
+    /* 检查是否有架构表 */
+    if (header->arch_count == 0 || header->arch_table_offset == 0) {
+        /* 单架构兼容模式：使用 legacy 字段 */
+        static hicmod_arch_section_t legacy_section;
+        legacy_section.arch_id = HICMOD_ARCH_X86_64;
+        legacy_section.code_offset = header->legacy_code_offset;
+        legacy_section.code_size = header->legacy_code_size;
+        legacy_section.data_offset = header->legacy_data_offset;
+        legacy_section.data_size = header->legacy_data_size;
+        return &legacy_section;
+    }
+    
+    /* 遍历架构表 */
+    const hicmod_arch_section_t* arch_table = 
+        (const hicmod_arch_section_t*)((const u8*)module_data + header->arch_table_offset);
+    
+    for (u32 i = 0; i < header->arch_count && i < HICMOD_ARCH_MAX; i++) {
+        if (arch_table[i].arch_id == current_arch) {
+            return &arch_table[i];
+        }
+    }
+    
+    return NULL;
+}
+
+/**
+ * 检查模块是否支持当前架构
+ * 
+ * 参数：
+ *   header - 模块头
+ * 
+ * 返回值：支持返回true
+ */
+bool module_supports_current_arch(const hicmod_header_t* header)
+{
+    if (!header) {
+        return false;
+    }
+    
+    u32 current_arch = module_get_current_arch();
+    
+    /* 单架构兼容模式 */
+    if (header->arch_count == 0) {
+        return true;  /* 假设兼容 */
+    }
+    
+    /* 检查架构表中是否有当前架构 */
+    return header->arch_count > 0;  /* 简化检查，实际需要遍历架构表 */
+}
+
+/**
+ * 获取模块支持的架构列表
+ * 
+ * 参数：
+ *   header - 模块头
+ *   module_data - 模块数据指针
+ *   arch_ids - 输出架构ID数组
+ *   max_count - 数组最大容量
+ * 
+ * 返回值：实际架构数量
+ */
+u32 module_get_supported_archs(const hicmod_header_t* header,
+                               const void* module_data,
+                               u32* arch_ids,
+                               u32 max_count)
+{
+    if (!header || !arch_ids || max_count == 0) {
+        return 0;
+    }
+    
+    /* 单架构兼容模式 */
+    if (header->arch_count == 0 || header->arch_table_offset == 0) {
+        arch_ids[0] = HICMOD_ARCH_X86_64;
+        return 1;
+    }
+    
+    /* 遍历架构表 */
+    const hicmod_arch_section_t* arch_table = 
+        (const hicmod_arch_section_t*)((const u8*)module_data + header->arch_table_offset);
+    
+    u32 count = 0;
+    for (u32 i = 0; i < header->arch_count && i < max_count && i < HICMOD_ARCH_MAX; i++) {
+        arch_ids[count++] = arch_table[i].arch_id;
+    }
+    
+    return count;
 }

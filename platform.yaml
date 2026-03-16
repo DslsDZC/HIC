@@ -79,16 +79,27 @@ static_modules:
     critical: true
     privileged: true
 
-  # 2. FAT32 文件系统驱动（必需：提供磁盘读取能力）
+  # 2. IDE 磁盘驱动（必需：提供磁盘扇区访问能力）
+  # 必须在 fat32_service 之前加载，因为 fat32_service 需要它访问磁盘
+  - name: ide_driver
+    type: driver
+    auto_start: true
+    critical: true
+    privileged: true
+    capabilities:
+      - io_port_access
+
+  # 3. FAT32 文件系统驱动（必需：提供文件读取能力）
   # 必须在 init_launcher 之前加载，因为 init_launcher 需要它读取模块文件
+  # 依赖 ide_driver 来访问磁盘扇区
   - name: fat32_service
     type: driver
     auto_start: true
     critical: true
     privileged: true
 
-  # 3. 初始服务启动器（必需：引导动态模块）
-  # 依赖 fat32_service 来读取 /boot/module_manager.hicmod
+  # 4. 初始服务启动器（必需：引导动态模块）
+  # 依赖 fat32_service 来读取 /modules/module_manager_service.hicmod
   # 使用 verifier 服务验证模块签名后加载模块管理器
   - name: init_launcher
     type: service
@@ -99,6 +110,37 @@ static_modules:
       - storage_access
       - domain_create
       - verifier_access
+
+  # 5. 内存管理服务（策略层：伙伴系统、碎片整理）
+  # 遵循机制与策略分离原则：
+  # - Core-0 保留物理页位图分配原语（机制）
+  # - 本服务实现分配策略和碎片整理
+  - name: memory_service
+    type: service
+    auto_start: true
+    critical: true
+    privileged: true
+
+  # 6. 设备管理服务（策略层：硬件探测）
+  # 遵循机制与策略分离原则：
+  # - Core-0 保留最小 CPU 信息（机制）
+  # - 本服务实现完整硬件探测（PCI、ACPI）
+  - name: device_manager
+    type: service
+    auto_start: true
+    critical: false
+    privileged: true
+
+  # 7. 安全监控服务（策略层：异常检测、告警响应）
+  # 遵循机制与策略分离原则：
+  # - Core-0 提供事件记录、阈值检查、动作执行（机制）
+  # - 本服务定义检测规则、响应策略、告警配置（策略）
+  # 调试模式：静态链接到内核；正式版：动态加载
+  - name: security_monitor
+    type: service
+    auto_start: true
+    critical: false
+    privileged: true
 
 # ==================== CPU特性配置 ====================
 cpu_features:

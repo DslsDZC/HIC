@@ -40,6 +40,10 @@ struct thread {
     thread_state_t state;         /* 线程状态 */
     priority_t     priority;      /* 优先级 */
     
+    /* 逻辑核心绑定 */
+    u32            logical_core_id;  /* 绑定的逻辑核心ID (INVALID_LOGICAL_CORE表示未绑定) */
+    u32            core_affinity;    /* 核心亲和性掩码（用于调度决策） */
+    
     /* 栈信息 */
     virt_addr_t    stack_base;    /* 栈基址 */
     size_t         stack_size;    /* 栈大小 */
@@ -65,15 +69,29 @@ struct thread {
     u32    flags;
 #define THREAD_FLAG_KERNEL    (1U << 0)  /* 内核线程 */
 #define THREAD_FLAG_USER      (1U << 1)  /* 用户线程 */
+#define THREAD_FLAG_BOUND     (1U << 2)  /* 已绑定到逻辑核心 */
     
 };
 
 /* 线程管理接口 */
 void thread_system_init(void);
 
-/* 创建线程 */
+/* 创建线程（必须绑定逻辑核心） */
+hic_status_t thread_create_bound(domain_id_t domain_id, 
+                                  u32 logical_core_id,
+                                  virt_addr_t entry_point,
+                                  priority_t priority, 
+                                  thread_id_t *out);
+
+/* 创建线程（内部接口，仅用于Core-0初始化） */
 hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
                           priority_t priority, thread_id_t *out);
+
+/* 绑定线程到逻辑核心 */
+hic_status_t thread_bind_to_core(thread_id_t thread_id, u32 logical_core_id);
+
+/* 获取线程绑定的逻辑核心 */
+u32 thread_get_bound_core(thread_id_t thread_id);
 
 /* 终止线程 */
 hic_status_t thread_terminate(thread_id_t thread_id);

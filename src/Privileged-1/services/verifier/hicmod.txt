@@ -1,0 +1,44 @@
+# HIC服务模块元数据文件
+
+[service]
+name = verifier
+display_name = 签名验证服务
+version = 1.0.0
+api_version = 1.0
+uuid = 0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供模块签名验证服务
+long = 签名验证服务提供SHA-384哈希计算和签名验证功能，用于验证动态加载模块的完整性和真实性。作为静态模块加载，确保系统安全性。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 32768
+max_threads = 1
+max_capabilities = 32
+cpu_quota_percent = 5
+
+[endpoints]
+verifier_verify = 1.0:verifier_verify_module
+verifier_hash = 1.0:verifier_compute_hash
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = true
+priority = 1
+autostart = true

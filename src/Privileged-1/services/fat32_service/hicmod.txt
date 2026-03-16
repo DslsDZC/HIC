@@ -18,6 +18,7 @@ long = FAT32文件系统服务提供对FAT32格式存储设备的读写访问功
 
 [dependencies]
 core_api = 1.0:1.0:2.0
+ide_driver = 1.0:1.0:1.0
 
 [resources]
 max_memory = 65536
@@ -42,6 +43,6 @@ privileged = true
 signature_required = false
 
 [build]
-static = false
-priority = 1
+static = true
+priority = 2
 autostart = true

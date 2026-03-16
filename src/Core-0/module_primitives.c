@@ -18,6 +18,7 @@
 #include "pmm.h"
 #include "pagetable.h"
 #include "exception.h"
+#include "thread.h"
 #include "atomic.h"
 #include "console.h"
 #include "formal_verification.h"
@@ -209,6 +210,11 @@ hic_status_t module_memory_alloc(domain_id_t domain_id,
     /* 检查域的内存配额 */
     hic_status_t status = domain_check_memory_quota(domain_id, size);
     if (status != HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Memory quota check failed for domain ");
+        console_putu32(domain_id);
+        console_puts(", size=");
+        console_putu64(size);
+        console_puts("\n");
         return status;
     }
     
@@ -643,7 +649,7 @@ hic_status_t module_audit_log(u32 event_type,
 uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain)
 {
     domain_quota_t quota = {
-        .max_memory = 16 * 1024 * 1024,  /* 16MB */
+        .max_memory = 2 * 1024 * 1024,  /* 2MB - 足够加载模块 */
         .max_threads = 4,
         .max_caps = 32,
         .cpu_quota_percent = 10
@@ -682,10 +688,44 @@ uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id)
  */
 uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point)
 {
-    (void)entry_point;  /* 暂时忽略入口点，由加载器设置 */
+    /* 首先创建线程 - 动态模块使用较高优先级确保被调度 */
+    thread_id_t thread_id;
+    hic_status_t status = thread_create((domain_id_t)domain_id, 
+                                         (virt_addr_t)entry_point,
+                                         3,  /* HIC_PRIORITY_HIGH - 确保被调度 */
+                                         &thread_id);
+    if (status != HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Failed to create thread for domain ");
+        console_putu32(domain_id);
+        console_puts("\n");
+        return (uint64_t)status;
+    }
+    
+    console_puts("[PRIMITIVES] Thread ");
+    console_putu32(thread_id);
+    console_puts(" created for domain ");
+    console_putu32(domain_id);
+    console_puts("\n");
     
     /* 恢复域运行 */
-    return (uint64_t)domain_resume((domain_id_t)domain_id);
+    status = domain_resume((domain_id_t)domain_id);
+    if (status != HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Failed to resume domain\n");
+        return (uint64_t)status;
+    }
+    
+    /* 将线程加入调度 */
+    status = thread_ready(thread_id);
+    if (status != HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Failed to ready thread\n");
+        return (uint64_t)status;
+    }
+    
+    console_puts("[PRIMITIVES] Thread ");
+    console_putu32(thread_id);
+    console_puts(" added to scheduler queue\n");
+    
+    return 0;  /* 成功 */
 }
 
 /**

@@ -1,8 +1,35 @@
 #!/usr/bin/env python3
 """
-创建 HIC 服务模块 (.hicmod)
-将 .o 文件和 hicmod.txt 元数据打包成模块格式
+创建 HIC 服务模块 (.hicmod) - 多架构版本
+将多个架构的 .o 文件和 hicmod.txt 元数据打包成模块格式
 支持数字签名（Ed25519）
+
+.hicmod 文件布局:
+┌─────────────────────────────────────┐
+│  模块头 (hicmod_header_t)           │
+│  - magic, version, uuid             │
+│  - arch_count, arch_table_offset    │
+│  - metadata_offset/size             │
+│  - signature_offset/size            │
+├─────────────────────────────────────┤
+│  架构表 (hicmod_arch_section_t[])   │
+│  - arch_id, flags                   │
+│  - code_offset/size, data_offset    │
+│  - entry_offset, reloc_offset       │
+├─────────────────────────────────────┤
+│  架构段1 (x86_64)                   │
+│  - 代码段, 数据段, 只读数据         │
+├─────────────────────────────────────┤
+│  架构段2 (aarch64)                  │
+│  - 代码段, 数据段, 只读数据         │
+├─────────────────────────────────────┤
+│  元数据段 (架构中立)                │
+│  - name, version, dependencies      │
+├─────────────────────────────────────┤
+│  符号表 (架构中立)                  │
+├─────────────────────────────────────┤
+│  签名 (可选)                        │
+└─────────────────────────────────────┘
 """
 
 import struct
@@ -11,10 +38,36 @@ import os
 import uuid
 import hashlib
 import json
+import argparse
 
+# 常量定义
 HICMOD_MAGIC = 0x48494B4D  # "HICM"
-HICMOD_VERSION = 1
-HICMOD_SIGNATURE_OFFSET = 40
+HICMOD_VERSION = 2          # 版本2支持多架构
+
+# 架构标识符
+HICMOD_ARCH_X86_64    = 0x01
+HICMOD_ARCH_AARCH64   = 0x02
+HICMOD_ARCH_RISCV64   = 0x03
+HICMOD_ARCH_ARM32     = 0x04
+HICMOD_ARCH_RISCV32   = 0x05
+HICMOD_ARCH_MAX       = 8
+
+# 架构名称映射
+ARCH_NAME_MAP = {
+    'x86_64': HICMOD_ARCH_X86_64,
+    'amd64': HICMOD_ARCH_X86_64,
+    'aarch64': HICMOD_ARCH_AARCH64,
+    'arm64': HICMOD_ARCH_AARCH64,
+    'riscv64': HICMOD_ARCH_RISCV64,
+    'arm32': HICMOD_ARCH_ARM32,
+    'arm': HICMOD_ARCH_ARM32,
+    'riscv32': HICMOD_ARCH_RISCV32,
+}
+
+# 结构体大小
+HICMOD_HEADER_SIZE = 88   # hicmod_header_t
+HICMOD_ARCH_SECTION_SIZE = 56  # hicmod_arch_section_t
+
 
 def parse_hicmod_txt(txt_path):
     """解析 hicmod.txt 元数据文件"""
@@ -41,13 +94,13 @@ def parse_hicmod_txt(txt_path):
     
     return metadata
 
+
 def create_signature(data, private_key_path=None):
     """创建签名（使用 Ed25519）"""
     if private_key_path and os.path.exists(private_key_path):
         try:
             from cryptography.hazmat.primitives import serialization
             from cryptography.hazmat.primitives.asymmetric import ed25519
-            from cryptography.exceptions import InvalidSignature
             
             # 加载私钥
             with open(private_key_path, 'rb') as f:
@@ -70,6 +123,7 @@ def create_signature(data, private_key_path=None):
             return None
     else:
         return None
+
 
 def verify_signature(data, signature, public_key_path=None):
     """验证签名"""
@@ -97,25 +151,71 @@ def verify_signature(data, signature, public_key_path=None):
     except Exception as e:
         return False
 
+
 def calculate_checksum(data):
     """计算模块校验和（SHA-256）"""
     return hashlib.sha256(data).digest()
 
-def create_hicmod(obj_path, txt_path, output_path, private_key_path=None, public_key_path=None):
-    """创建 .hicmod 模块文件"""
+
+def parse_arch_spec(arch_spec):
+    """
+    解析架构规格字符串
+    格式: arch_name:obj_file 或 obj_file (默认当前架构)
+    返回: (arch_id, obj_path)
+    """
+    if ':' in arch_spec:
+        arch_name, obj_path = arch_spec.split(':', 1)
+        arch_id = ARCH_NAME_MAP.get(arch_name.lower())
+        if arch_id is None:
+            raise ValueError(f"未知架构: {arch_name}")
+        return arch_id, obj_path
+    else:
+        # 默认 x86_64
+        return HICMOD_ARCH_X86_64, arch_spec
+
+
+def build_arch_section(arch_id, obj_data, offset_base):
+    """
+    构建架构段数据
+    
+    返回: (arch_section_bytes, total_size)
+    """
+    # 架构段头
+    section = bytearray(HICMOD_ARCH_SECTION_SIZE)
+    
+    struct.pack_into('<I', section, 0, arch_id)           # arch_id
+    struct.pack_into('<I', section, 4, 0)                  # flags
+    struct.pack_into('<I', section, 8, offset_base)        # code_offset
+    struct.pack_into('<I', section, 12, len(obj_data))     # code_size
+    struct.pack_into('<I', section, 16, 0)                 # data_offset
+    struct.pack_into('<I', section, 20, 0)                 # data_size
+    struct.pack_into('<I', section, 24, 0)                 # bss_size
+    struct.pack_into('<I', section, 28, 0)                 # rodata_offset
+    struct.pack_into('<I', section, 32, 0)                 # rodata_size
+    struct.pack_into('<I', section, 36, 0)                 # entry_offset
+    struct.pack_into('<I', section, 40, 0)                 # reloc_offset
+    struct.pack_into('<I', section, 44, 0)                 # reloc_count
+    
+    return bytes(section), len(obj_data)
+
+
+def create_hicmod_multiarch(arch_specs, txt_path, output_path, 
+                            private_key_path=None, public_key_path=None):
+    """
+    创建多架构 .hicmod 模块文件
+    
+    参数:
+        arch_specs: 架构规格列表，格式 ["x86_64:obj1.o", "aarch64:obj2.o"]
+        txt_path: 元数据文件路径
+        output_path: 输出文件路径
+        private_key_path: 私钥路径（可选）
+        public_key_path: 公钥路径（可选）
+    """
     
     # 检查输入文件
-    if not os.path.exists(obj_path):
-        print(f"错误: {obj_path} 不存在")
-        return False
-    
     if not os.path.exists(txt_path):
         print(f"错误: {txt_path} 不存在")
         return False
-    
-    # 读取对象文件
-    with open(obj_path, 'rb') as f:
-        obj_data = f.read()
     
     # 解析元数据
     metadata = parse_hicmod_txt(txt_path)
@@ -127,8 +227,10 @@ def create_hicmod(obj_path, txt_path, output_path, private_key_path=None, public
     api_version_str = service_info.get('api_version', '1.0')
     uuid_str = service_info.get('uuid', str(uuid.uuid4()))
     
-    # 解析版本号 (major.minor.patch -> packed)
+    # 解析版本号
     version_parts = [int(x) for x in version_str.split('.')]
+    while len(version_parts) < 3:
+        version_parts.append(0)
     semantic_version = (version_parts[0] << 16) | (version_parts[1] << 8) | version_parts[2]
     
     # 解析 API 版本
@@ -139,55 +241,135 @@ def create_hicmod(obj_path, txt_path, output_path, private_key_path=None, public
     
     # 构建 UUID 字节数组
     try:
-        # 尝试解析 UUID
         uuid_obj = uuid.UUID(uuid_str)
         uuid_bytes = uuid_obj.bytes
     except:
-        # 使用字符串的 MD5 作为 UUID
         uuid_bytes = hashlib.md5(name.encode()).digest()
     
-    # 计算各部分偏移
-    header_size = 72  # hicmod_header_t 的大小
+    # 读取所有架构的对象文件
+    arch_data_list = []
+    for spec in arch_specs:
+        arch_id, obj_path = parse_arch_spec(spec)
+        
+        if not os.path.exists(obj_path):
+            print(f"错误: {obj_path} 不存在")
+            return False
+        
+        with open(obj_path, 'rb') as f:
+            obj_data = f.read()
+        
+        arch_data_list.append((arch_id, obj_data, obj_path))
     
-    # 将 hicmod.txt 内容作为元数据追加
+    if not arch_data_list:
+        print("错误: 没有指定任何架构对象文件")
+        return False
+    
+    # 计算偏移量
+    arch_count = len(arch_data_list)
+    arch_table_offset = HICMOD_HEADER_SIZE
+    
+    # 架构段数据起始位置
+    arch_data_offset = arch_table_offset + arch_count * HICMOD_ARCH_SECTION_SIZE
+    
+    # 构建架构段表和段数据
+    arch_sections = bytearray()
+    arch_binary_data = bytearray()
+    current_offset = arch_data_offset
+    
+    # 兼容性字段（单一架构时使用）
+    legacy_code_offset = 0
+    legacy_code_size = 0
+    legacy_data_offset = 0
+    legacy_data_size = 0
+    
+    for i, (arch_id, obj_data, obj_path) in enumerate(arch_data_list):
+        # 构建架构段头
+        section = bytearray(HICMOD_ARCH_SECTION_SIZE)
+        struct.pack_into('<I', section, 0, arch_id)           # arch_id
+        struct.pack_into('<I', section, 4, 0)                  # flags
+        struct.pack_into('<I', section, 8, current_offset)     # code_offset
+        struct.pack_into('<I', section, 12, len(obj_data))     # code_size
+        struct.pack_into('<I', section, 16, 0)                 # data_offset
+        struct.pack_into('<I', section, 20, 0)                 # data_size
+        struct.pack_into('<I', section, 24, 0)                 # bss_size
+        struct.pack_into('<I', section, 28, 0)                 # rodata_offset
+        struct.pack_into('<I', section, 32, 0)                 # rodata_size
+        struct.pack_into('<I', section, 36, 0)                 # entry_offset
+        struct.pack_into('<I', section, 40, 0)                 # reloc_offset
+        struct.pack_into('<I', section, 44, 0)                 # reloc_count
+        
+        arch_sections.extend(section)
+        arch_binary_data.extend(obj_data)
+        
+        # 兼容性字段：第一个架构
+        if i == 0:
+            legacy_code_offset = current_offset
+            legacy_code_size = len(obj_data)
+        
+        current_offset += len(obj_data)
+    
+    # 元数据段位置
+    metadata_offset = current_offset
+    
+    # 读取元数据文本
     with open(txt_path, 'r', encoding='utf-8') as f:
         txt_data = f.read().encode('utf-8')
+    metadata_size = len(txt_data)
     
-    # 构建模块数据（不含签名）
-    module_body = obj_data + txt_data
+    # 符号表位置（暂时为空）
+    symbol_offset = metadata_offset + metadata_size
+    symbol_size = 0
     
-    # 计算校验和
-    checksum = calculate_checksum(module_body)
+    # 签名位置
+    signature_offset = symbol_offset + symbol_size
     
     # 构建模块头
-    header = bytearray(header_size)
-    struct.pack_into('<I', header, 0, HICMOD_MAGIC)
-    struct.pack_into('<I', header, 4, HICMOD_VERSION)
-    header[8:24] = uuid_bytes
-    struct.pack_into('<I', header, 24, semantic_version)
-    struct.pack_into('<I', header, 28, 0)  # API 描述符偏移（暂时为0）
-    struct.pack_into('<I', header, 32, len(obj_data))  # 代码段大小
-    struct.pack_into('<I', header, 36, 0)  # 数据段大小
-    struct.pack_into('<I', header, 40, 0)  # 签名偏移（将在之后设置）
-    struct.pack_into('<I', header, 44, header_size)  # 头部大小
-    header[48:64] = checksum  # 存储校验和
-    struct.pack_into('<I', header, 64, 0)  # 签名大小（暂时为0）
-    struct.pack_into('<I', header, 68, 0)  # 标志位（暂时为0）
+    header = bytearray(HICMOD_HEADER_SIZE)
+    struct.pack_into('<I', header, 0, HICMOD_MAGIC)           # magic
+    struct.pack_into('<I', header, 4, HICMOD_VERSION)         # version
+    header[8:24] = uuid_bytes                                  # uuid
+    struct.pack_into('<I', header, 24, semantic_version)      # semantic_version
+    struct.pack_into('<I', header, 28, api_version)           # api_version
+    struct.pack_into('<I', header, 32, HICMOD_HEADER_SIZE)    # header_size
+    
+    # 多架构支持
+    struct.pack_into('<I', header, 36, arch_count)            # arch_count
+    struct.pack_into('<I', header, 40, arch_table_offset)     # arch_table_offset
+    struct.pack_into('<I', header, 44, arch_count * HICMOD_ARCH_SECTION_SIZE)  # arch_table_size
+    
+    # 元数据
+    struct.pack_into('<I', header, 48, metadata_offset)       # metadata_offset
+    struct.pack_into('<I', header, 52, metadata_size)         # metadata_size
+    
+    # 符号表
+    struct.pack_into('<I', header, 56, symbol_offset)         # symbol_offset
+    struct.pack_into('<I', header, 60, symbol_size)           # symbol_size
+    
+    # 签名（将在之后设置）
+    struct.pack_into('<I', header, 64, 0)                     # signature_offset
+    struct.pack_into('<I', header, 68, 0)                     # signature_size
+    
+    # 兼容性字段
+    struct.pack_into('<I', header, 72, legacy_code_offset)    # legacy_code_offset
+    struct.pack_into('<I', header, 76, legacy_code_size)      # legacy_code_size
+    struct.pack_into('<I', header, 80, legacy_data_offset)    # legacy_data_offset
+    struct.pack_into('<I', header, 84, legacy_data_size)      # legacy_data_size
+    
+    # 构建模块体（不含签名）
+    module_body = bytes(header) + bytes(arch_sections) + bytes(arch_binary_data) + txt_data
     
     # 尝试签名
     signature = create_signature(module_body, private_key_path)
     signature_size = len(signature) if signature else 0
     
-    # 如果有签名，添加到头部
+    # 更新签名信息
     if signature:
-        header[48:64] = checksum  # 校验和
-        struct.pack_into('<I', header, 40, header_size + len(module_body))  # 签名偏移
-        struct.pack_into('<I', header, 64, signature_size)  # 签名大小
-        # 标志位：bit0 = 已签名
-        struct.pack_into('<I', header, 68, 0x01)
+        struct.pack_into('<I', header, 64, signature_offset)
+        struct.pack_into('<I', header, 68, signature_size)
+        module_body = bytes(header) + bytes(arch_sections) + bytes(arch_binary_data) + txt_data
     
-    # 构建完整的模块数据
-    module_data = header + module_body
+    # 构建完整模块
+    module_data = module_body
     if signature:
         module_data += signature
     
@@ -195,11 +377,15 @@ def create_hicmod(obj_path, txt_path, output_path, private_key_path=None, public
     with open(output_path, 'wb') as f:
         f.write(module_data)
     
-    print(f"成功创建模块: {output_path}")
+    # 输出信息
+    print(f"成功创建多架构模块: {output_path}")
     print(f"  模块名称: {name}")
     print(f"  模块版本: {version_str}")
     print(f"  UUID: {uuid_str}")
-    print(f"  代码大小: {len(obj_data)} 字节")
+    print(f"  架构数量: {arch_count}")
+    for arch_id, obj_data, obj_path in arch_data_list:
+        arch_name = {v: k for k, v in ARCH_NAME_MAP.items()}.get(arch_id, f"未知({arch_id})")
+        print(f"    - {arch_name}: {len(obj_data)} 字节 ({os.path.basename(obj_path)})")
     print(f"  总大小: {len(module_data)} 字节")
     if signature:
         print(f"  状态: 已签名 (Ed25519, {signature_size} 字节)")
@@ -207,6 +393,16 @@ def create_hicmod(obj_path, txt_path, output_path, private_key_path=None, public
         print(f"  状态: 未签名")
     
     return True
+
+
+def create_hicmod_single(obj_path, txt_path, output_path,
+                         private_key_path=None, public_key_path=None):
+    """
+    创建单架构 .hicmod 模块文件（兼容模式）
+    """
+    return create_hicmod_multiarch([obj_path], txt_path, output_path,
+                                   private_key_path, public_key_path)
+
 
 def verify_hicmod(module_path, public_key_path=None):
     """验证 .hicmod 模块文件"""
@@ -218,7 +414,7 @@ def verify_hicmod(module_path, public_key_path=None):
         module_data = f.read()
     
     # 解析头部
-    if len(module_data) < 72:
+    if len(module_data) < HICMOD_HEADER_SIZE:
         print("错误: 模块数据过小")
         return False
     
@@ -228,80 +424,114 @@ def verify_hicmod(module_path, public_key_path=None):
         return False
     
     version = struct.unpack_from('<I', module_data, 4)[0]
-    if version != HICMOD_VERSION:
+    if version < 1 or version > HICMOD_VERSION:
         print(f"错误: 不支持的模块版本 {version}")
         return False
     
-    code_size = struct.unpack_from('<I', module_data, 32)[0]
-    header_size = struct.unpack_from('<I', module_data, 44)[0]
-    signature_offset = struct.unpack_from('<I', module_data, 40)[0]
-    signature_size = struct.unpack_from('<I', module_data, 64)[0]
-    flags = struct.unpack_from('<I', module_data, 68)[0]
+    header_size = struct.unpack_from('<I', module_data, 32)[0]
+    arch_count = struct.unpack_from('<I', module_data, 36)[0]
+    arch_table_offset = struct.unpack_from('<I', module_data, 40)[0]
+    signature_offset = struct.unpack_from('<I', module_data, 64)[0]
+    signature_size = struct.unpack_from('<I', module_data, 68)[0]
     
-    is_signed = (flags & 0x01) != 0
+    print(f"模块信息:")
+    print(f"  版本: {version}")
+    print(f"  架构数量: {arch_count}")
     
-    # 提取模块体
-    module_body = module_data[header_size:header_size + code_size + 256]  # 包含元数据
-    
-    # 验证校验和
-    stored_checksum = module_data[48:64]
-    calculated_checksum = calculate_checksum(module_body)
-    
-    if stored_checksum != calculated_checksum:
-        print("错误: 校验和不匹配，模块可能已损坏")
-        return False
+    # 解析架构表
+    arch_names = {v: k for k, v in ARCH_NAME_MAP.items()}
+    for i in range(arch_count):
+        arch_offset = arch_table_offset + i * HICMOD_ARCH_SECTION_SIZE
+        arch_id = struct.unpack_from('<I', module_data, arch_offset)[0]
+        code_size = struct.unpack_from('<I', module_data, arch_offset + 12)[0]
+        arch_name = arch_names.get(arch_id, f"未知({arch_id})")
+        print(f"  架构 {i+1}: {arch_name}, 代码大小: {code_size} 字节")
     
     # 验证签名
-    if is_signed and public_key_path:
-        if signature_offset == 0 or signature_size == 0:
-            print("错误: 模块标记为已签名，但缺少签名数据")
+    if signature_offset > 0 and signature_size > 0:
+        if signature_offset + signature_size > len(module_data):
+            print("错误: 签名数据超出文件范围")
             return False
         
+        signed_data = module_data[:signature_offset]
         signature = module_data[signature_offset:signature_offset + signature_size]
-        if verify_signature(module_body, signature, public_key_path):
-            print("验证成功: 签名有效")
+        
+        if public_key_path and os.path.exists(public_key_path):
+            if verify_signature(signed_data, signature, public_key_path):
+                print("签名验证: 有效")
+            else:
+                print("签名验证: 失败")
+                return False
         else:
-            print("错误: 签名验证失败")
-            return False
-    elif is_signed:
-        print("警告: 模块已签名，但未提供公钥进行验证")
+            print("签名状态: 已签名（未验证，缺少公钥）")
+    else:
+        print("签名状态: 未签名")
     
-    print(f"验证成功: 模块格式正确 (版本 {version})")
+    print("验证成功: 模块格式正确")
     return True
 
+
 def main():
-    if len(sys.argv) < 4:
-        print("用法: create_hicmod.py <对象文件> <元数据文件> <输出文件> [私钥文件] [公钥文件]")
-        print("示例: create_hicmod.py serial_service.o hicmod.txt serial_service.hicmod")
-        print("       create_hicmod.py serial_service.o hicmod.txt serial_service.hicmod private.pem public.pem")
-        print("\n验证模块: create_hicmod.py --verify <模块文件> [公钥文件]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='创建/验证 HIC 多架构模块 (.hicmod)',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+示例:
+  # 单架构模式（兼容）
+  %(prog)s service.o hicmod.txt service.hicmod
+  
+  # 多架构模式
+  %(prog)s -a x86_64:service_x64.o -a aarch64:service_arm64.o hicmod.txt service.hicmod
+  
+  # 带签名
+  %(prog)s -a x86_64:service.o hicmod.txt service.hicmod -k private.pem
+  
+  # 验证模块
+  %(prog)s --verify service.hicmod -p public.pem
+'''
+    )
     
-    if sys.argv[1] == '--verify':
-        # 验证模式
-        if len(sys.argv) < 3:
-            print("错误: 需要指定要验证的模块文件")
-            sys.exit(1)
-        
-        module_path = sys.argv[2]
-        public_key_path = sys.argv[3] if len(sys.argv) > 3 else None
-        
-        if verify_hicmod(module_path, public_key_path):
+    parser.add_argument('obj_file', nargs='?', help='对象文件（单架构模式）')
+    parser.add_argument('txt_file', nargs='?', help='元数据文件')
+    parser.add_argument('output', nargs='?', help='输出文件')
+    
+    parser.add_argument('-a', '--arch', action='append', dest='archs',
+                       metavar='ARCH:OBJ', help='架构规格（可多次指定）')
+    parser.add_argument('-k', '--private-key', help='私钥文件路径')
+    parser.add_argument('-p', '--public-key', help='公钥文件路径')
+    parser.add_argument('--verify', metavar='MODULE', help='验证模块文件')
+    
+    args = parser.parse_args()
+    
+    # 验证模式
+    if args.verify:
+        if verify_hicmod(args.verify, args.public_key):
             sys.exit(0)
         else:
             sys.exit(1)
     
     # 创建模式
-    obj_path = sys.argv[1]
-    txt_path = sys.argv[2]
-    output_path = sys.argv[3]
-    private_key_path = sys.argv[4] if len(sys.argv) > 4 else None
-    public_key_path = sys.argv[5] if len(sys.argv) > 5 else None
+    # 确定架构列表
+    if args.archs:
+        # 多架构模式
+        arch_specs = args.archs
+    elif args.obj_file:
+        # 单架构兼容模式
+        arch_specs = [args.obj_file]
+    else:
+        parser.print_help()
+        sys.exit(1)
     
-    if create_hicmod(obj_path, txt_path, output_path, private_key_path, public_key_path):
+    if not args.txt_file or not args.output:
+        print("错误: 需要指定元数据文件和输出文件")
+        sys.exit(1)
+    
+    if create_hicmod_multiarch(arch_specs, args.txt_file, args.output,
+                               args.private_key, args.public_key):
         sys.exit(0)
     else:
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

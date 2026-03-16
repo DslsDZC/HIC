@@ -312,14 +312,6 @@ boot_state_t* get_boot_state(void);
  */
 void boot_info_print_summary(void);
 
-/* 中断处理 */
-bool interrupts_pending(void);
-void handle_pending_interrupts(void);
-
-/* 系统调用处理 */
-bool syscalls_pending(void);
-void handle_pending_syscalls(void);
-
 /* 定时器 */
 void timer_update(void);
 

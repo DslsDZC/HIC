@@ -8,170 +8,229 @@ SPDX-License-Identifier: CC-BY-4.0
 
 ## 概述
 
-HIC 提供高效的域间通信（IPC）机制，支持同步和异步通信模式。通过能力系统和域切换，实现安全、高效的通信。
+HIC 的通信模型与传统操作系统有本质区别。**IPC（进程间通信）的概念被彻底重构，甚至可以说被"精简"到了几乎不存在的程度**。这不是说 HIC 没有跨域通信，而是它用更基础的机制替代了传统意义上的 IPC，使其成为零开销、与生俱来的特性。
 
-## IPC 类型
+## HIC 通信模型
 
-### 同步 IPC
+### 核心设计原则
+
+HIC 的通信模型基于两个核心设计：
+
+1. **能力系统**：所有跨域交互都必须通过能力验证，通信权限与资源权限统一。
+2. **无锁共享内存**：服务之间通过能力授权的共享内存区域进行数据交换，使用无锁环形缓冲区，无需内核介入。
+
+这意味着：
+
+- **数据平面**：服务间的大批量数据交换通过共享内存直接完成，零拷贝、无内核介入。
+- **控制平面**：服务间的控制信令可以通过共享内存中的标志位或轻量级消息传递，同样无需内核介入。
+
+### 架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        HIC 通信架构                                                                                                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                                                                                                  │
+│   ┌─────────────┐         能力授权                                 ┌─────────────┐                                 │
+│   │   域 A                   │  ──────────────────────▶  │   域 B                   │                                 │
+│   │ (发送方)                 │                                                  │ (接收方)                 │                                 │
+│   └──────┬──────┘                                                  └──────┬──────┘                                 │
+│                 │                                                                              │                                               │
+│                 │         共享内存区域                                                         │                                               │
+│                 │        ┌───────────────────────┐                    │                                               │
+│                 └───▶│  无锁环形缓冲区                              │◀─────────┘                                               │
+│                           │  + 数据区                                    │                                                                     │
+│                           │  + 标志位区                                  │                                                                     │
+│                           │  + 序列号                                    │                                                                     │
+│                           └───────────────────────┘                                                                     │
+│                                  ▲                                                                                                              │
+│                                  │                                                                                                              │
+│                ┌────────┴────────┐                                                                                            │
+│                │     Core-0                       │                                                                                            │
+│                │  (仅初始化时介入)                │                                                                                            │
+│                └─────────────────┘                                                                                            │
+│                                                                                                                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## 通信的两个阶段
+
+### 阶段一：初始化（内核介入）
 
 ```c
-// 同步 IPC 调用
-hic_status_t ipc_call_sync(domain_id_t caller, cap_id_t endpoint_cap,
-                          void *request, size_t req_size,
-                          void *response, size_t resp_size) {
-    // 验证端点能力
-    if (!cap_check_access(caller, endpoint_cap, CAP_IPC_CALL)) {
-        return HIC_ERROR_PERMISSION;
+/* 1. 分配共享内存 */
+cap_id_t shm_cap;
+cap_handle_t shm_handle;
+shmem_alloc(owner_domain, size, SHMEM_FLAG_WRITABLE, &shm_cap, &shm_handle);
+
+/* 2. 映射到目标域（可指定衰减权限） */
+cap_handle_t target_handle;
+shmem_map(owner_domain, target_domain, shm_cap, 
+          CAP_MEM_READ | CAP_MEM_WRITE,  /* 可以是原权限的子集 */
+          &target_handle);
+
+/* 3. 能力传递（带权限衰减） */
+cap_transfer_with_attenuation(owner_domain, target_domain, 
+                               shm_cap, attenuated_rights, &target_handle);
+```
+
+**关键点**：
+- 内核仅在初始化阶段介入
+- 能力授权后，后续访问无需再次验证
+- 权限衰减确保派生权限不超过原始权限
+
+### 阶段二：运行时（零内核介入）
+
+```c
+/* 初始化完成后，所有通信在用户态完成 */
+
+/* 发送方：写入数据到共享内存 */
+void sender_communicate(shmem_region_t *shm) {
+    /* 获取写位置（无锁） */
+    u32 write_idx = atomic_load(&shm->write_index);
+    u32 read_idx = atomic_load(&shm->read_index);
+    
+    /* 检查是否有空间 */
+    if ((write_idx + 1) % shm->size == read_idx) {
+        return;  /* 缓冲区满 */
     }
     
-    // 获取端点信息
-    cap_entry_t *endpoint = &g_cap_table[endpoint_cap];
+    /* 写入数据（零拷贝） */
+    memcpy(&shm->data[write_idx], message, message_size);
     
-    // 执行域切换
-    domain_id_t target_domain = endpoint->endpoint.target_domain;
-    return domain_switch(caller, target_domain, endpoint_cap,
-                         0, request, req_size);
+    /* 更新写位置（内存屏障确保顺序） */
+    atomic_thread_fence(memory_order_release);
+    atomic_store(&shm->write_index, (write_idx + 1) % shm->size);
+    
+    /* 可选：通知接收方（通过标志位） */
+    atomic_store(&shm->data_ready, 1);
 }
-```
 
-### 异步 IPC
-
-```c
-// 异步 IPC 调用
-hic_status_t ipc_call_async(domain_id_t caller, cap_id_t endpoint_cap,
-                            void *request, size_t req_size,
-                            ipc_callback_t callback) {
-    // 验证端点能力
-    if (!cap_check_access(caller, endpoint_cap, CAP_IPC_CALL)) {
-        return HIC_ERROR_PERMISSION;
+/* 接收方：从共享内存读取数据 */
+void receiver_communicate(shmem_region_t *shm) {
+    /* 检查是否有数据（无锁） */
+    while (atomic_load(&shm->data_ready) == 0) {
+        /* 等待或执行其他任务 */
+        cpu_relax();
     }
     
-    // 创建异步IPC 请求
-    ipc_async_req_t *req = allocate_ipc_request();
-    req->caller = caller;
-    req->endpoint_cap = endpoint_cap;
-    req->request = request;
-    req->req_size = req_size;
-    req->callback = callback;
+    /* 读取数据（零拷贝） */
+    u32 read_idx = atomic_load(&shm->read_index);
+    process_message(&shm->data[read_idx]);
     
-    // 加入异步队列
-    enqueue_async_request(req);
-    
-    return HIC_SUCCESS;
+    /* 更新读位置 */
+    atomic_thread_fence(memory_order_release);
+    atomic_store(&shm->read_index, (read_idx + 1) % shm->size);
+    atomic_store(&shm->data_ready, 0);
 }
 ```
 
-## 端点管理
+**关键点**：
+- 所有数据交换在用户态完成
+- 无锁设计避免内核调度
+- 内存屏障确保数据一致性
 
-### 创建端点
+## 精简版 IPC 原语
+
+HIC 只保留两个核心原语：
+
+### 1. 能力调用（domain_switch）
+
+用于服务向 Core-0 请求能力操作：
 
 ```c
-// 创建 IPC 端点
-hic_status_t ipc_create_endpoint(domain_id_t owner, cap_id_t *out) {
-    // 创建端点能力
-    return cap_create_endpoint(owner, owner, out);
-}
-
-// 绑定端点到服务
-hic_status_t ipc_bind_endpoint(cap_id_t endpoint, domain_id_t service) {
-    cap_entry_t *endpoint = &g_cap_table[endpoint];
-    
-    // 设置目标域
-    endpoint->endpoint.target_domain = service;
-    
-    return HIC能力: 按照这种极简的格式创建剩余的文档（快速完成）。
+/* 系统调用号：SYSCALL_IPC_CALL */
+hic_status_t syscall_ipc_call(ipc_call_params_t *params);
 ```
 
-## 共享内存 IPC
+这本质上是一种系统调用，仅用于能力管理，而非数据通信。
 
-### 共享内存
+### 2. 共享内存映射（shmem_map）
+
+用于建立通信通道的初始化步骤：
 
 ```c
-// 创建共享内存
-hic_status_t ipc_create_shared_memory(domain_id_t d1, domain_id_t d2,
-                                        size_t size, cap_id_t *out1, cap_id_t *out2) {
-    // 分配共享内存
-    phys_addr_t shm_addr;
-    hic_status_t status = pmm_alloc_frames(HIC_DOMAIN_CORE,
-                                           (size + PAGE_SIZE - 1) / PAGE_SIZE,
-                                           PAGE_FRAME_SHARED,
-                                           &shm_addr);
-    
-    if (status != HIC_SUCCESS) {
-        return status;
-    }
-    
-    // 为两个域创建共享内存能力
-    status = cap_create_memory(d1, shm_addr, size, CAP_READ | CAP_WRITE, out1);
-    if (status != HIC_SUCCESS) {
-        pmm_free_frames(shm_addr, (size + PAGE_SIZE - 1) / PAGE_SIZE);
-        return status;
-    }
-    
-    return cap_create_memory(d2, shm_addr, size, CAP_READ | CAP_WRITE, out2);
-}
+/* 系统调用号：SYSCALL_SHMEM_MAP */
+hic_status_t shmem_map(domain_id_t from, domain_id_t to, cap_id_t cap,
+                        cap_rights_t rights, cap_handle_t *out_handle);
 ```
 
-## 消息传递
+## 与传统 IPC 的对比
 
-### 消息格式
+| 特性 | 传统 IPC | HIC 通信模型 |
+|------|----------|--------------|
+| 数据拷贝 | 多次（用户态→内核态→用户态） | 零拷贝 |
+| 内核介入 | 每次通信 | 仅初始化时 |
+| 同步机制 | 内核调度 | 用户态无锁 |
+| 权限检查 | 每次通信 | 一次建立，永久有效 |
+| 性能 | 微秒级 | 纳秒级 |
+| 复杂度 | 高（消息队列、管道、socket） | 低（共享内存 + 能力） |
+
+## 为什么 HIC 可以做到 IPC 近乎不存在？
+
+因为 HIC 的架构从根本上改变了通信的性质：
+
+1. **同特权级运行**：Privileged-1 服务之间、服务与 Core-0 之间都在 Ring 0，无需特权级切换即可共享内存。
+
+2. **物理隔离**：服务拥有独立物理内存，但可以通过能力授权共享特定区域，既保证了隔离，又实现了零拷贝通信。
+
+3. **无锁设计**：整个系统无锁，通信通过无锁队列完成，无需内核调度介入。
+
+4. **能力系统**：通信权限在共享内存建立时就已经确定，后续访问无需再次检查。
+
+## 共享内存能力接口
+
+### 分配共享内存
 
 ```c
-// IPC 消息头
-typedef struct ipc_msg_header {
-    u32 msg_id;           // 消息ID
-    u32 msg_type;         // 消息类型
-    u32 payload_size;     // 载荷大小
-    u32 flags;            // 标志
-} ipc_msg_header_t;
-
-// 消息
-typedef struct ipc_msg {
-    ipc_msg_header_t header;
-    u8                payload[];
-} ipc_msg_t;
+/**
+ * @brief 分配共享内存区域（机制层）
+ */
+hic_status_t shmem_alloc(domain_id_t owner, size_t size, u32 flags,
+                          cap_id_t *out_cap, cap_handle_t *out_handle);
 ```
 
-## 性能优化
-
-### 快速 IPC 路径
+### 映射共享内存
 
 ```c
-// 快速IPC（共享内存）
-hic_status_t fast_ipc_call(cap_id_t endpoint_cap, void *request, 
-                            void *response) {
-    // 直接访问共享内存，无需拷贝
-    ipc_shm_t *shm = get_shared_memory(endpoint_cap);
-    
-    // 写入请求
-    memcpy(shm->request_buffer, request, shm->request_size);
-    
-    // 通知接收者
-    notify_recipient(shm->recipient);
-    
-    // 等待响应
-    wait_for_response(shm);
-    
-    // 读取响应
-    memcpy(response, shm->response_buffer, shm->response_size);
-    
-    return HIC_SUCCESS;
-}
+/**
+ * @brief 映射共享内存到目标域（机制层）
+ */
+hic_status_t shmem_map(domain_id_t from, domain_id_t to, cap_id_t cap,
+                        cap_rights_t rights, cap_handle_t *out_handle);
+```
+
+### 解除映射
+
+```c
+/**
+ * @brief 解除共享内存映射（机制层）
+ */
+hic_status_t shmem_unmap(domain_id_t domain, cap_handle_t handle);
+```
+
+### 获取信息
+
+```c
+/**
+ * @brief 获取共享内存信息
+ */
+hic_status_t shmem_get_info(cap_id_t cap, shmem_region_t *info);
 ```
 
 ## 最佳实践
 
-1. **批量操作**: 使用批量IPC减少域切换
-2. **共享内存**: 大数据传输使用共享内存
-3. **错误处理**: 正确处理所有错误情况
-4. **资源清理**: 及时释放IPC资源
+1. **一次建立，永久使用**：初始化时建立通信通道，运行时零开销
+2. **权限衰减原则**：派生权限必须是原始权限的子集
+3. **无锁设计**：使用原子操作和内存屏障，避免锁竞争
+4. **批量传输**：共享内存天然支持批量数据传输
 
 ## 相关文档
 
-- [域切换](./08-Core0.md) - 域切换机制
-- [能力系统](./11-CapabilitySystem.md) - 能力系统
-- [异常处理](./33-ExceptionHandling.md) - 异常处理
+- [能力系统](./11-CapabilitySystem.md) - 能力系统详解
+- [域切换](./08-Core0.md) - Core-0 域切换机制
+- [安全机制](./13-SecurityMechanisms.md) - 安全机制
 
 ---
 
-*最后更新: 202-06-14*
+*最后更新: 2026-03-16*

@@ -68,6 +68,7 @@ typedef u32 hic_status_t;
 #define HIC_ERROR_INVALID_STATE  13
 #define HIC_ERROR_NO_RESOURCE    14
 #define HIC_ERROR_ALREADY_EXISTS 15
+#define HIC_ERROR_BUFFER_TOO_SMALL 16
 
 /* 能力类型 */
 typedef u32 cap_id_t;

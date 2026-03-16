@@ -81,12 +81,13 @@ typedef struct memory_layout_entry {
 #define MEM_LAYOUT_FLAG_SHARED  (1 << 2)
 } memory_layout_entry_t;
 
-/* 中断路由表项 */
+/* 中断路由表项（构建时静态配置） */
 typedef struct interrupt_route {
-    u32           irq_vector;
-    domain_id_t   target_domain;
-    u64           handler_address;  /* 服务内的处理函数地址 */
-    u32           flags;
+    u32           irq_vector;       /* 中断向量号 */
+    domain_id_t   target_domain;    /* 目标服务域（构建时绑定） */
+    u64           handler_address;  /* 服务入口点，直接跳转 */
+    cap_handle_t  endpoint_cap;     /* 能力句柄，快速验证 */
+    u32           flags;            /* 触发类型标志 */
 #define IRQ_FLAG_EDGE   (1 << 0)
 #define IRQ_FLAG_LEVEL  (1 << 1)
 #define IRQ_FLAG_SHARED (1 << 2)

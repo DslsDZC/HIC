@@ -196,6 +196,76 @@ void audit_log_event(audit_event_type_t type, domain_id_t domain,
 u64 audit_get_entry_count(void);
 u64 audit_get_buffer_usage(void);
 
+/* ==================== 审计查询机制（机制层） ==================== */
+
+/* 审计查询过滤器 */
+typedef struct audit_query_filter {
+    domain_id_t domain;           /* 按域过滤（DOMAIN_ID_INVALID 表示不过滤） */
+    audit_event_type_t type;      /* 按事件类型过滤 */
+    u64 start_time;               /* 起始时间戳（0 表示不过滤） */
+    u64 end_time;                 /* 结束时间戳（0 表示不过滤） */
+    u32 max_results;              /* 最大返回数量 */
+    u32 offset;                   /* 结果偏移（分页） */
+} audit_query_filter_t;
+
+/* 审计查询结果 */
+typedef struct audit_query_result {
+    u32 count;                    /* 返回的条目数 */
+    u32 total_matches;            /* 总匹配数 */
+    bool has_more;                /* 是否还有更多结果 */
+    audit_entry_t entries[];      /* 条目数组（柔性数组） */
+} audit_query_result_t;
+
+/**
+ * 查询审计日志（机制层）
+ * 
+ * @param filter 查询过滤器
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @param out_size 实际写入大小
+ * @return 状态码
+ */
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          void *buffer, size_t buffer_size, size_t *out_size);
+
+/**
+ * 按域查询审计日志（便捷接口）
+ * 
+ * @param domain 域ID
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @param out_count 返回条目数
+ * @return 状态码
+ */
+hic_status_t audit_query_by_domain(domain_id_t domain,
+                                    audit_entry_t *buffer, 
+                                    u32 buffer_count,
+                                    u32 *out_count);
+
+/**
+ * 按事件类型查询审计日志
+ * 
+ * @param type 事件类型
+ * @param buffer 输出缓冲区
+ * @param buffer_count 缓冲区能容纳的条目数
+ * @param out_count 返回条目数
+ * @return 状态码
+ */
+hic_status_t audit_query_by_type(audit_event_type_t type,
+                                  audit_entry_t *buffer,
+                                  u32 buffer_count,
+                                  u32 *out_count);
+
+/**
+ * 获取最新N条审计日志
+ * 
+ * @param buffer 输出缓冲区
+ * @param count 请求条目数
+ * @param out_count 实际返回条目数
+ * @return 状态码
+ */
+hic_status_t audit_query_latest(audit_entry_t *buffer, u32 count, u32 *out_count);
+
 /* 内存安全检测函数 */
 void audit_check_null_pointer(void* ptr, const char* context);
 void audit_check_buffer_overflow(void* ptr, size_t size, size_t max_size, const char* context);

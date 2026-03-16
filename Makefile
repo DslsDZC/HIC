@@ -93,6 +93,12 @@ img: bootloader kernel privileged-services privileged-modules
 	@mdir -i $(OUTPUT_DIR)/hic-uefi-disk.img ::modules
 	@echo "磁盘镜像创建完成: $(OUTPUT_DIR)/hic-uefi-disk.img"
 
+# 创建 QCOW2 磁盘镜像（更好的 FAT32 支持）
+qcow2: img
+	@echo "转换磁盘镜像为 QCOW2 格式..."
+	@qemu-img convert -f raw -O qcow2 $(OUTPUT_DIR)/hic-uefi-disk.img $(OUTPUT_DIR)/hic-uefi-disk.qcow2
+	@echo "QCOW2 镜像创建完成: $(OUTPUT_DIR)/hic-uefi-disk.qcow2"
+
 # 清理
 clean: clean-debug clean-iso
 	@echo "清理构建文件"
@@ -274,7 +280,7 @@ run-serial:
 	@timeout 15 qemu-system-x86_64 \
 		-nographic \
 		-serial mon:stdio \
-		-drive if=virtio,file=output/hic-uefi-disk.img,format=raw \
+		-drive if=ide,file=output/hic-uefi-disk.img,format=raw \
 		-m $(QEMU_MEM) \
 		-drive if=pflash,readonly=on,file=$(QEMU_OVMF_CODE) \
 		2>&1 | tail -100 || true
@@ -368,7 +374,7 @@ deps-arch:
 	@sudo pacman -S --needed base-devel git mingw-w64-gcc gnu-efi ncurses gtk3
 
 # 使用 GDB 调试运行（复用现有的 qemu 和 gdb 目标）
-img-run: img
+img-run: qcow2
 	@killall -9 qemu-system-x86_64 2>/dev/null || true
 	@sleep 1
 	@echo " 准备 OVMF 变量文件 "
@@ -376,7 +382,7 @@ img-run: img
 	@qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(QEMU_OVMF_CODE) \
 		-drive if=pflash,format=raw,file=OVMF_VARS.4m.fd \
-		-drive format=raw,file=output/hic-uefi-disk.img \
+		-drive if=ide,format=qcow2,file=output/hic-uefi-disk.qcow2 \
 		-m $(QEMU_MEM) \
 		-nographic \
 		-s -S \

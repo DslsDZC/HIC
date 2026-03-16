@@ -1,0 +1,20 @@
+[service]
+name = device_manager
+display_name = 设备管理服务
+description = 硬件设备探测与管理服务，提供 PCI 和 ACPI 支持
+version = 1.0.0
+author = DslsDZC
+
+[build]
+static = true
+priority = 3
+autostart = true
+critical = false
+
+[dependencies]
+requires = verifier
+
+[capabilities]
+pci_access = true
+acpi_access = true
+hardware_probe = true

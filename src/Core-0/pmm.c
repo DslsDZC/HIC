@@ -28,6 +28,9 @@ static mem_region_t *mem_regions = NULL;
 static u64 g_total_memory = 0;
 static u64 g_used_memory = 0;
 
+/* 递归保护标志（避免在映射时递归分配） */
+static int in_mapping = 0;
+
 /* 位图操作 */
 static inline void set_bit(u8 *bitmap, u64 index)
 {
@@ -276,7 +279,11 @@ hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
         console_puts("[PMM] Invariant violation detected!\n");
     }
     
-    *out = start * PAGE_SIZE;
+    phys_addr_t phys_addr = start * PAGE_SIZE;
+    
+    /* 内存已在 pagetable_init 中预先映射，无需再映射 */
+    
+    *out = phys_addr;
     
     return HIC_SUCCESS;
 }

@@ -13,30 +13,30 @@ HIC通过多层安全机制提供强安全隔离和防护。
 ### 防御深度
 
 ```
-┌─────────────────────────────────────────────────┐
-│                 应用层攻击面                    │
-└─────────────────────────────────────────────────┘
+┌────────────────────────┐
+│                 应用层攻击面                   │
+└────────────────────────┘
                     ↓
-┌─────────────────────────────────────────────────┐
+┌─────────────────────────┐
 │            能力系统验证 (逻辑层)                 │
 │  - 能力验证                                      │
 │  - 权限检查                                      │
 │  - 域隔离                                        │
-└─────────────────────────────────────────────────┘
+└─────────────────────────┘
                     ↓
-┌─────────────────────────────────────────────────┐
+┌─────────────────────────┐
 │            MMU硬件隔离 (物理层)                  │
 │  - 页表保护                                      │
 │  - 特权级分离                                    │
 │  - 内存隔离                                      │
-└─────────────────────────────────────────────────┘
+└─────────────────────────┘
                     ↓
-┌─────────────────────────────────────────────────┐
+┌─────────────────────────┐
 │            形式化验证 (数学层)                   │
 │  - 不变式证明                                    │
 │  - 类型安全                                      │
 │  - 安全属性验证                                  │
-└─────────────────────────────────────────────────┘
+└─────────────────────────┘
 ```
 
 ### 安全边界
@@ -296,42 +296,53 @@ bool check_resource_quota(domain_id_t domain_id, resource_type_t type, u64 amoun
 }
 ```
 
-### 流量控制
+### 流量控制（共享内存端点）
+
+HIC 使用共享内存通信模型，流量控制通过共享内存端点的信用机制实现：
 
 ```c
 /**
- * @brief IPC流量控制
+ * @brief 共享内存端点流量控制
  */
-typedef struct {
-    u64 calls_per_second;
-    u64 max_message_size;
-    u64 max_pending_messages;
-    u64 current_calls;
-    u64 current_messages;
-    u64 last_second;
-} ipc_quota_t;
+typedef struct flow_control_state {
+    flow_control_policy_t policy;    /* 控制策略 */
+    
+    /* 信用机制 */
+    u32 credits_available;            /* 可用信用 */
+    u32 credits_total;                /* 总信用 */
+    u32 credit_refill_rate;           /* 信用补充速率（个/秒） */
+    
+    /* 队列背压 */
+    u32 queue_depth;                  /* 当前队列深度 */
+    u32 queue_high_watermark;         /* 高水位线（触发背压） */
+    u32 queue_low_watermark;          /* 低水位线（解除背压） */
+} flow_control_state_t;
 
 /**
- * @brief 检查IPC配额
+ * @brief 检查流量控制
  */
-status_t check_ipc_quota(domain_id_t domain_id)
-{
-    ipc_quota_t *quota = &g_domains[domain_id].ipc_quota;
-    u64 current_time = get_timestamp();
-
-    /* 每秒重置计数器 */
-    if (current_time - quota->last_second >= 1000) {
-        quota->current_calls = 0;
-        quota->last_second = current_time;
+flow_control_action_t flow_control_check(service_endpoint_t *endpoint,
+                                          domain_id_t sender_domain) {
+    flow_control_state_t *fc = &endpoint->flow;
+    
+    switch (fc->policy) {
+    case FLOW_CONTROL_CREDIT:
+        /* 检查信用是否足够 */
+        if (fc->credits_available > 0) {
+            return FLOW_ACTION_ACCEPT;
+        }
+        return FLOW_ACTION_BLOCK;
+        
+    case FLOW_CONTROL_BACKPRESSURE:
+        /* 检查队列深度 */
+        if (fc->queue_depth >= fc->queue_high_watermark) {
+            return FLOW_ACTION_THROTTLE;
+        }
+        return FLOW_ACTION_ACCEPT;
+        
+    default:
+        return FLOW_ACTION_ACCEPT;
     }
-
-    /* 检查调用频率 */
-    if (quota->current_calls >= quota->calls_per_second) {
-        return HIC_ERROR_RATE_LIMIT;
-    }
-
-    quota->current_calls++;
-    return HIC_SUCCESS;
 }
 ```
 
@@ -374,7 +385,7 @@ bool detect_cap_verification_attack(domain_id_t domain_id)
 /**
  * @brief 审计日志条目
  */
-typedef struct {
+typedef struct audit_entry {
     u64 timestamp;         /* 时间戳 */
     domain_id_t domain_id;  /* 域ID */
     thread_id_t thread_id;  /* 线程ID */
@@ -401,6 +412,36 @@ void audit_log(domain_id_t domain_id, thread_id_t thread_id,
     /* 原子推进日志指针 */
     atomic_fetch_add(&g_audit_log.write_index, 1);
 }
+```
+
+### 审计查询
+
+```c
+/**
+ * @brief 审计查询过滤器
+ */
+typedef struct audit_query_filter {
+    domain_id_t         domain;         /* 域ID（DOMAIN_ID_ANY 表示任意） */
+    audit_event_type_t  event_type;     /* 事件类型（0 表示任意） */
+    u64                 start_time;     /* 起始时间戳 */
+    u64                 end_time;       /* 结束时间戳 */
+    u32                 offset;         /* 分页偏移 */
+    u32                 max_results;    /* 最大返回数量 */
+} audit_query_filter_t;
+
+/**
+ * @brief 查询审计日志
+ */
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          audit_entry_t *buffer, u32 buffer_size,
+                          u32 *out_count);
+
+/**
+ * @brief 按域查询审计日志
+ */
+hic_status_t audit_query_by_domain(domain_id_t domain,
+                                     audit_entry_t *buffer,
+                                     u32 buffer_size, u32 *out_count);
 ```
 
 ### 安全事件响应

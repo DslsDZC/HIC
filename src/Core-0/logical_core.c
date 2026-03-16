@@ -23,6 +23,7 @@
 #include "hardware_probe.h"
 #include "thread.h"
 #include "domain.h"
+#include "monitor.h"
 
 /* ==================== 全局数据结构定义 ==================== */
 
@@ -48,6 +49,14 @@ static logical_core_borrow_info_t g_borrow_info[MAX_LOGICAL_CORES];
 /* 迁移配置 */
 static migration_config_t g_migration_config = DEFAULT_MIGRATION_CONFIG;
 
+
+/* ==================== 性能优化索引 ==================== */
+
+/* 缓存的最小负载物理核心（O(1)分配） */
+static physical_core_id_t g_cached_min_load_core = 0;
+
+/* 逻辑核心在物理核心列表中的索引（O(1)迁移） */
+static u8 g_lcore_index_in_pcore[MAX_LOGICAL_CORES];
 /* ==================== 辅助函数 ==================== */
 
 /**
@@ -249,14 +258,23 @@ cap_handle_t logical_core_allocate_to_domain(logical_core_id_t logical_core_id,
         }
     }
     
-    /* 如果没有亲和性要求或没有匹配的，选择负载最轻的物理核心 */
+    /* 如果没有亲和性要求或没有匹配的，使用缓存的最小负载物理核心 */
     if (physical_core_id == INVALID_PHYSICAL_CORE) {
-        u32 min_load = 0xFFFFFFFF;
-        for (physical_core_id_t i = 0; i < MAX_PHYSICAL_CORES; i++) {
-            if (g_physical_core_load[i] < min_load) {
-                min_load = g_physical_core_load[i];
-                physical_core_id = i;
+        /* O(1) 快速路径：使用缓存的最小负载核心 */
+        physical_core_id = g_cached_min_load_core;
+        
+        /* 验证缓存是否有效（每16次分配更新一次缓存） */
+        static u32 cache_check_counter = 0;
+        if (++cache_check_counter >= 16) {
+            cache_check_counter = 0;
+            u32 min_load = g_physical_core_load[physical_core_id];
+            for (physical_core_id_t i = 0; i < MAX_PHYSICAL_CORES; i++) {
+                if (g_physical_core_load[i] < min_load) {
+                    min_load = g_physical_core_load[i];
+                    g_cached_min_load_core = i;
+                }
             }
+            physical_core_id = g_cached_min_load_core;
         }
     }
     
@@ -264,11 +282,12 @@ cap_handle_t logical_core_allocate_to_domain(logical_core_id_t logical_core_id,
     core->mapping.physical_core_id = physical_core_id;
     g_logical_to_physical_map[logical_core_id] = physical_core_id;
     
-    /* 添加到物理核心的负载列表 */
+    /* 添加到物理核心的负载列表（O(1)，同时更新索引） */
     if (physical_core_id != INVALID_PHYSICAL_CORE) {
         u32 load = g_physical_core_load[physical_core_id];
         if (load < 16) {
             g_physical_to_logical_map[physical_core_id][load] = logical_core_id;
+            g_lcore_index_in_pcore[logical_core_id] = (u8)load;  /* 记录索引 */
             g_physical_core_load[physical_core_id]++;
         }
     }
@@ -337,22 +356,24 @@ bool logical_core_perform_migration(logical_core_id_t logical_core_id,
     /* 更新状态为迁移中 */
     core->state = LOGICAL_CORE_STATE_MIGRATING;
     
-    /* 从旧物理核心移除 */
+    /* 从旧物理核心移除（O(1)：使用索引直接定位） */
     if (old_physical_core_id != INVALID_PHYSICAL_CORE) {
-        for (u32 i = 0; i < g_physical_core_load[old_physical_core_id]; i++) {
-            if (g_physical_to_logical_map[old_physical_core_id][i] == logical_core_id) {
-                /* 移动最后一个元素到当前位置 */
-                g_physical_to_logical_map[old_physical_core_id][i] = 
-                    g_physical_to_logical_map[old_physical_core_id][g_physical_core_load[old_physical_core_id] - 1];
-                g_physical_core_load[old_physical_core_id]--;
-                break;
-            }
+        u8 idx = g_lcore_index_in_pcore[logical_core_id];
+        u32 load = g_physical_core_load[old_physical_core_id];
+        
+        if (idx < load) {
+            /* 移动最后一个元素到当前位置 */
+            logical_core_id_t last_lcore = g_physical_to_logical_map[old_physical_core_id][load - 1];
+            g_physical_to_logical_map[old_physical_core_id][idx] = last_lcore;
+            g_lcore_index_in_pcore[last_lcore] = idx;  /* 更新被移动元素的索引 */
+            g_physical_core_load[old_physical_core_id]--;
         }
     }
     
-    /* 添加到新物理核心 */
+    /* 添加到新物理核心（O(1)） */
     u32 new_load = g_physical_core_load[target_physical_core_id];
     g_physical_to_logical_map[target_physical_core_id][new_load] = logical_core_id;
+    g_lcore_index_in_pcore[logical_core_id] = (u8)new_load;  /* 记录新索引 */
     g_physical_core_load[target_physical_core_id]++;
     
     /* 更新映射表 */
@@ -535,17 +556,18 @@ hic_status_t hic_logical_core_release(domain_id_t domain_id,
             return HIC_ERROR_BUSY;
         }
         
-        /* 从物理核心负载列表中移除 */
+        /* 从物理核心负载列表中移除（O(1)：使用索引直接定位） */
         physical_core_id_t physical_core_id = core->mapping.physical_core_id;
         if (physical_core_id != INVALID_PHYSICAL_CORE) {
-            for (u32 j = 0; j < g_physical_core_load[physical_core_id]; j++) {
-                if (g_physical_to_logical_map[physical_core_id][j] == logical_core_id) {
-                    /* 移动最后一个元素到当前位置 */
-                    g_physical_to_logical_map[physical_core_id][j] = 
-                        g_physical_to_logical_map[physical_core_id][g_physical_core_load[physical_core_id] - 1];
-                    g_physical_core_load[physical_core_id]--;
-                    break;
-                }
+            u8 idx = g_lcore_index_in_pcore[logical_core_id];
+            u32 load = g_physical_core_load[physical_core_id];
+            
+            if (idx < load) {
+                /* 移动最后一个元素到当前位置 */
+                logical_core_id_t last_lcore = g_physical_to_logical_map[physical_core_id][load - 1];
+                g_physical_to_logical_map[physical_core_id][idx] = last_lcore;
+                g_lcore_index_in_pcore[last_lcore] = idx;  /* 更新被移动元素的索引 */
+                g_physical_core_load[physical_core_id]--;
             }
         }
         
@@ -607,20 +629,17 @@ hic_status_t hic_thread_create_on_core(cap_handle_t logical_core_handle,
         return HIC_ERROR_BUSY;
     }
     
-    /* 创建线程 */
+    /* 创建绑定到逻辑核心的线程 */
     thread_id_t thread_id;
-    hic_status_t status = thread_create(domain_id, entry_point, priority, &thread_id);
+    hic_status_t status = thread_create_bound(domain_id, logical_core_id, 
+                                              entry_point, priority, &thread_id);
     if (status != HIC_SUCCESS) {
         return status;
     }
     
-    /* 绑定线程到逻辑核心 */
+    /* 更新逻辑核心状态（thread_create_bound 已设置 thread.logical_core_id） */
     core->running_thread = thread_id;
     core->state = LOGICAL_CORE_STATE_ACTIVE;
-    
-    /* 设置线程的亲和性（通过线程扩展字段） */
-    thread_t *thread = &g_threads[thread_id];
-    /* 这里可以添加线程到逻辑核心的绑定信息 */
     
     *out_thread_id = thread_id;
     return HIC_SUCCESS;
@@ -957,7 +976,6 @@ void logical_core_update_quotas(void) {
                     core->running_thread = INVALID_THREAD;
                     
                     /* 通知监控服务 */
-                    #include "monitor.h"
                     monitor_event_t event;
                     event.type = MONITOR_EVENT_RESOURCE_EXHAUSTED;
                     event.domain = core->owner_domain;

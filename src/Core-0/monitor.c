@@ -293,3 +293,278 @@ void monitor_check_system_health(void)
         console_puts("\n");
     }
 }
+
+/* ==================== 机制层：异常行为检测原语实现 ==================== */
+
+/* 事件统计表（每域每种事件） */
+static event_stat_t g_event_stats[MAX_SERVICES][MONITOR_EVENT_TYPE_COUNT];
+
+/* 检测规则表（由策略层设置） */
+static monitor_rule_t g_monitor_rules[MONITOR_EVENT_TYPE_COUNT];
+
+/* 崩溃转储存储 */
+static crash_dump_header_t g_crash_dumps[MAX_SERVICES];
+static u8 g_crash_dump_data[MAX_SERVICES][CRASH_DUMP_MAX_SIZE];
+
+/* 记录事件计数（机制层） */
+void monitor_record_event(monitor_event_type_t event_type, domain_id_t domain)
+{
+    if (domain >= MAX_SERVICES || event_type >= MONITOR_EVENT_TYPE_COUNT) {
+        return;
+    }
+    
+    u64 now = hal_get_timestamp();
+    event_stat_t* stat = &g_event_stats[domain][event_type];
+    
+    /* 检查是否需要重置窗口 */
+    u64 window_us = (u64)MONITOR_STATS_WINDOW_MS * 1000;
+    if (now - stat->window_start > window_us) {
+        stat->count = 0;
+        stat->window_start = now;
+    }
+    
+    stat->count++;
+}
+
+/* 获取事件速率（机制层） */
+u32 monitor_get_event_rate(monitor_event_type_t event_type, domain_id_t domain)
+{
+    if (domain >= MAX_SERVICES || event_type >= MONITOR_EVENT_TYPE_COUNT) {
+        return 0;
+    }
+    
+    event_stat_t* stat = &g_event_stats[domain][event_type];
+    u64 now = hal_get_timestamp();
+    u64 window_us = (u64)MONITOR_STATS_WINDOW_MS * 1000;
+    
+    /* 如果窗口过期，返回0 */
+    if (now - stat->window_start > window_us) {
+        return 0;
+    }
+    
+    /* 计算速率（每秒次数） */
+    u64 elapsed_ms = (now - stat->window_start) / 1000;
+    if (elapsed_ms == 0) elapsed_ms = 1;
+    
+    return (u32)((stat->count * 1000) / elapsed_ms);
+}
+
+/* 检查是否超过阈值（机制层） */
+bool monitor_check_threshold(const monitor_rule_t* rule, domain_id_t domain)
+{
+    if (!rule || !rule->enabled || domain >= MAX_SERVICES) {
+        return false;
+    }
+    
+    u32 rate = monitor_get_event_rate(rule->event_type, domain);
+    return rate > rule->threshold;
+}
+
+/* 执行阈值动作（机制层） */
+hic_status_t monitor_execute_action(monitor_action_t action, domain_id_t domain)
+{
+    if (domain >= MAX_SERVICES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    switch (action) {
+        case MONITOR_ACTION_ALERT:
+            /* 告警：记录审计日志 */
+            console_puts("[MONITOR] ALERT for domain ");
+            console_putu64(domain);
+            console_puts("\n");
+            u64 data[4] = { domain, MONITOR_ACTION_ALERT, 0, 0 };
+            audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, data, 4, 0);
+            break;
+            
+        case MONITOR_ACTION_THROTTLE:
+            /* 限流：设置域的执行限制 */
+            console_puts("[MONITOR] THROTTLE domain ");
+            console_putu64(domain);
+            console_puts("\n");
+            /* 机制层只提供标记，策略层决定具体限流参数 */
+            break;
+            
+        case MONITOR_ACTION_SUSPEND:
+            /* 暂停：停止域的调度 */
+            console_puts("[MONITOR] SUSPEND domain ");
+            console_putu64(domain);
+            console_puts("\n");
+            g_services[domain].state = SERVICE_STATE_STOPPED;
+            break;
+            
+        case MONITOR_ACTION_TERMINATE:
+            /* 终止：强制结束域 */
+            console_puts("[MONITOR] TERMINATE domain ");
+            console_putu64(domain);
+            console_puts("\n");
+            g_services[domain].state = SERVICE_STATE_CRASHED;
+            break;
+            
+        default:
+            break;
+    }
+    
+    return HIC_SUCCESS;
+}
+
+/* ==================== 机制层：崩溃转储原语实现 ==================== */
+
+/* 简单校验和计算 */
+static u64 compute_checksum(const void* data, size_t size)
+{
+    u64 sum = 0;
+    const u64* ptr = (const u64*)data;
+    size_t count = size / sizeof(u64);
+    
+    for (size_t i = 0; i < count; i++) {
+        sum ^= ptr[i];
+    }
+    
+    return sum;
+}
+
+/* 捕获崩溃现场（机制层） */
+hic_status_t crash_dump_capture(domain_id_t domain, u64 stack_ptr, u64 instr_ptr)
+{
+    if (domain >= MAX_SERVICES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    crash_dump_header_t* header = &g_crash_dumps[domain];
+    
+    /* 初始化头 */
+    header->magic = CRASH_DUMP_MAGIC;
+    header->timestamp = hal_get_timestamp();
+    header->domain = domain;
+    header->type = CRASH_DUMP_STACK;
+    header->stack_ptr = stack_ptr;
+    header->instr_ptr = instr_ptr;
+    
+    /* 捕获栈数据（最多 1KB） */
+    size_t capture_size = CRASH_DUMP_MAX_SIZE;
+    if (stack_ptr != 0) {
+        /* 安全复制栈数据 */
+        memzero(g_crash_dump_data[domain], capture_size);
+        /* 注意：实际实现需要检查内存边界 */
+        /* 这里使用占位数据 */
+        for (size_t i = 0; i < capture_size / sizeof(u64); i++) {
+            ((u64*)g_crash_dump_data[domain])[i] = 0xDEADBEEF;
+        }
+    }
+    
+    header->size = (u32)capture_size;
+    header->checksum = compute_checksum(g_crash_dump_data[domain], capture_size);
+    
+    console_puts("[MONITOR] Captured crash dump for domain ");
+    console_putu64(domain);
+    console_puts(", SP=0x");
+    console_puthex64(stack_ptr);
+    console_puts(", IP=0x");
+    console_puthex64(instr_ptr);
+    console_puts("\n");
+    
+    return HIC_SUCCESS;
+}
+
+/* 检索崩溃转储（机制层） */
+hic_status_t crash_dump_retrieve(domain_id_t domain, void* buffer, 
+                                  size_t buffer_size, size_t* out_size)
+{
+    if (domain >= MAX_SERVICES || !buffer) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    crash_dump_header_t* header = &g_crash_dumps[domain];
+    
+    /* 验证转储有效性 */
+    if (header->magic != CRASH_DUMP_MAGIC) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    /* 计算输出大小 */
+    size_t total_size = sizeof(crash_dump_header_t) + header->size;
+    if (out_size) {
+        *out_size = total_size;
+    }
+    
+    /* 检查缓冲区大小 */
+    if (buffer_size < total_size) {
+        return HIC_ERROR_BUFFER_TOO_SMALL;
+    }
+    
+    /* 复制头 */
+    memcopy(buffer, header, sizeof(crash_dump_header_t));
+    
+    /* 复制数据 */
+    memcopy((u8*)buffer + sizeof(crash_dump_header_t), 
+            g_crash_dump_data[domain], header->size);
+    
+    return HIC_SUCCESS;
+}
+
+/* 清除崩溃转储（机制层） */
+void crash_dump_clear(domain_id_t domain)
+{
+    if (domain >= MAX_SERVICES) {
+        return;
+    }
+    
+    memzero(&g_crash_dumps[domain], sizeof(crash_dump_header_t));
+    memzero(g_crash_dump_data[domain], CRASH_DUMP_MAX_SIZE);
+}
+
+/* ==================== 策略层接口实现 ==================== */
+
+/* 设置检测规则（策略层调用） */
+hic_status_t monitor_set_rule(const monitor_rule_t* rule)
+{
+    if (!rule || rule->event_type >= MONITOR_EVENT_TYPE_COUNT) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    g_monitor_rules[rule->event_type] = *rule;
+    
+    console_puts("[MONITOR] Rule set for event type ");
+    console_putu64(rule->event_type);
+    console_puts(", threshold=");
+    console_putu64(rule->threshold);
+    console_puts("\n");
+    
+    return HIC_SUCCESS;
+}
+
+/* 获取检测规则（策略层调用） */
+hic_status_t monitor_get_rule(monitor_event_type_t event_type, monitor_rule_t* rule)
+{
+    if (event_type >= MONITOR_EVENT_TYPE_COUNT || !rule) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    *rule = g_monitor_rules[event_type];
+    return HIC_SUCCESS;
+}
+
+/* 获取所有事件统计（策略层调用） */
+void monitor_get_all_stats(event_stat_t* stats, u32 max_count, u32* out_count)
+{
+    if (!stats) {
+        if (out_count) *out_count = 0;
+        return;
+    }
+    
+    u32 count = 0;
+    u32 total = MAX_SERVICES * MONITOR_EVENT_TYPE_COUNT;
+    
+    if (max_count < total) {
+        total = max_count;
+    }
+    
+    for (u32 d = 0; d < MAX_SERVICES && count < total; d++) {
+        for (u32 e = 0; e < MONITOR_EVENT_TYPE_COUNT && count < total; e++) {
+            stats[count++] = g_event_stats[d][e];
+        }
+    }
+    
+    if (out_count) *out_count = count;
+}

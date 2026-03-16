@@ -15,6 +15,30 @@
 
 #include "service.h"
 
+/* ==================== 服务入口点（必须在代码段最前面） ==================== */
+
+/**
+ * 服务入口点 - 必须放在代码段最前面
+ * 使用 section 属性确保此函数在链接时位于 .static_svc.verifier.text 的开头
+ */
+__attribute__((section(".static_svc.verifier.text"), used, noinline))
+int _verifier_entry(void)
+{
+    /* 初始化验证服务 */
+    verifier_init();
+    
+    /* 启动服务主循环 */
+    verifier_start();
+    
+    /* 服务不应返回，如果返回则进入无限循环 */
+    while (1) {
+        /* 等待被调度或终止 */
+        __asm__ volatile("hlt");
+    }
+    
+    return 0;
+}
+
 /* ==================== SHA-384 实现（内嵌） ==================== */
 
 #define ROTR64(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
@@ -226,6 +250,26 @@ int verifier_init(void)
 
 int verifier_start(void)
 {
+    /* 输出启动信息 */
+    extern void serial_print(const char *msg);
+    extern void thread_yield(void);
+    
+    serial_print("[VERIFIER] Service started\n");
+    
+    /* 主服务循环 - 等待请求 */
+    /* TODO: 实现 IPC 请求处理 */
+    int count = 0;
+    while (1) {
+        /* 让出 CPU 给其他线程 */
+        thread_yield();
+        count++;
+        
+        /* 避免无限循环太快 */
+        if (count > 1000000) {
+            count = 0;
+        }
+    }
+    
     return 0;
 }
 

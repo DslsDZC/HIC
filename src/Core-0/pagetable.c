@@ -15,6 +15,7 @@
 #include "hal.h"
 #include "hal_cr3.h"
 #include "domain_switch.h"
+#include "boot_info.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
@@ -76,7 +77,52 @@ static void free_page_table_tree(page_table_t* root, int level)
 /* 初始化页表管理器 */
 void pagetable_init(void)
 {
+    /* 获取当前页表（UEFI 页表） */
+    u64 cr3 = hal_get_cr3();
+    page_table_t *uefi_pml4 = (page_table_t *)cr3;
+    
+    console_puts("[PAGETABLE] UEFI page table at 0x");
+    console_puthex64(cr3);
+    console_puts("\n");
+    
+    /* 使用 g_boot_info 获取内存映射，预先映射所有可用物理内存 */
+    extern hic_boot_info_t *g_boot_info;
+    if (g_boot_info && g_boot_info->mem_map) {
+        console_puts("[PAGETABLE] Pre-mapping all available physical memory...\n");
+        
+        /* 遍历内存映射，为所有可用内存建立恒等映射 */
+        for (u64 i = 0; i < g_boot_info->mem_map_entry_count; i++) {
+            hic_mem_entry_t *entry = &g_boot_info->mem_map[i];
+            
+            /* 只映射可用内存（USABLE 类型）*/
+            if (entry->type == 0 && entry->length > 0) {  /* 0 = HIC_MEM_TYPE_USABLE */
+                phys_addr_t base = entry->base_address;
+                size_t size = entry->length;
+                
+                /* 建立恒等映射：虚拟地址 = 物理地址 */
+                hic_status_t status = pagetable_map(uefi_pml4, base, base, size,
+                                                    PERM_RW, MAP_TYPE_USER);
+                if (status == HIC_SUCCESS) {
+                    console_puts("[PAGETABLE] Pre-mapped 0x");
+                    console_puthex64(base);
+                    console_puts(" - 0x");
+                    console_puthex64(base + size);
+                    console_puts("\n");
+                } else {
+                    console_puts("[PAGETABLE] Failed to map 0x");
+                    console_puthex64(base);
+                    console_puts("\n");
+                }
+            }
+        }
+        
+        console_puts("[PAGETABLE] Pre-mapping complete\n");
+    }
+    
     console_puts("[PAGETABLE] Page table manager initialized\n");
+    
+    /* 保存 UEFI 页表指针供后续使用 */
+    (void)uefi_pml4;
 }
 
 /* 创建页表 */

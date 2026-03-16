@@ -1,0 +1,47 @@
+# HIC服务模块元数据文件
+
+[service]
+name = memory_service
+display_name = 内存管理服务
+version = 1.0.0
+api_version = 1.0
+uuid = a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供伙伴系统内存分配和碎片整理服务
+long = 内存管理服务实现伙伴系统分配器，管理动态服务池，提供内存碎片整理和服务迁移功能。遵循机制与策略分离原则，Core-0 保留物理页分配原语，本服务实现分配策略。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+
+[resources]
+max_memory = 131072
+max_threads = 2
+max_capabilities = 32
+cpu_quota_percent = 5
+
+[endpoints]
+memory_alloc = 1.0:memory_service_alloc
+memory_free = 1.0:memory_service_free
+memory_defrag = 1.0:memory_service_defrag
+memory_migrate = 1.0:memory_service_migrate
+memory_stats = 1.0:memory_service_get_stats
+
+[permissions]
+domain_create = false
+capability_create = false
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = true
+priority = 2
+autostart = true

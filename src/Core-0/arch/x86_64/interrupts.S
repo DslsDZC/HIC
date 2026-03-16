@@ -73,9 +73,9 @@ isr_common_stub:
     push %r14
     push %r15
 
-    /* 调用C语言中断处理函数 */
-    mov %rsp, %rdi    /* 传递栈指针作为参数 */
-    call irq_handler
+    /* 从栈中获取中断向量号（在保存的寄存器之后，偏移 15*8 = 120 字节） */
+    mov 120(%rsp), %rdi    /* 获取中断向量号 */
+    call irq_dispatch
 
     /* 恢复寄存器 */
     pop %r15
