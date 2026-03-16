@@ -19,6 +19,33 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* ==================== 服务入口点（必须在代码段最前面） ==================== */
+
+/**
+ * 服务入口点 - 必须放在代码段最前面
+ * 使用 section 属性确保此函数在链接时位于 .static_svc.fat32_service.text 的开头
+ */
+__attribute__((section(".static_svc.fat32_service.text"), used, noinline))
+int _fat32_service_entry(void)
+{
+    /* 初始化 FAT32 服务 */
+    fat32_service_init();
+    
+    /* 启动服务主循环 */
+    fat32_service_start();
+    
+    /* 服务不应返回，如果返回则进入无限循环 */
+    while (1) {
+        __asm__ volatile("hlt");
+    }
+    
+    return 0;
+}
+
+/* IDE 驱动函数（来自 ide_driver 服务） */
+extern int ide_read_sector(uint32_t lba, void *buffer);
+extern int ide_read_sectors(uint32_t lba, uint8_t count, void *buffer);
+
 /* Boot信息结构 */
 typedef struct {
     uint32_t magic;
@@ -39,6 +66,10 @@ static fat32_service_ctx_t g_fat32_ctx = {0};
 
 /* 文件句柄表 */
 static fat32_file_handle_t g_file_handles[FAT32_MAX_OPEN_FILES];
+
+/* 扇区缓冲区（用于 IDE 驱动读取） */
+static uint8_t g_sector_buffer[512];
+static uint8_t g_cluster_buffer[65536];  /* 最大簇大小 128 扇区 = 64KB */
 
 /* FAT32签名 */
 #define FAT32_SIGNATURE 0xAA55
@@ -160,8 +191,37 @@ hic_status_t fat32_service_init(void) {
 
 /* 启动FAT32服务 */
 hic_status_t fat32_service_start(void) {
+    /* 输出启动信息 */
+    extern void serial_print(const char *msg);
+    extern void thread_yield(void);
+    
+    serial_print("[FAT32] Service started\n");
+    
+    /* 初始化 FAT32 设备（使用 IDE 驱动） */
+    serial_print("[FAT32] Initializing disk via IDE driver...\n");
+    if (fat32_init_device() != HIC_SUCCESS) {
+        serial_print("[FAT32] Failed to initialize disk\n");
+        /* 继续运行，但磁盘不可用 */
+    } else {
+        serial_print("[FAT32] Disk initialized successfully\n");
+    }
+    
     /* 加载嵌入的文件系统驱动 */
     fat32_load_embedded_filesystem_drivers();
+    
+    /* 主服务循环 - 等待请求 */
+    /* TODO: 实现 IPC 请求处理 */
+    int count = 0;
+    while (1) {
+        /* 让出 CPU 给其他线程 */
+        thread_yield();
+        count++;
+        
+        /* 避免无限循环太快 */
+        if (count > 1000000) {
+            count = 0;
+        }
+    }
     
     return HIC_SUCCESS;
 }
@@ -184,26 +244,27 @@ hic_status_t fat32_service_cleanup(void) {
     return HIC_SUCCESS;
 }
 
-/* 初始化存储设备 */
-hic_status_t fat32_init_device(void *device_base, uint32_t device_size) {
+/* 初始化存储设备 - 使用 IDE 驱动 */
+hic_status_t fat32_init_device(void) {
     fat32_bpb_t *bpb;
     fat32_ext_bpb_t *ext_bpb;
     uint16_t *signature;
     
-    if (!device_base || device_size < 512) {
-        return HIC_INVALID_PARAM;
+    /* 使用 IDE 驱动读取第一个扇区 */
+    if (ide_read_sector(0, g_sector_buffer) != 0) {
+        extern void serial_print(const char *msg);
+        serial_print("[FAT32] Failed to read boot sector via IDE\n");
+        return HIC_ERROR;
     }
     
-    /* 初始化上下文 */
-    g_fat32_ctx.device_base = (uint8_t *)device_base;
-    g_fat32_ctx.device_size = device_size;
-    
-    /* 解析BPB */
-    bpb = (fat32_bpb_t *)g_fat32_ctx.device_base;
+    /* 解析 BPB */
+    bpb = (fat32_bpb_t *)g_sector_buffer;
     
     /* 验证签名 */
-    signature = (uint16_t *)(g_fat32_ctx.device_base + 510);
+    signature = (uint16_t *)(g_sector_buffer + 510);
     if (*signature != FAT32_SIGNATURE) {
+        extern void serial_print(const char *msg);
+        serial_print("[FAT32] Invalid boot sector signature\n");
         return HIC_PARSE_FAILED;
     }
     
@@ -229,28 +290,32 @@ hic_status_t fat32_init_device(void *device_base, uint32_t device_size) {
     /* 初始化空闲簇链表（用于写入） */
     g_fat32_ctx.first_free_cluster = 0;
     
+    /* 设置设备为已初始化状态 */
+    g_fat32_ctx.device_base = (uint8_t *)1;  /* 非 NULL 表示已初始化 */
+    g_fat32_ctx.device_size = total_sectors * g_fat32_ctx.bytes_per_sector;
+    
     return HIC_SUCCESS;
 }
 
-/* 读取FAT表项 */
+/* 读取FAT表项 - 使用 IDE 驱动 */
 static uint32_t get_fat_entry(uint32_t cluster) {
     uint32_t fat_offset = cluster * 4;
     uint32_t fat_sector = g_fat32_ctx.fat_start + (fat_offset / g_fat32_ctx.bytes_per_sector);
     uint32_t entry_offset = fat_offset % g_fat32_ctx.bytes_per_sector;
     
-    uint8_t *fat_sector_ptr = g_fat32_ctx.device_base + (fat_sector * g_fat32_ctx.bytes_per_sector);
-    return *(uint32_t *)(fat_sector_ptr + entry_offset) & 0x0FFFFFFF;
+    /* 使用 IDE 驱动读取 FAT 扇区 */
+    if (ide_read_sector(fat_sector, g_sector_buffer) != 0) {
+        return 0;  /* 返回 0 表示错误 */
+    }
+    
+    return *(uint32_t *)(g_sector_buffer + entry_offset) & 0x0FFFFFFF;
 }
 
-/* 写入FAT表项 */
+/* 写入FAT表项 - 暂不支持 */
 static void set_fat_entry(uint32_t cluster, uint32_t value) {
-    uint32_t fat_offset = cluster * 4;
-    uint32_t fat_sector = g_fat32_ctx.fat_start + (fat_offset / g_fat32_ctx.bytes_per_sector);
-    uint32_t entry_offset = fat_offset % g_fat32_ctx.bytes_per_sector;
-    
-    uint8_t *fat_sector_ptr = g_fat32_ctx.device_base + (fat_sector * g_fat32_ctx.bytes_per_sector);
-    uint32_t *entry = (uint32_t *)(fat_sector_ptr + entry_offset);
-    *entry = (*entry & 0xF0000000) | (value & 0x0FFFFFFF);
+    /* 写入功能暂未实现，需要 IDE 写入支持 */
+    (void)cluster;
+    (void)value;
 }
 
 /* 查找空闲簇 */
@@ -278,28 +343,28 @@ static uint32_t find_free_cluster(void) {
     return 0;  /* 没有空闲簇 */
 }
 
-/* 读取簇 */
+/* 读取簇 - 使用 IDE 驱动 */
 static int read_cluster(uint32_t cluster, void *buffer) {
     if (cluster < 2 || cluster >= g_fat32_ctx.total_clusters + 2) {
         return -1;
     }
     
     uint32_t sector = g_fat32_ctx.data_start + (cluster - 2) * g_fat32_ctx.sectors_per_cluster;
-    uint8_t *src = g_fat32_ctx.device_base + (sector * g_fat32_ctx.bytes_per_sector);
-    memcpy(buffer, src, g_fat32_ctx.bytes_per_cluster);
-    return 0;
-}
-
-/* 写入簇 */
-static int write_cluster(uint32_t cluster, const void *buffer) {
-    if (cluster < 2 || cluster >= g_fat32_ctx.total_clusters + 2) {
+    
+    /* 使用 IDE 驱动读取扇区 */
+    if (ide_read_sectors(sector, g_fat32_ctx.sectors_per_cluster, buffer) != 0) {
         return -1;
     }
     
-    uint32_t sector = g_fat32_ctx.data_start + (cluster - 2) * g_fat32_ctx.sectors_per_cluster;
-    uint8_t *dst = g_fat32_ctx.device_base + (sector * g_fat32_ctx.bytes_per_sector);
-    memcpy(dst, buffer, g_fat32_ctx.bytes_per_cluster);
     return 0;
+}
+
+/* 写入簇 - 暂不支持 */
+static int write_cluster(uint32_t cluster, const void *buffer) {
+    /* 写入功能暂未实现，需要 IDE 写入支持 */
+    (void)cluster;
+    (void)buffer;
+    return -1;
 }
 
 /* 路径解析 */

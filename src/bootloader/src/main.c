@@ -1147,13 +1147,12 @@ EFI_STATUS get_memory_map(hic_boot_info_t *boot_info)
         // 转换内存类型
         switch (desc->type) {
             case EfiConventionalMemory:
-                hic_map[i].type = HIC_MEM_TYPE_USABLE;
-                break;
             case EfiLoaderCode:
             case EfiLoaderData:
             case EfiBootServicesCode:
             case EfiBootServicesData:
-                hic_map[i].type = HIC_MEM_TYPE_BOOTLOADER;
+                // UEFI退出启动服务后，这些内存都可以使用
+                hic_map[i].type = HIC_MEM_TYPE_USABLE;
                 break;
             case EfiRuntimeServicesCode:
             case EfiRuntimeServicesData:

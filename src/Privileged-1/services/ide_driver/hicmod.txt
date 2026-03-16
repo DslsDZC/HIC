@@ -1,0 +1,47 @@
+# HIC服务模块元数据文件
+
+[service]
+name = ide_driver
+display_name = IDE/ATA磁盘驱动服务
+version = 1.0.0
+api_version = 1.0
+uuid = 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+[description]
+short = 提供IDE/ATA磁盘访问服务
+long = IDE磁盘驱动服务提供LBA28模式的磁盘扇区读写功能，支持主从驱动器检测和基本磁盘操作。运行在Privileged-1层，通过HAL访问硬件端口。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
+hal = 1.0:1.0:1.0
+
+[resources]
+max_memory = 16384
+max_threads = 1
+max_capabilities = 16
+cpu_quota_percent = 5
+
+[endpoints]
+ide_read = 1.0:ide_read_sectors
+ide_write = 1.0:ide_write_sectors
+ide_info = 1.0:ide_get_drive_info
+
+[permissions]
+domain_create = false
+capability_create = false
+hardware_access = true
+
+[security]
+critical = false
+privileged = true
+signature_required = false
+
+[build]
+static = true
+priority = 1
+autostart = true

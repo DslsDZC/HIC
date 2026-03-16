@@ -30,6 +30,7 @@
 #include "thread.h"
 #include "lib/string.h"
 #include "lib/mem.h"
+#include "logical_core.h"
 
 extern static_module_desc_t __static_modules_start;
 extern static_module_desc_t __static_modules_end;
@@ -40,6 +41,8 @@ typedef struct static_module_runtime {
     cap_id_t endpoint_cap;          /* 服务端点能力 */
     bool running;                   /* 是否正在运行 */
     phys_addr_t code_phys;          /* 代码段加载地址（物理） */
+    u32 logical_core_id;            /* 分配的逻辑核心ID */
+    cap_handle_t logical_core_handle; /* 逻辑核心能力句柄 */
 } static_module_runtime_t;
 
 #define MAX_STATIC_MODULES 16
@@ -163,6 +166,7 @@ int static_module_load_all(void)
  * 
  * 重要：静态模块直接在内核镜像中的原始位置执行（位置相关代码）
  * 不复制代码到新内存，避免位置相关代码崩溃问题
+ * 每个模块需要分配逻辑核心才能运行线程
  */
 int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_idx)
 {
@@ -171,6 +175,7 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     phys_addr_t code_phys;
     domain_quota_t quota;
     hic_status_t status;
+    cap_handle_t lcore_handles[1];
 
     /* 计算模块大小 */
     code_size = (u64)((u8*)module->code_end - (u8*)module->code_start);
@@ -212,6 +217,37 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     console_putu64(domain);
     console_puts("\n");
 
+    /* 为模块分配逻辑核心 */
+    status = hic_logical_core_allocate(domain, 1, 
+                                       0,     /* 无特殊标志 */
+                                       10,  /* 10% CPU 配额 */
+                                       NULL, /* 无亲和性限制 */
+                                       lcore_handles);
+    if (status != HIC_SUCCESS) {
+        console_puts("[STATIC_MODULE]     ERROR: Failed to allocate logical core (status=");
+        console_putu64(status);
+        console_puts(")\n");
+        /* 清理已创建的域 */
+        domain_destroy(domain);
+        return -1;
+    }
+    
+    console_puts("[STATIC_MODULE]     Logical core allocated: handle=0x");
+    console_puthex64(lcore_handles[0]);
+    console_puts("\n");
+
+    /* 获取逻辑核心ID */
+    logical_core_id_t lcore_id = logical_core_validate_handle(domain, lcore_handles[0]);
+    if (lcore_id == INVALID_LOGICAL_CORE) {
+        console_puts("[STATIC_MODULE]     ERROR: Invalid logical core handle\n");
+        domain_destroy(domain);
+        return -1;
+    }
+    
+    console_puts("[STATIC_MODULE]     Logical core ID: ");
+    console_putu64(lcore_id);
+    console_puts("\n");
+
     /* 静态模块：直接使用内核中的原始地址
      * 静态模块嵌入在内核镜像中，是受信任的代码
      * 使用原始链接地址，避免位置相关代码问题
@@ -225,6 +261,8 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     /* 保存运行时状态 */
     g_module_runtime[runtime_idx].domain_id = domain;
     g_module_runtime[runtime_idx].code_phys = code_phys;
+    g_module_runtime[runtime_idx].logical_core_id = lcore_id;
+    g_module_runtime[runtime_idx].logical_core_handle = lcore_handles[0];
 
     /* 记录审计日志 */
     u64 audit_data[4] = { domain, code_size, data_size, code_phys };
@@ -376,49 +414,97 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
     }
 }
 
+/* ==================== 服务入口点声明 ==================== */
+
+/* 静态服务入口函数（由各服务实现） */
+extern int verifier_start(void);
+extern int ide_driver_start(void);
+extern int fat32_service_start(void);
+extern int init_launcher_start(void);
+
+/* 服务入口点查找表 */
+typedef struct {
+    const char *name;
+    int (*entry_func)(void);  /* 使用正确的函数指针类型 */
+} service_entry_t;
+
+static const service_entry_t g_service_entries[] = {
+    { "verifier",        verifier_start },
+    { "ide_driver",      ide_driver_start },
+    { "fat32_service",   fat32_service_start },
+    { "init_launcher",   init_launcher_start },
+    { NULL, NULL }  /* 结束标记 */
+};
+
 /* ==================== 模块启动 ==================== */
 
 /**
  * 启动模块主线程（扩展版本）
+ * 
+ * 使用 thread_create_bound 创建绑定到逻辑核心的线程
  */
 int static_module_start_ex(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain = g_module_runtime[runtime_idx].domain_id;
     phys_addr_t code_phys = g_module_runtime[runtime_idx].code_phys;
+    u32 logical_core_id = g_module_runtime[runtime_idx].logical_core_id;
     
     console_puts("[STATIC_MODULE]     Starting module in domain ");
     console_putu64(domain);
+    console_puts(" on logical core ");
+    console_putu64(logical_core_id);
     console_puts("\n");
 
-    /* 计算入口点地址 - 使用实际加载地址 */
-    void *entry_point = NULL;
-    if (code_phys != 0) {
-        /* 使用实际加载地址 + 入口偏移 */
-        entry_point = (void*)((u8*)code_phys + module->entry_offset);
-    } else if (module->code_start != NULL) {
-        /* 回退：使用链接地址（不应该发生） */
-        entry_point = (void*)((u8*)module->code_start + module->entry_offset);
+    /* 查找服务入口函数 */
+    virt_addr_t entry_point = 0;
+    for (int i = 0; g_service_entries[i].name != NULL; i++) {
+        if (strcmp(module->name, g_service_entries[i].name) == 0) {
+            /* 使用 union 进行函数指针到整数的转换（GCC 扩展） */
+            union {
+                int (*func)(void);
+                virt_addr_t addr;
+            } conv;
+            conv.func = g_service_entries[i].entry_func;
+            entry_point = conv.addr;
+            console_puts("[STATIC_MODULE]     Found entry function: ");
+            console_puts(g_service_entries[i].name);
+            console_puts("_start at 0x");
+            console_puthex64(entry_point);
+            console_puts("\n");
+            break;
+        }
     }
 
-    if (entry_point == NULL) {
-        console_puts("[STATIC_MODULE]     ERROR: No entry point\n");
+    /* 如果没找到入口函数，使用描述符中的偏移 */
+    if (entry_point == 0 && code_phys != 0) {
+        entry_point = (virt_addr_t)((u8*)code_phys + module->entry_offset);
+        console_puts("[STATIC_MODULE]     Using default entry offset: 0x");
+        console_puthex64(entry_point);
+        console_puts("\n");
+    }
+
+    if (entry_point == 0) {
+        console_puts("[STATIC_MODULE]     ERROR: No entry point found for service ");
+        console_puts(module->name);
+        console_puts("\n");
         return -1;
     }
 
     console_puts("[STATIC_MODULE]     Entry point: 0x");
-    console_puthex64((u64)entry_point);
+    console_puthex64(entry_point);
     console_puts("\n");
 
     /* 
-     * 在独立线程中启动模块
-     * 这确保模块在自己的执行上下文中运行
+     * 使用 thread_create_bound 创建绑定到逻辑核心的线程
+     * 这确保模块在自己的执行上下文中运行，并绑定到特定的逻辑核心
      */
     thread_id_t module_thread;
-    hic_status_t status = thread_create(domain, (virt_addr_t)entry_point,
-                                         HIC_PRIORITY_NORMAL, &module_thread);
+    hic_status_t status = thread_create_bound(domain, logical_core_id,
+                                              (virt_addr_t)entry_point,
+                                              HIC_PRIORITY_NORMAL, &module_thread);
     
     if (status != HIC_SUCCESS) {
-        console_puts("[STATIC_MODULE]     ERROR: Failed to create module thread (status=");
+        console_puts("[STATIC_MODULE]     ERROR: Failed to create bound module thread (status=");
         console_putu64(status);
         console_puts(")\n");
         return -1;
@@ -426,7 +512,9 @@ int static_module_start_ex(static_module_desc_t *module, u32 runtime_idx)
     
     console_puts("[STATIC_MODULE]     Module thread created: ");
     console_putu64(module_thread);
-    console_puts("\n");
+    console_puts(" (bound to core ");
+    console_putu64(logical_core_id);
+    console_puts(")\n");
     
     /* 标记模块为运行状态 */
     g_module_runtime[runtime_idx].running = true;

@@ -14,6 +14,8 @@
 #include "pmm.h"
 #include "lib/mem.h"
 #include "atomic.h"
+#include "logical_core.h"
+#include "console.h"
 
 /* 全局线程表 */
 thread_t g_threads[MAX_THREADS];
@@ -133,12 +135,34 @@ hic_status_t thread_terminate(thread_id_t thread_id)
     return HIC_SUCCESS;
 }
 
-/* 创建线程 */
-hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
-                          priority_t priority, thread_id_t *out)
+/* 创建线程（必须绑定逻辑核心） */
+hic_status_t thread_create_bound(domain_id_t domain_id, 
+                                  u32 logical_core_id,
+                                  virt_addr_t entry_point,
+                                  priority_t priority, 
+                                  thread_id_t *out)
 {
     if (out == NULL || domain_id >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 验证逻辑核心ID */
+    extern logical_core_t g_logical_cores[];
+    if (logical_core_id >= MAX_LOGICAL_CORES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    logical_core_t *core = &g_logical_cores[logical_core_id];
+    
+    /* 检查逻辑核心是否属于该域 */
+    if (core->owner_domain != domain_id) {
+        return HIC_ERROR_PERMISSION_DENIED;
+    }
+    
+    /* 检查逻辑核心状态 */
+    if (core->state != LOGICAL_CORE_STATE_ALLOCATED &&
+        core->state != LOGICAL_CORE_STATE_ACTIVE) {
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 使用位图快速查找空闲线程槽 */
@@ -188,6 +212,9 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     thread->domain_id = domain_id;
     thread->state = THREAD_STATE_READY;
     thread->priority = priority;
+    thread->logical_core_id = logical_core_id;  /* 绑定逻辑核心 */
+    thread->core_affinity = 0xFFFFFFFF;          /* 默认所有核心亲和性 */
+    thread->flags = THREAD_FLAG_BOUND;           /* 标记已绑定 */
     thread->stack_base = (virt_addr_t)stack_phys;
     thread->stack_size = 2 * PAGE_SIZE;
     thread->last_run_time = 0;
@@ -210,6 +237,14 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     
     thread->stack_ptr = (virt_addr_t)stack_top;
     
+    /* 更新逻辑核心状态 */
+    if (core->running_thread == INVALID_THREAD) {
+        core->running_thread = free_slot;
+    }
+    if (core->state == LOGICAL_CORE_STATE_ALLOCATED) {
+        core->state = LOGICAL_CORE_STATE_ACTIVE;
+    }
+    
     atomic_exit_critical(irq);
     
     /* 将线程加入调度队列 */
@@ -217,4 +252,166 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     
     *out = free_slot;
     return HIC_SUCCESS;
+}
+
+/* 创建线程（自动分配逻辑核心如果域还没有） */
+hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
+                          priority_t priority, thread_id_t *out)
+{
+    if (out == NULL || domain_id >= HIC_DOMAIN_MAX) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 查找域是否已有逻辑核心 */
+    logical_core_id_t existing_core = INVALID_LOGICAL_CORE;
+    for (u32 i = 0; i < MAX_LOGICAL_CORES; i++) {
+        if (g_logical_cores[i].owner_domain == domain_id &&
+            (g_logical_cores[i].state == LOGICAL_CORE_STATE_ALLOCATED ||
+             g_logical_cores[i].state == LOGICAL_CORE_STATE_ACTIVE)) {
+            existing_core = i;
+            break;
+        }
+    }
+    
+    /* 如果域还没有逻辑核心，自动分配一个 */
+    logical_core_id_t target_core = existing_core;
+    if (target_core == INVALID_LOGICAL_CORE) {
+        cap_handle_t lcore_handle;
+        hic_status_t alloc_status = hic_logical_core_allocate(domain_id, 1,
+                                                              0,    /* 无特殊标志 */
+                                                              10,   /* 10% CPU 配额 */
+                                                              NULL, /* 无亲和性限制 */
+                                                              &lcore_handle);
+        if (alloc_status != HIC_SUCCESS) {
+            console_puts("[THREAD] WARN: Failed to auto-allocate logical core for domain ");
+            console_putu64(domain_id);
+            console_puts("\n");
+            /* 继续创建线程，但标记为未绑定 */
+        } else {
+            target_core = logical_core_validate_handle(domain_id, lcore_handle);
+            console_puts("[THREAD] Auto-allocated logical core ");
+            console_putu64(target_core);
+            console_puts(" for domain ");
+            console_putu64(domain_id);
+            console_puts("\n");
+        }
+    }
+    
+    /* 使用位图快速查找空闲线程槽 */
+    static u64 g_thread_bitmap[(MAX_THREADS + 63) / 64] = {0};
+    
+    thread_id_t free_slot = MAX_THREADS;
+    bool irq = atomic_enter_critical();
+    
+    /* 在位图中查找空闲位 */
+    for (u32 i = 0; i < (MAX_THREADS + 63) / 64 && free_slot == MAX_THREADS; i++) {
+        if (g_thread_bitmap[i] != 0xFFFFFFFFFFFFFFFFULL) {
+            /* 找到有空闲位的块 */
+            for (u32 j = 0; j < 64; j++) {
+                u32 idx = i * 64 + j;
+                if (idx >= MAX_THREADS) break;
+                
+                if (!(g_thread_bitmap[i] & (1ULL << j))) {
+                    /* 找到空闲槽 */
+                    free_slot = idx;
+                    g_thread_bitmap[i] |= (1ULL << j);
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (free_slot >= MAX_THREADS) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_RESOURCE;
+    }
+    
+    /* 分配内核栈 (2 页 = 8KB) */
+    extern hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
+                                          page_frame_type_t type, phys_addr_t *out);
+    phys_addr_t stack_phys;
+    hic_status_t status = pmm_alloc_frames(domain_id, 2, PAGE_FRAME_PRIVILEGED, &stack_phys);
+    if (status != HIC_SUCCESS) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_RESOURCE;
+    }
+    
+    /* 初始化线程结构 */
+    thread_t *thread = &g_threads[free_slot];
+    memzero(thread, sizeof(thread_t));
+    
+    thread->thread_id = free_slot;
+    thread->domain_id = domain_id;
+    thread->state = THREAD_STATE_READY;
+    thread->priority = priority;
+    thread->logical_core_id = target_core;  /* 绑定自动分配的逻辑核心 */
+    thread->core_affinity = 0xFFFFFFFF;      /* 默认所有核心亲和性 */
+    thread->flags = (target_core != INVALID_LOGICAL_CORE) ? THREAD_FLAG_BOUND : 0;
+    thread->stack_base = (virt_addr_t)stack_phys;
+    thread->stack_size = 2 * PAGE_SIZE;
+    thread->last_run_time = 0;
+    thread->cpu_time_used = 0;
+    thread->time_slice = 100;  /* 默认时间片 */
+    thread->wait_flags = 0;
+    
+    /* 初始化栈：设置入口点 */
+    u64 *stack_top = (u64 *)(stack_phys + 2 * PAGE_SIZE);
+    
+    /* 压入入口点地址（作为 ret 的返回地址） */
+    stack_top--;
+    *stack_top = (u64)entry_point;
+    
+    /* 为 callee-saved 寄存器预留空间 (rbx, rbp, r12-r15 = 6 个) */
+    stack_top -= 6;
+    
+    thread->stack_ptr = (virt_addr_t)stack_top;
+    
+    atomic_exit_critical(irq);
+    
+    /* 将线程加入调度队列 */
+    thread_ready(free_slot);
+    
+    *out = free_slot;
+    return HIC_SUCCESS;
+}
+
+/* 绑定线程到逻辑核心 */
+hic_status_t thread_bind_to_core(thread_id_t thread_id, u32 logical_core_id)
+{
+    if (thread_id >= MAX_THREADS) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    extern logical_core_t g_logical_cores[];
+    if (logical_core_id >= MAX_LOGICAL_CORES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    thread_t *thread = &g_threads[thread_id];
+    logical_core_t *core = &g_logical_cores[logical_core_id];
+    
+    /* 验证所有权 */
+    if (core->owner_domain != thread->domain_id) {
+        return HIC_ERROR_PERMISSION_DENIED;
+    }
+    
+    bool irq = atomic_enter_critical();
+    
+    thread->logical_core_id = logical_core_id;
+    thread->flags |= THREAD_FLAG_BOUND;
+    
+    atomic_exit_critical(irq);
+    
+    return HIC_SUCCESS;
+}
+
+/* 获取线程绑定的逻辑核心 */
+u32 thread_get_bound_core(thread_id_t thread_id)
+{
+    if (thread_id >= MAX_THREADS) {
+        return INVALID_LOGICAL_CORE;
+    }
+    
+    thread_t *thread = &g_threads[thread_id];
+    return thread->logical_core_id;
 }

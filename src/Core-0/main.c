@@ -13,6 +13,7 @@
 #include "capability.h"
 #include "domain.h"
 #include "pmm.h"
+#include "imal.h"
 #include "thread.h"
 #include "irq.h"
 #include "syscall.h"
@@ -21,12 +22,15 @@
 #include "audit.h"
 #include "formal_verification.h"
 #include "amp.h"
+#include "logical_core.h"
 #include "lib/console.h"
 #include "boot_info.h"
 #include "minimal_uart.h"
 #include "module_loader.h"
 #include "include/static_module.h"
 #include "include/module_primitives.h"
+
+/* 注意：buddy.h 和 memory_compact.h 功能已移到 memory_service */
 
 /* 外部全局变量 */
 extern boot_state_t g_boot_state;
@@ -135,6 +139,15 @@ void kernel_main(void *info)
     boot_info_init_memory(boot_info);
     console_puts("[BOOT] Memory manager initialization completed\n");
     
+    /* 【步骤1.2：内存布局初始化 - 已移到 memory_service】 */
+    /* memory_layout_init 现在由 memory_service 负责，遵循机制与策略分离原则 */
+    console_puts("[BOOT] Memory layout will be initialized by memory_service\n");
+    
+    /* 【步骤1.5：IMAL 初始化 - 隔离机制抽象层】 */
+    console_puts("\n[BOOT] STEP 1.5: Initializing IMAL\n");
+    imal_init();
+    console_puts("[BOOT] IMAL initialization completed\n");
+    
     /* 【步骤2：能力系统初始化】 */
     console_puts("\n[BOOT] STEP 2: Initializing Capability System\n");
     capability_system_init();
@@ -149,6 +162,11 @@ void kernel_main(void *info)
     console_puts("\n[BOOT] STEP 4: Initializing Scheduler\n");
     scheduler_init();
     console_puts("[BOOT] Scheduler initialization completed\n");
+    
+    /* 【步骤4.4：逻辑核心系统初始化】 */
+    console_puts("\n[BOOT] STEP 4.4: Initializing Logical Core System\n");
+    logical_core_system_init();
+    console_puts("[BOOT] Logical core system initialization completed\n");
 
     /* 【步骤4.5：AMP初始化】 */
     console_puts("\n[BOOT] STEP 4.5: Initializing AMP\n");
@@ -278,26 +296,18 @@ void kernel_main(void *info)
     /* ==================== 第八阶段：主循环 ==================== */
     
     while (1) {
-        /* 1. 检查待处理的中断 */
-        if (interrupts_pending()) {
-            handle_pending_interrupts();
-        }
+        /* 中断直接送达服务，无需主循环轮询（精简设计） */
         
-        /* 2. 调度器：执行上下文切换到下一个线程 */
+        /* 调度器：执行上下文切换到下一个线程 */
         schedule();
         
-        /* 3. 处理定时器 */
+        /* 处理定时器 */
         timer_update();
         
-        /* 4. 处理待处理的系统调用 */
-        if (syscalls_pending()) {
-            handle_pending_syscalls();
-        }
-        
-        /* 5. 执行内核维护任务 */
+        /* 执行内核维护任务 */
         kernel_maintenance_tasks();
         
-        /* 6. 进入低功耗状态等待 */
+        /* 进入低功耗状态等待 */
         hal_halt();
     }
     

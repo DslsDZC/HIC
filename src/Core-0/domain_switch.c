@@ -5,8 +5,15 @@
  */
 
 /**
- * HIC域切换实现（完整版）
+ * HIC域切换实现
  * 遵循文档第2.1节：跨域通信和隔离
+ * 
+ * HIC通信模型：
+ * - 数据平面：共享内存 + 无锁环形缓冲区（零拷贝，无内核介入）
+ * - 控制平面：共享内存标志位（用户态同步）
+ * - 初始化：shmem_map + 能力授权（一次性建立）
+ * 
+ * 本模块仅提供域切换（用于能力调用），不包含传统IPC消息队列。
  */
 
 #include "domain_switch.h"
@@ -54,13 +61,15 @@ void domain_switch_init(void)
     console_puts("[DOMAIN] Domain switch initialized\n");
 }
 
-/* 执行域切换（完整实现） */
+/* 执行域切换（用于能力调用） */
 hic_status_t domain_switch(domain_id_t from, domain_id_t to, 
                            cap_id_t endpoint_cap, u64 syscall_num,
                            u64* args, u32 arg_count)
 {
     (void)arg_count;  /* 避免未使用参数警告 */
     (void)args;       /* 避免未使用参数警告 */
+    (void)syscall_num;
+    
     /* 验证参数 */
     if (from >= HIC_DOMAIN_MAX || to >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
@@ -115,7 +124,7 @@ hic_status_t domain_switch(domain_id_t from, domain_id_t to,
     return HIC_SUCCESS;
 }
 
-/* 从域切换返回（完整实现） */
+/* 从域切换返回 */
 void __attribute__((unused)) domain_switch_return(hic_status_t result)
 {
     (void)result;  /* 避免未使用参数警告 */

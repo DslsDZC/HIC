@@ -1,6 +1,7 @@
 # HIC 项目 .gitignore
 
-.cache/clangd/index
+.cache/
+*.idx
 AGENTS.md
 # 构建输出
 build/

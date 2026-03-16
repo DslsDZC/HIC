@@ -47,8 +47,10 @@ def create_fat32_image(disk_path, bootloader_path, kernel_path):
         # 计算需要的块数
         bootloader_size = os.path.getsize(bootloader_path)
         kernel_size = os.path.getsize(kernel_path)
-        total_size = bootloader_size + kernel_size + 32 * 1024 * 1024  # 额外32MB
-        block_count = (total_size // 512) + 10000  # 增加更多空间
+        total_size = bootloader_size + kernel_size + 64 * 1024 * 1024  # 额外64MB
+        # 确保大小是 1MB 对齐（更好的兼容性）
+        total_size = ((total_size + 1024 * 1024 - 1) // (1024 * 1024)) * (1024 * 1024)
+        block_count = total_size // 512
         
         # 创建FAT32镜像
         print(f"创建镜像文件 (块数: {block_count})...")

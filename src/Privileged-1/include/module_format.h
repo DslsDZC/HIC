@@ -15,32 +15,67 @@
 #include "../Core-0/types.h"
 
 /* HIC模块魔数 */
-#define HICMOD_MAGIC 0x48494B4D  /* "HKMD" */
-#define HICMOD_VERSION 1
+#define HICMOD_MAGIC 0x48494B4D  /* "HICM" */
+#define HICMOD_VERSION 2         /* 版本2支持多架构 */
 
-/* 模块头部 */
+/* 架构标识符 */
+#define HICMOD_ARCH_X86_64    0x01  /* x86-64 (AMD64) */
+#define HICMOD_ARCH_AARCH64   0x02  /* ARM64 (AArch64) */
+#define HICMOD_ARCH_RISCV64   0x03  /* RISC-V 64-bit */
+#define HICMOD_ARCH_ARM32     0x04  /* ARM 32-bit */
+#define HICMOD_ARCH_RISCV32   0x05  /* RISC-V 32-bit */
+#define HICMOD_ARCH_MAX       8     /* 最大架构数量 */
+
+/* 架构段描述符 - 每个架构一份 */
+typedef struct hicmod_arch_section {
+    u32 arch_id;                /* 架构标识符 (HICMOD_ARCH_*) */
+    u32 flags;                  /* 架构特定标志 */
+    u32 code_offset;            /* 代码段偏移（相对于文件起始） */
+    u32 code_size;              /* 代码段大小 */
+    u32 data_offset;            /* 数据段偏移 */
+    u32 data_size;              /* 数据段大小 */
+    u32 bss_size;               /* BSS段大小（运行时分配） */
+    u32 rodata_offset;          /* 只读数据偏移 */
+    u32 rodata_size;            /* 只读数据大小 */
+    u32 entry_offset;           /* 入口点偏移（相对于代码段） */
+    u32 reloc_offset;           /* 重定位表偏移 */
+    u32 reloc_count;            /* 重定位项数量 */
+    u32 reserved[4];            /* 保留 */
+} hicmod_arch_section_t;
+
+/* 模块头部 - 多架构布局 */
 typedef struct hicmod_header {
-    u32 magic;                  /* 魔数 */
+    u32 magic;                  /* 魔数 HICMOD_MAGIC */
     u32 version;                /* 格式版本 */
     u8 uuid[16];                /* 模块UUID */
     u32 semantic_version;       /* 语义化版本 */
     u32 api_version;            /* API版本 */
     u32 header_size;            /* 头部大小 */
+    
+    /* 多架构支持 */
+    u32 arch_count;             /* 包含的架构数量 */
+    u32 arch_table_offset;      /* 架构表偏移 */
+    u32 arch_table_size;        /* 架构表大小 */
+    
+    /* 元数据（架构中立） */
     u32 metadata_offset;        /* 元数据偏移 */
     u32 metadata_size;          /* 元数据大小 */
-    u32 code_offset;            /* 代码段偏移 */
-    u32 code_size;              /* 代码段大小 */
-    u32 data_offset;            /* 数据段偏移 */
-    u32 data_size;              /* 数据段大小 */
-    u32 bss_offset;             /* BSS段偏移 */
-    u32 bss_size;               /* BSS段大小 */
-    u32 rodata_offset;          /* 只读数据偏移 */
-    u32 rodata_size;            /* 只读数据大小 */
+    
+    /* 符号表（架构中立，符号名映射） */
     u32 symbol_offset;          /* 符号表偏移 */
     u32 symbol_size;            /* 符号表大小 */
+    
+    /* 安全签名 */
     u32 signature_offset;       /* 签名偏移 */
     u32 signature_size;         /* 签名大小 */
-    u32 reserved[8];            /* 保留 */
+    
+    /* 兼容性：单一架构快捷访问（arch_count==1时使用） */
+    u32 legacy_code_offset;
+    u32 legacy_code_size;
+    u32 legacy_data_offset;
+    u32 legacy_data_size;
+    
+    u32 reserved[4];            /* 保留 */
 } hicmod_header_t;
 
 /* 元数据头部 */

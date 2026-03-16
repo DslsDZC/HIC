@@ -206,3 +206,168 @@ void audit_check_invalid_memory(void* ptr, const char* context)
         audit_log_event(AUDIT_EVENT_INVALID_MEMORY, 0, 0, 0, data, 2, false);
     }
 }
+
+/* ==================== 审计查询机制实现 ==================== */
+
+#define DOMAIN_ID_INVALID  ((domain_id_t)-1)
+
+/**
+ * 查询审计日志（机制层核心实现）
+ */
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          void *buffer, size_t buffer_size, size_t *out_size)
+{
+    if (!g_audit_buffer.initialized || !filter || !buffer || !out_size) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 计算最大可返回条目数 */
+    size_t max_entries = buffer_size / sizeof(audit_entry_t);
+    if (max_entries == 0) {
+        *out_size = 0;
+        return HIC_ERROR_BUFFER_TOO_SMALL;
+    }
+    
+    audit_entry_t *output = (audit_entry_t*)buffer;
+    u32 match_count = 0;
+    u32 total_matches = 0;
+    u32 skipped = 0;
+    
+    /* 计算缓冲区中的条目总数 */
+    size_t total_entries = g_audit_buffer.write_offset / sizeof(audit_entry_t);
+    
+    /* 从最新条目开始向前遍历（逆序） */
+    for (size_t i = 0; i < total_entries && match_count < filter->max_results; i++) {
+        size_t idx = (total_entries - 1 - i);
+        audit_entry_t *entry = (audit_entry_t*)((u8*)g_audit_buffer.base + 
+                                                 idx * sizeof(audit_entry_t));
+        
+        /* 检查有效性 */
+        if (entry->sequence == 0) continue;
+        
+        /* 应用过滤器 */
+        bool matches = true;
+        
+        /* 按域过滤 */
+        if (filter->domain != DOMAIN_ID_INVALID && entry->domain != filter->domain) {
+            matches = false;
+        }
+        
+        /* 按事件类型过滤 */
+        if (matches && filter->type != 0 && entry->type != filter->type) {
+            matches = false;
+        }
+        
+        /* 按时间范围过滤 */
+        if (matches && filter->start_time != 0 && entry->timestamp < filter->start_time) {
+            matches = false;
+        }
+        if (matches && filter->end_time != 0 && entry->timestamp > filter->end_time) {
+            matches = false;
+        }
+        
+        if (matches) {
+            total_matches++;
+            
+            /* 应用偏移 */
+            if (skipped < filter->offset) {
+                skipped++;
+                continue;
+            }
+            
+            /* 复制到输出缓冲区 */
+            if (match_count < max_entries) {
+                memcopy(&output[match_count], entry, sizeof(audit_entry_t));
+                match_count++;
+            }
+        }
+    }
+    
+    *out_size = match_count * sizeof(audit_entry_t);
+    return HIC_SUCCESS;
+}
+
+/**
+ * 按域查询审计日志
+ */
+hic_status_t audit_query_by_domain(domain_id_t domain,
+                                    audit_entry_t *buffer, 
+                                    u32 buffer_count,
+                                    u32 *out_count)
+{
+    if (!g_audit_buffer.initialized || !buffer || !out_count) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    u32 match_count = 0;
+    size_t total_entries = g_audit_buffer.write_offset / sizeof(audit_entry_t);
+    
+    /* 从最新开始遍历 */
+    for (size_t i = 0; i < total_entries && match_count < buffer_count; i++) {
+        size_t idx = (total_entries - 1 - i);
+        audit_entry_t *entry = (audit_entry_t*)((u8*)g_audit_buffer.base + 
+                                                 idx * sizeof(audit_entry_t));
+        
+        if (entry->sequence != 0 && entry->domain == domain) {
+            memcopy(&buffer[match_count], entry, sizeof(audit_entry_t));
+            match_count++;
+        }
+    }
+    
+    *out_count = match_count;
+    return HIC_SUCCESS;
+}
+
+/**
+ * 按事件类型查询审计日志
+ */
+hic_status_t audit_query_by_type(audit_event_type_t type,
+                                  audit_entry_t *buffer,
+                                  u32 buffer_count,
+                                  u32 *out_count)
+{
+    if (!g_audit_buffer.initialized || !buffer || !out_count) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    u32 match_count = 0;
+    size_t total_entries = g_audit_buffer.write_offset / sizeof(audit_entry_t);
+    
+    for (size_t i = 0; i < total_entries && match_count < buffer_count; i++) {
+        size_t idx = (total_entries - 1 - i);
+        audit_entry_t *entry = (audit_entry_t*)((u8*)g_audit_buffer.base + 
+                                                 idx * sizeof(audit_entry_t));
+        
+        if (entry->sequence != 0 && entry->type == type) {
+            memcopy(&buffer[match_count], entry, sizeof(audit_entry_t));
+            match_count++;
+        }
+    }
+    
+    *out_count = match_count;
+    return HIC_SUCCESS;
+}
+
+/**
+ * 获取最新N条审计日志
+ */
+hic_status_t audit_query_latest(audit_entry_t *buffer, u32 count, u32 *out_count)
+{
+    if (!g_audit_buffer.initialized || !buffer || !out_count) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    size_t total_entries = g_audit_buffer.write_offset / sizeof(audit_entry_t);
+    u32 copy_count = (count < total_entries) ? count : (u32)total_entries;
+    
+    /* 从最新开始复制 */
+    for (u32 i = 0; i < copy_count; i++) {
+        size_t idx = (total_entries - 1 - i);
+        audit_entry_t *entry = (audit_entry_t*)((u8*)g_audit_buffer.base + 
+                                                 idx * sizeof(audit_entry_t));
+        memcopy(&buffer[i], entry, sizeof(audit_entry_t));
+    }
+    
+    *out_count = copy_count;
+    return HIC_SUCCESS;
+}

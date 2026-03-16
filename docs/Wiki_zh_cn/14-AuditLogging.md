@@ -399,6 +399,125 @@ bool detect_threat(audit_entry_t *entry) {
 }
 ```
 
+## 审计查询机制
+
+### 查询过滤器
+
+```c
+/**
+ * @brief 审计查询过滤器
+ */
+typedef struct audit_query_filter {
+    domain_id_t         domain;         /* 域ID（DOMAIN_ID_ANY 表示任意） */
+    audit_event_type_t  event_type;     /* 事件类型（0 表示任意） */
+    u64                 start_time;     /* 起始时间戳（0 表示无限制） */
+    u64                 end_time;       /* 结束时间戳（0 表示无限制） */
+    u32                 offset;         /* 分页偏移 */
+    u32                 max_results;    /* 最大返回数量 */
+} audit_query_filter_t;
+
+#define DOMAIN_ID_ANY  ((domain_id_t)-1)
+```
+
+### 查询接口
+
+```c
+/**
+ * @brief 通用审计查询
+ * @param filter 查询过滤器
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @param out_count 实际返回数量
+ * @return 状态码
+ */
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          audit_entry_t *buffer, u32 buffer_size,
+                          u32 *out_count);
+
+/**
+ * @brief 按域查询审计日志
+ */
+hic_status_t audit_query_by_domain(domain_id_t domain,
+                                     audit_entry_t *buffer,
+                                     u32 buffer_size, u32 *out_count);
+
+/**
+ * @brief 按事件类型查询
+ */
+hic_status_t audit_query_by_type(audit_event_type_t type,
+                                   audit_entry_t *buffer,
+                                   u32 buffer_size, u32 *out_count);
+
+/**
+ * @brief 获取最近的审计条目
+ */
+hic_status_t audit_query_latest(audit_entry_t *buffer, u32 count, u32 *out_count);
+```
+
+### 查询实现
+
+```c
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          audit_entry_t *buffer, u32 buffer_size,
+                          u32 *out_count)
+{
+    if (!filter || !buffer || !out_count) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    u32 found = 0;
+    u32 skipped = 0;
+    u32 max_entries = buffer_size / sizeof(audit_entry_t);
+    
+    /* 遍历审计缓冲区 */
+    for (u64 i = 0; i < g_audit_buffer.sequence && found < max_entries; i++) {
+        audit_entry_t *entry = get_entry_by_sequence(i);
+        if (!entry) continue;
+        
+        /* 应用过滤器 */
+        if (filter->domain != DOMAIN_ID_ANY && entry->domain != filter->domain) {
+            continue;
+        }
+        if (filter->event_type != 0 && entry->type != filter->event_type) {
+            continue;
+        }
+        if (filter->start_time > 0 && entry->timestamp < filter->start_time) {
+            continue;
+        }
+        if (filter->end_time > 0 && entry->timestamp > filter->end_time) {
+            continue;
+        }
+        
+        /* 应用分页 */
+        if (skipped < filter->offset) {
+            skipped++;
+            continue;
+        }
+        
+        /* 复制到输出缓冲区 */
+        buffer[found++] = *entry;
+    }
+    
+    *out_count = found;
+    return HIC_SUCCESS;
+}
+```
+
+### 系统调用接口
+
+```c
+/* SYSCALL_AUDIT_QUERY */
+case SYSCALL_AUDIT_QUERY:
+    {
+        audit_query_filter_t *filter = (audit_query_filter_t*)arg1;
+        audit_entry_t *buffer = (audit_entry_t*)arg2;
+        u32 buffer_size = (u32)arg3;
+        u32 out_count;
+        status = audit_query(filter, buffer, buffer_size, &out_count);
+    }
+    break;
+```
+
 ## 审计日志导出
 
 ### 导出为文本

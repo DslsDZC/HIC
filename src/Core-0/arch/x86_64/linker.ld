@@ -75,23 +75,50 @@ SECTIONS
     .static_services ALIGN(4K) : AT(ADDR(.static_services)) {
         __static_services_start = .;
         
+                                                        /* @STATIC_MODULES_TEXT_START@ - 自动生成 2026-03-16 */
         /* verifier 服务段 */
         __start_static_svc_verifier_text = .;
         KEEP(*(.static_svc.verifier.text))
         KEEP(*(.static_svc.verifier.rodata))
         __stop_static_svc_verifier_text = .;
-        
+
+        /* ide_driver 服务段 */
+        __start_static_svc_ide_driver_text = .;
+        KEEP(*(.static_svc.ide_driver.text))
+        KEEP(*(.static_svc.ide_driver.rodata))
+        __stop_static_svc_ide_driver_text = .;
+
         /* fat32_service 服务段 */
         __start_static_svc_fat32_service_text = .;
         KEEP(*(.static_svc.fat32_service.text))
         KEEP(*(.static_svc.fat32_service.rodata))
         __stop_static_svc_fat32_service_text = .;
-        
+
         /* init_launcher 服务段 */
         __start_static_svc_init_launcher_text = .;
         KEEP(*(.static_svc.init_launcher.text))
         KEEP(*(.static_svc.init_launcher.rodata))
         __stop_static_svc_init_launcher_text = .;
+
+        /* memory_service 服务段 */
+        __start_static_svc_memory_service_text = .;
+        KEEP(*(.static_svc.memory_service.text))
+        KEEP(*(.static_svc.memory_service.rodata))
+        __stop_static_svc_memory_service_text = .;
+
+        /* device_manager 服务段 */
+        __start_static_svc_device_manager_text = .;
+        KEEP(*(.static_svc.device_manager.text))
+        KEEP(*(.static_svc.device_manager.rodata))
+        __stop_static_svc_device_manager_text = .;
+
+        /* security_monitor 服务段 */
+        __start_static_svc_security_monitor_text = .;
+        KEEP(*(.static_svc.security_monitor.text))
+        KEEP(*(.static_svc.security_monitor.rodata))
+        __stop_static_svc_security_monitor_text = .;
+
+        /* @STATIC_MODULES_TEXT_END@ */
         
         /* 通配符匹配其他静态服务段 */
         *(.static_svc.*)
@@ -108,20 +135,43 @@ SECTIONS
     .static_services_data ALIGN(4K) : AT(ADDR(.static_services_data)) {
         __static_services_data_start = .;
         
+                                                        /* @STATIC_MODULES_DATA_START@ - 自动生成 2026-03-16 */
         /* verifier 数据段 */
         __start_static_svc_verifier_data = .;
         KEEP(*(.static_svc.verifier.data))
         __stop_static_svc_verifier_data = .;
-        
+
+        /* ide_driver 数据段 */
+        __start_static_svc_ide_driver_data = .;
+        KEEP(*(.static_svc.ide_driver.data))
+        __stop_static_svc_ide_driver_data = .;
+
         /* fat32_service 数据段 */
         __start_static_svc_fat32_service_data = .;
         KEEP(*(.static_svc.fat32_service.data))
         __stop_static_svc_fat32_service_data = .;
-        
+
         /* init_launcher 数据段 */
         __start_static_svc_init_launcher_data = .;
         KEEP(*(.static_svc.init_launcher.data))
         __stop_static_svc_init_launcher_data = .;
+
+        /* memory_service 数据段 */
+        __start_static_svc_memory_service_data = .;
+        KEEP(*(.static_svc.memory_service.data))
+        __stop_static_svc_memory_service_data = .;
+
+        /* device_manager 数据段 */
+        __start_static_svc_device_manager_data = .;
+        KEEP(*(.static_svc.device_manager.data))
+        __stop_static_svc_device_manager_data = .;
+
+        /* security_monitor 数据段 */
+        __start_static_svc_security_monitor_data = .;
+        KEEP(*(.static_svc.security_monitor.data))
+        __stop_static_svc_security_monitor_data = .;
+
+        /* @STATIC_MODULES_DATA_END@ */
         
         /* 通配符 */
         *(.static_svc.*.data)
@@ -134,20 +184,43 @@ SECTIONS
     .static_services_bss ALIGN(4K) : AT(ADDR(.static_services_bss)) {
         __static_services_bss_start = .;
         
+                                                        /* @STATIC_MODULES_BSS_START@ - 自动生成 2026-03-16 */
         /* verifier BSS 段 */
         __start_static_svc_verifier_bss = .;
         KEEP(*(.static_svc.verifier.bss))
         __stop_static_svc_verifier_bss = .;
-        
+
+        /* ide_driver BSS 段 */
+        __start_static_svc_ide_driver_bss = .;
+        KEEP(*(.static_svc.ide_driver.bss))
+        __stop_static_svc_ide_driver_bss = .;
+
         /* fat32_service BSS 段 */
         __start_static_svc_fat32_service_bss = .;
         KEEP(*(.static_svc.fat32_service.bss))
         __stop_static_svc_fat32_service_bss = .;
-        
+
         /* init_launcher BSS 段 */
         __start_static_svc_init_launcher_bss = .;
         KEEP(*(.static_svc.init_launcher.bss))
         __stop_static_svc_init_launcher_bss = .;
+
+        /* memory_service BSS 段 */
+        __start_static_svc_memory_service_bss = .;
+        KEEP(*(.static_svc.memory_service.bss))
+        __stop_static_svc_memory_service_bss = .;
+
+        /* device_manager BSS 段 */
+        __start_static_svc_device_manager_bss = .;
+        KEEP(*(.static_svc.device_manager.bss))
+        __stop_static_svc_device_manager_bss = .;
+
+        /* security_monitor BSS 段 */
+        __start_static_svc_security_monitor_bss = .;
+        KEEP(*(.static_svc.security_monitor.bss))
+        __stop_static_svc_security_monitor_bss = .;
+
+        /* @STATIC_MODULES_BSS_END@ */
         
         /* 通配符 */
         *(.static_svc.*.bss)

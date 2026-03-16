@@ -42,7 +42,7 @@ hic_status_t fat32_service_stop(void);
 hic_status_t fat32_service_cleanup(void);
 
 /* FAT32操作接口 */
-hic_status_t fat32_init_device(void *device_base, uint32_t device_size);
+hic_status_t fat32_init_device(void);
 hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_size, uint32_t *bytes_read);
 hic_status_t fat32_write_file(const char *path, const void *data, uint32_t size);
 hic_status_t fat32_list_dir(const char *path, char *buffer, uint32_t buffer_size, uint32_t *count);

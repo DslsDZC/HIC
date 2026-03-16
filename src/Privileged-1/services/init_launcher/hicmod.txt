@@ -1,29 +1,47 @@
-# Init Launcher 服务模块定义
-name: init_launcher
-version: 1
-type: service
-description: 初始服务启动器 - 系统引导锚点
-author: DslsDZC
+# HIC服务模块元数据文件
 
-# 服务入口点
-entry: init_launcher_init
+[service]
+name = init_launcher
+display_name = 初始服务启动器
+version = 1.0.0
+api_version = 1.0
+uuid = 5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b
 
-# 能力要求（启动时授予）
-capabilities:
-  - storage_access
-  - domain_create
-  - serial_output
+[author]
+name = DslsDZC
+email = dsls.dzc@gmail.com
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
 
-# 服务特性
-flags:
-  auto_start: true
-  critical: true    # 关键服务，启动失败会导致系统 panic
-  static: true      # 静态链接到内核
-  privileged: true  # 特权层服务
+[description]
+short = 初始服务启动器 - 系统引导锚点
+long = 初始服务启动器负责从存储设备加载和启动其他服务模块，是系统引导的关键锚点。作为静态模块加载，支持HICMOD格式解析和ELF加载。
 
-# 启动优先级（最高优先级）
-priority: 0
+[dependencies]
+core_api = 1.0:1.0:2.0
+fat32_service = 1.0:1.0:1.0
 
-# 依赖（fat32_service 必须先启动）
-depends:
-  - fat32_service
+[resources]
+max_memory = 262144
+max_threads = 2
+max_capabilities = 64
+cpu_quota_percent = 15
+
+[endpoints]
+init_launch = 1.0:init_launch_service
+init_load_module = 1.0:init_load_module
+
+[permissions]
+domain_create = true
+capability_create = true
+storage_access = true
+serial_output = true
+
+[security]
+critical = true
+privileged = true
+signature_required = false
+
+[build]
+static = true
+priority = 0
+autostart = true

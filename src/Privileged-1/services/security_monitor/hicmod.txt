@@ -1,0 +1,33 @@
+# HIC Module Manifest: Security Monitor Service
+# 安全监控服务（策略层）
+
+name = security_monitor
+version = 1.0.0
+description = Security monitoring service implementing policy-layer rules for anomaly detection and alert response
+author = DslsDZC
+license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
+
+# 模块类型
+type = privileged_service
+privilege_level = 1
+
+# 依赖
+depends = audit
+
+# 能力需求
+capabilities = monitor_read, audit_write, domain_control
+
+# 入口点
+init = service_init
+start = service_start
+stop = service_stop
+
+# 内存配置
+stack_size = 16384
+heap_size = 32768
+
+# 调度优先级
+priority = high
+
+# 服务端点
+endpoints = security_monitor.control, security_monitor.alerts, security_monitor.reports

@@ -1,26 +1,43 @@
-# HIC共享库管理服务元数据
+# HIC服务模块元数据文件
 
-[module]
+[service]
 name = lib_manager_service
-display_name = Shared Library Manager
+display_name = 共享库管理服务
 version = 1.0.0
-api_version = 1.0.0
+api_version = 1.0
 uuid = 123e4567-e89b-12d3-a456-426614174001
 
 [author]
-name = HIC Team
-email = hic@example.com
+name = DslsDZC
+email = dsls.dzc@gmail.com
 license = GPL-2.0-only WITH LicenseRef-HIC-service-exception
 
 [description]
-short = Manages shared libraries (.hiclib) for Privileged-1 services
-long = The shared library manager service provides registration, lookup, reference counting, and version management for .hiclib shared libraries. It enables efficient code sharing between services while maintaining security isolation through the capability system.
+short = 提供共享库(.hiclib)管理服务
+long = 共享库管理服务提供.hiclib共享库的注册、查找、引用计数和版本管理功能。支持服务间的高效代码共享，通过能力系统维护安全隔离。
+
+[dependencies]
+core_api = 1.0:1.0:2.0
 
 [resources]
-max_memory = 4194304
-max_threads = 1
+max_memory = 262144
+max_threads = 2
 max_capabilities = 64
 cpu_quota_percent = 5
+
+[endpoints]
+lib_register = 1.0:lib_register
+lib_lookup = 1.0:lib_lookup
+lib_reference = 1.0:lib_reference
+lib_release = 1.0:lib_release
+lib_update = 1.0:lib_update
+lib_query_symbol = 1.0:lib_query_symbol
+lib_list = 1.0:lib_list
+lib_get_stats = 1.0:lib_get_stats
+
+[permissions]
+domain_create = false
+capability_create = true
 
 [security]
 critical = true
@@ -28,21 +45,6 @@ privileged = true
 signature_required = true
 
 [build]
-static_build = true
+static = true
 priority = 3
 autostart = true
-
-[dependencies]
-# 无外部依赖
-
-[endpoints]
-# 端点定义
-register = 0x6800
-lookup = 0x6801
-reference = 0x6802
-release = 0x6803
-update = 0x6804
-query_symbol = 0x6805
-list = 0x6806
-get_stats = 0x6807
-unload = 0x6808
