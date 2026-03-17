@@ -7,7 +7,7 @@ CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 CC := gcc
 CFLAGS := -Wall -Wextra -O2 -fPIC -ffreestanding -nostdinc
-CFLAGS += -I$(ROOT_DIR)/src/Core-0/include
+CFLAGS += -I$(ROOT_DIR)/src/Core-0/include -I$(ROOT_DIR)/src/Core-0
 CFLAGS += -I$(ROOT_DIR)/src/Privileged-1/include
 CFLAGS += -I.
 

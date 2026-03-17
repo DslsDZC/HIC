@@ -17,6 +17,7 @@
 #include "audit.h"
 #include "monitor.h"
 #include "console.h"
+#include "atomic.h"
 #include "lib/mem.h"
 #include "hal.h"
 
@@ -851,7 +852,7 @@ u32 domain_trigger_emergency_action(emergency_level_t level, bool exclude_critic
                 console_puts("[EMERGENCY] Warning for domain ");
                 console_putu32(i);
                 console_puts("\n");
-                monitor_record_event(MONITOR_EVENT_RESOURCE_EXHAUSTED, i);
+                monitor_record_event(MONITOR_EVENT_TYPE_4, i);
                 break;
                 
             case EMERGENCY_LEVEL_CRITICAL:
@@ -942,4 +943,222 @@ hic_status_t domain_atomic_resource_reclaim(domain_id_t domain_id)
     console_puts("[DOMAIN] Atomic resource reclaim complete\n");
     
     return HIC_SUCCESS;
+}
+
+/* ==================== 零停机更新机制层实现 ==================== */
+
+/* 并行域伙伴关系表 */
+static domain_id_t g_parallel_partners[MAX_DOMAINS];
+
+/**
+ * 并行域创建（机制层）
+ */
+hic_status_t domain_parallel_create(domain_id_t template_domain,
+                                     const char *name,
+                                     const domain_quota_t *quota_override,
+                                     domain_id_t *out) {
+    (void)name;  /* 保留供未来扩展 */
+    
+    if (template_domain >= MAX_DOMAINS || !out) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    domain_t *template = &g_domains[template_domain];
+    
+    /* 检查模板域状态 */
+    if (template->state != DOMAIN_STATE_RUNNING &&
+        template->state != DOMAIN_STATE_READY) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    /* 使用覆盖配额或模板配额 */
+    domain_quota_t quota = quota_override ? *quota_override : template->quota;
+    
+    /* 创建新域 */
+    domain_id_t new_domain_id;
+    hic_status_t status = domain_create(template->type, template_domain,
+                                         &quota, &new_domain_id);
+    if (status != HIC_SUCCESS) {
+        return status;
+    }
+    
+    domain_t *new_domain = &g_domains[new_domain_id];
+    
+    /* 标记为新实例 */
+    new_domain->flags |= DOMAIN_FLAG_NEW_INSTANCE;
+    
+    /* 设置并行伙伴关系 */
+    g_parallel_partners[new_domain_id] = template_domain;
+    g_parallel_partners[template_domain] = new_domain_id;
+    
+    /* 复制模板域的能力配置（不复制实际能力） */
+    new_domain->cap_capacity = template->cap_capacity;
+    
+    console_puts("[DOMAIN] Created parallel domain ");
+    console_putu32(new_domain_id);
+    console_puts(" from template ");
+    console_putu32(template_domain);
+    console_puts("\n");
+    
+    *out = new_domain_id;
+    return HIC_SUCCESS;
+}
+
+/**
+ * 设置域的并行运行伙伴（机制层）
+ */
+hic_status_t domain_set_parallel_partner(domain_id_t domain_a, domain_id_t domain_b) {
+    if (domain_a >= MAX_DOMAINS || domain_b >= MAX_DOMAINS) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    bool irq = atomic_enter_critical();
+    g_parallel_partners[domain_a] = domain_b;
+    g_parallel_partners[domain_b] = domain_a;
+    atomic_exit_critical(irq);
+    
+    return HIC_SUCCESS;
+}
+
+/**
+ * 获取域的并行运行伙伴（机制层）
+ */
+hic_status_t domain_get_parallel_partner(domain_id_t domain, domain_id_t *partner) {
+    if (domain >= MAX_DOMAINS || !partner) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    *partner = g_parallel_partners[domain];
+    
+    if (*partner == HIC_INVALID_DOMAIN) {
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    return HIC_SUCCESS;
+}
+
+/**
+ * 原子性域切换（机制层）
+ */
+hic_status_t domain_atomic_switch(domain_id_t from,
+                                   domain_id_t to,
+                                   cap_id_t *endpoint_caps,
+                                   u32 cap_count) {
+    if (from >= MAX_DOMAINS || to >= MAX_DOMAINS) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    domain_t *from_domain = &g_domains[from];
+    domain_t *to_domain = &g_domains[to];
+    
+    /* 检查域状态 */
+    if (from_domain->state != DOMAIN_STATE_RUNNING &&
+        from_domain->state != DOMAIN_STATE_READY) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    if (to_domain->state != DOMAIN_STATE_RUNNING &&
+        to_domain->state != DOMAIN_STATE_READY) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    bool irq = atomic_enter_critical();
+    
+    /* 1. 标记旧域为排空状态 */
+    from_domain->flags |= DOMAIN_FLAG_DRAINING | DOMAIN_FLAG_OLD_INSTANCE;
+    from_domain->state = DOMAIN_STATE_SUSPENDED;
+    
+    /* 2. 原子性重定向所有端点 */
+    for (u32 i = 0; i < cap_count && endpoint_caps; i++) {
+        if (endpoint_caps[i] != HIC_CAP_INVALID) {
+            domain_id_t old_target;
+            hic_status_t status = cap_endpoint_redirect(endpoint_caps[i], to, &old_target);
+            if (status != HIC_SUCCESS) {
+                /* 重定向失败，记录但继续 */
+                console_puts("[DOMAIN] Warning: endpoint redirect failed for cap ");
+                console_putu32(endpoint_caps[i]);
+                console_puts("\n");
+            }
+        }
+    }
+    
+    /* 3. 标记新域为主实例 */
+    to_domain->flags &= ~DOMAIN_FLAG_NEW_INSTANCE;
+    to_domain->flags |= DOMAIN_FLAG_PRIMARY;
+    
+    /* 4. 确保所有写入可见 */
+    atomic_release_barrier();
+    
+    atomic_exit_critical(irq);
+    
+    console_puts("[DOMAIN] Atomic switch: domain ");
+    console_putu32(from);
+    console_puts(" -> domain ");
+    console_putu32(to);
+    console_puts(" (");
+    console_putu32(cap_count);
+    console_puts(" endpoints redirected)\n");
+    
+    return HIC_SUCCESS;
+}
+
+/**
+ * 域优雅关闭（机制层）
+ */
+hic_status_t domain_graceful_shutdown(domain_id_t domain,
+                                        u32 timeout_ms,
+                                        bool force) {
+    if (domain >= MAX_DOMAINS) {
+        return HIC_ERROR_INVALID_DOMAIN;
+    }
+    
+    domain_t *target = &g_domains[domain];
+    
+    /* 检查域状态 */
+    if (target->state != DOMAIN_STATE_RUNNING &&
+        target->state != DOMAIN_STATE_SUSPENDED) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    console_puts("[DOMAIN] Graceful shutdown for domain ");
+    console_putu32(domain);
+    console_puts(", timeout=");
+    console_putu32(timeout_ms);
+    console_puts("ms\n");
+    
+    /* 1. 标记为终止中 */
+    target->state = DOMAIN_STATE_TERMINATED;
+    target->flags |= DOMAIN_FLAG_OLD_INSTANCE;
+    
+    /* 2. 等待连接排空（简化版：直接使用超时） */
+    u64 start_time = hal_get_timestamp();
+    u64 timeout_ns = (u64)timeout_ms * 1000000ULL;
+    
+    while (target->usage.thread_used > 0 || target->usage.cap_used > 0) {
+        u64 elapsed = hal_get_timestamp() - start_time;
+        if (elapsed >= timeout_ns) {
+            console_puts("[DOMAIN] Graceful shutdown timeout, force=");
+            console_puts(force ? "yes" : "no");
+            console_puts("\n");
+            
+            if (!force) {
+                return HIC_ERROR_TIMEOUT;
+            }
+            break;
+        }
+        
+        /* 短暂等待 */
+        hal_udelay(1000);  /* 1ms */
+    }
+    
+    /* 3. 销毁域 */
+    hic_status_t status = domain_destroy(domain);
+    
+    if (status == HIC_SUCCESS) {
+        console_puts("[DOMAIN] Domain ");
+        console_putu32(domain);
+        console_puts(" gracefully shutdown\n");
+    }
+    
+    return status;
 }

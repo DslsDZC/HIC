@@ -92,12 +92,12 @@ typedef struct pmu_event_attr {
 } pmu_event_attr_t;
 
 /* 事件标志 */
-#define PMU_EVENT_FLAG_ENABLED      (1 << 0)   /* 事件已启用 */
-#define PMU_EVENT_FLAG_INHERIT      (1 << 1)   /* 子进程继承 */
-#define PMU_EVENT_FLAG_EXCLUSIVE    (1 << 2)   /* 独占计数器 */
-#define PMU_EVENT_FLAG_EXCLUDE_USER (1 << 3)   /* 排除用户态 */
-#define PMU_EVENT_FLAG_EXCLUDE_KERNEL (1 << 4) /* 排除内核态 */
-#define PMU_EVENT_FLAG_EXCLUDE_HV   (1 << 5)   /* 排除虚拟化层 */
+#define PMU_EVENT_FLAG_ENABLED      (1U << 0)   /* 事件已启用 */
+#define PMU_EVENT_FLAG_INHERIT      (1U << 1)   /* 子进程继承 */
+#define PMU_EVENT_FLAG_EXCLUSIVE    (1U << 2)   /* 独占计数器 */
+#define PMU_EVENT_FLAG_EXCLUDE_USER (1U << 3)   /* 排除用户态 */
+#define PMU_EVENT_FLAG_EXCLUDE_KERNEL (1U << 4) /* 排除内核态 */
+#define PMU_EVENT_FLAG_EXCLUDE_HV   (1U << 5)   /* 排除虚拟化层 */
 
 /* 特权级别 */
 #define PMU_PRIV_ALL    0   /* 所有特权级别 */

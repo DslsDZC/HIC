@@ -5,275 +5,128 @@
  */
 
 /**
- * HIC审计日志系统
- * 遵循文档第3.3节：安全审计与防篡改日志
+ * HIC 审计日志机制层 (Audit Log Mechanism Layer)
+ * 
+ * Core-0 提供审计日志记录和查询的原语接口：
+ * - 事件记录
+ * - 日志查询
+ * - 缓冲区管理
+ * 
+ * 策略层（audit_service）负责：
+ * - 内存安全检测策略
+ * - 告警处理策略
+ * - 审计规则配置
+ * - 安全事件响应
  */
 
 #ifndef HIC_KERNEL_AUDIT_H
 #define HIC_KERNEL_AUDIT_H
 
 #include "types.h"
-#include "capability.h"
-#include "domain.h"
 
-/* 审计日志事件类型 */
+/* ========== 事件类型定义 ========== */
+
 typedef enum {
-    AUDIT_EVENT_CAP_VERIFY,       /* 能力验证 */
-    AUDIT_EVENT_CAP_CREATE,       /* 能力创建 */
-    AUDIT_EVENT_CAP_TRANSFER,     /* 能力传递 */
-    AUDIT_EVENT_CAP_DERIVE,       /* 能力派生 */
-    AUDIT_EVENT_CAP_REVOKE,       /* 能力撤销 */
-    AUDIT_EVENT_DOMAIN_CREATE,    /* 域创建 */
-    AUDIT_EVENT_DOMAIN_DESTROY,   /* 域销毁 */
-    AUDIT_EVENT_DOMAIN_SUSPEND,   /* 域暂停 */
-    AUDIT_EVENT_DOMAIN_RESUME,    /* 域恢复 */
-    AUDIT_EVENT_THREAD_CREATE,    /* 线程创建 */
-    AUDIT_EVENT_THREAD_DESTROY,   /* 线程销毁 */
-    AUDIT_EVENT_THREAD_SWITCH,    /* 线程切换 */
-    AUDIT_EVENT_SYSCALL,          /* 系统调用 */
-    AUDIT_EVENT_IRQ,              /* 中断处理 */
-    AUDIT_EVENT_IPC_CALL,         /* IPC调用 */
-    AUDIT_EVENT_PRIVILEGED_CALL,  /* 特权调用 */
-    AUDIT_EVENT_EXCEPTION,        /* 异常事件 */
-    AUDIT_EVENT_SECURITY_VIOLATION, /* 安全违规 */
-    AUDIT_EVENT_PMM_ALLOC,        /* 物理内存分配 */
-    AUDIT_EVENT_PMM_FREE,         /* 物理内存释放 */
-    AUDIT_EVENT_PAGETABLE_MAP,    /* 页表映射 */
-    AUDIT_EVENT_PAGETABLE_UNMAP,  /* 页表解映射 */
-    AUDIT_EVENT_SERVICE_CREATE,   /* 服务创建 */
-    AUDIT_EVENT_SERVICE_START,    /* 服务启动 */
-    AUDIT_EVENT_SERVICE_STOP,     /* 服务停止 */
-    AUDIT_EVENT_SERVICE_DESTROY,  /* 服务销毁 */
-    AUDIT_EVENT_SERVICE_CRASH,    /* 服务崩溃 */
-    AUDIT_EVENT_MODULE_LOAD,      /* 模块加载 */
-    AUDIT_EVENT_MODULE_UNLOAD,    /* 模块卸载 */
-    AUDIT_EVENT_MONITOR_ACTION,   /* 监控操作 */
-    AUDIT_EVENT_NULL_POINTER,     /* 空指针访问 */
-    AUDIT_EVENT_BUFFER_OVERFLOW,  /* 缓冲区溢出 */
-    AUDIT_EVENT_INVALID_MEMORY,   /* 无效内存访问 */
-    AUDIT_EVENT_USE_AFTER_FREE,   /* 释放后使用 */
-    AUDIT_EVENT_DOUBLE_FREE,      /* 重复释放 */
+    AUDIT_EVENT_CAP_VERIFY,
+    AUDIT_EVENT_CAP_CREATE,
+    AUDIT_EVENT_CAP_TRANSFER,
+    AUDIT_EVENT_CAP_DERIVE,
+    AUDIT_EVENT_CAP_REVOKE,
+    AUDIT_EVENT_DOMAIN_CREATE,
+    AUDIT_EVENT_DOMAIN_DESTROY,
+    AUDIT_EVENT_DOMAIN_SUSPEND,
+    AUDIT_EVENT_DOMAIN_RESUME,
+    AUDIT_EVENT_THREAD_CREATE,
+    AUDIT_EVENT_THREAD_DESTROY,
+    AUDIT_EVENT_THREAD_SWITCH,
+    AUDIT_EVENT_SYSCALL,
+    AUDIT_EVENT_IRQ,
+    AUDIT_EVENT_IPC_CALL,
+    AUDIT_EVENT_EXCEPTION,
+    AUDIT_EVENT_SECURITY_VIOLATION,
+    AUDIT_EVENT_PMM_ALLOC,
+    AUDIT_EVENT_PMM_FREE,
+    AUDIT_EVENT_SERVICE_START,
+    AUDIT_EVENT_SERVICE_STOP,
+    AUDIT_EVENT_SERVICE_CRASH,
+    AUDIT_EVENT_MODULE_LOAD,
+    AUDIT_EVENT_MODULE_UNLOAD,
+    AUDIT_EVENT_NULL_POINTER,
+    AUDIT_EVENT_BUFFER_OVERFLOW,
+    AUDIT_EVENT_INVALID_MEMORY,
+    AUDIT_EVENT_MAX
 } audit_event_type_t;
 
-/* 审计日志条目 */
+/* ========== 日志条目结构 ========== */
+
 typedef struct audit_entry {
-    u64 timestamp;               /* 高精度时间戳 */
-    u32 sequence;                /* 序列号 */
-    audit_event_type_t type;     /* 事件类型 */
-    domain_id_t domain;          /* 相关域ID */
-    cap_id_t cap_id;             /* 相关能力ID */
-    thread_id_t thread_id;       /* 相关线程ID */
-    u64 data[4];                 /* 事件特定数据 */
-    u8 result;                   /* 结果：0=失败，1=成功 */
+    u64 timestamp;
+    u32 sequence;
+    audit_event_type_t type;
+    domain_id_t domain;
+    cap_id_t cap_id;
+    thread_id_t thread_id;
+    u64 data[4];
+    u8 result;
     u8 reserved[3];
 } audit_entry_t;
 
-/* 审计日志缓冲区 */
-typedef struct audit_buffer {
-    void* base;                  /* 物理基地址 */
-    size_t size;                 /* 缓冲区大小 */
-    size_t write_offset;         /* 写入偏移 */
-    u64 sequence;                /* 当前序列号 */
-    bool initialized;            /* 是否已初始化 */
-} audit_buffer_t;
+/* ========== 查询过滤器 ========== */
 
-/* 审计日志系统接口 */
+typedef struct audit_query_filter {
+    domain_id_t domain;           /* 过滤域 */
+    audit_event_type_t type;      /* 过滤事件类型 */
+    u64 start_time;               /* 起始时间 */
+    u64 end_time;                 /* 结束时间 */
+    u32 max_results;              /* 最大结果数 */
+    u32 offset;                   /* 偏移 */
+} audit_query_filter_t;
+
+/* ========== 机制层接口 ========== */
+
+/* 初始化 */
 void audit_system_init(void);
 void audit_system_init_buffer(phys_addr_t base, size_t size);
 
-/* 记录审计事件 */
-void audit_log_event(audit_event_type_t type, domain_id_t domain, 
+/* 记录事件 */
+void audit_log_event(audit_event_type_t type, domain_id_t domain,
                      cap_id_t cap, thread_id_t thread_id,
                      u64 *data, u32 data_count, u8 result);
 
-/* 简化的审计日志宏（用于系统调用） */
-#define AUDIT_LOG_SYSCALL(domain, syscall_num, result) \
-    do { \
-        u64 _audit_data[4] = { (u64)(domain), (u64)(syscall_num), (u64)(result), 0 }; \
-        audit_log_event(AUDIT_EVENT_SYSCALL, domain, 0, 0, 0, \
-                       _audit_data, 4, (result) == HIC_SUCCESS ? 1 : 0); \
-    } while(0)
+/* 查询接口 */
+hic_status_t audit_query(const audit_query_filter_t *filter,
+                          void *buffer, size_t buffer_size, size_t *out_size);
+hic_status_t audit_query_by_domain(domain_id_t domain,
+                                    audit_entry_t *buffer,
+                                    u32 buffer_count, u32 *out_count);
+hic_status_t audit_query_by_type(audit_event_type_t type,
+                                  audit_entry_t *buffer,
+                                  u32 buffer_count, u32 *out_count);
+hic_status_t audit_query_latest(audit_entry_t *buffer, u32 count, u32 *out_count);
 
-/* 域切换审计日志 */
-#define AUDIT_LOG_DOMAIN_SWITCH(from, to, cap) \
-    do { \
-        u64 _audit_data[4] = { (u64)(from), (u64)(to), (u64)(cap), 0 }; \
-        audit_log_event(AUDIT_EVENT_IPC_CALL, from, cap, 0, \
-                       _audit_data, 3, 1); \
-    } while(0)
+/* 统计 */
+u64 audit_get_entry_count(void);
+u64 audit_get_buffer_usage(void);
 
-/* 便捷宏 */
-#define AUDIT_LOG_CAP_VERIFY(domain, cap, result) \
-    audit_log_event(AUDIT_EVENT_CAP_VERIFY, domain, cap, 0, NULL, 0, result)
+/* ========== 便捷宏 ========== */
 
 #define AUDIT_LOG_CAP_CREATE(domain, cap, result) \
     audit_log_event(AUDIT_EVENT_CAP_CREATE, domain, cap, 0, NULL, 0, result)
 
-#define AUDIT_LOG_CAP_TRANSFER(from, to, cap, result) \
-    do { u64 data[2] = {from, to}; \
-         audit_log_event(AUDIT_EVENT_CAP_TRANSFER, from, cap, 0, data, 2, result); \
-    } while(0)
-
-#define AUDIT_LOG_CAP_REVOKE(domain, cap, result) \
-    audit_log_event(AUDIT_EVENT_CAP_REVOKE, domain, cap, 0, NULL, 0, result)
-
 #define AUDIT_LOG_DOMAIN_CREATE(domain, result) \
     audit_log_event(AUDIT_EVENT_DOMAIN_CREATE, domain, 0, 0, NULL, 0, result)
-
-#define AUDIT_LOG_DOMAIN_DESTROY(domain, result) \
-    audit_log_event(AUDIT_EVENT_DOMAIN_DESTROY, domain, 0, 0, NULL, 0, result)
-
-#define AUDIT_LOG_DOMAIN_SUSPEND(domain, result) \
-    audit_log_event(AUDIT_EVENT_DOMAIN_SUSPEND, domain, 0, 0, NULL, 0, result)
-
-#define AUDIT_LOG_DOMAIN_RESUME(domain, result) \
-    audit_log_event(AUDIT_EVENT_DOMAIN_RESUME, domain, 0, 0, NULL, 0, result)
-
-#define AUDIT_LOG_THREAD_CREATE(domain, thread, result) \
-    audit_log_event(AUDIT_EVENT_THREAD_CREATE, domain, 0, thread, NULL, 0, result)
-
-#define AUDIT_LOG_THREAD_DESTROY(domain, thread, result) \
-    audit_log_event(AUDIT_EVENT_THREAD_DESTROY, domain, 0, thread, NULL, 0, result)
-
-#define AUDIT_LOG_THREAD_SWITCH(from, to, thread) \
-    do { u64 data[2] = {from, to}; \
-         audit_log_event(AUDIT_EVENT_THREAD_SWITCH, 0, 0, thread, data, 2, true); \
-    } while(0)
-
-#define AUDIT_LOG_IRQ(vector, domain, result) \
-    audit_log_event(AUDIT_EVENT_IRQ, domain, 0, 0, &vector, 1, result)
-
-#define AUDIT_LOG_IPC_CALL(caller, cap, result) \
-    audit_log_event(AUDIT_EVENT_IPC_CALL, caller, cap, 0, NULL, 0, result)
-
-#define AUDIT_LOG_EXCEPTION(domain, exc_type, result) \
-    do { u64 _exc = exc_type; \
-         audit_log_event(AUDIT_EVENT_EXCEPTION, domain, 0, 0, &_exc, 1, result); \
-    } while(0)
-
-#define AUDIT_LOG_SECURITY_VIOLATION(domain, reason) \
-    do { u64 _reason = reason; \
-         audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &_reason, 1, false); \
-    } while(0)
-
-#define AUDIT_LOG_PMM_ALLOC(domain, addr, count, result) \
-    do { u64 data[2] = {addr, count}; \
-         audit_log_event(AUDIT_EVENT_PMM_ALLOC, domain, 0, 0, data, 2, result); \
-    } while(0)
-
-#define AUDIT_LOG_PMM_FREE(domain, addr, count, result) \
-    do { u64 data[2] = {addr, count}; \
-         audit_log_event(AUDIT_EVENT_PMM_FREE, domain, 0, 0, data, 2, result); \
-    } while(0)
-
-#define AUDIT_LOG_PAGETABLE_MAP(domain, virt, phys, result) \
-    do { u64 data[2] = {virt, phys}; \
-         audit_log_event(AUDIT_EVENT_PAGETABLE_MAP, domain, 0, 0, data, 2, result); \
-    } while(0)
-
-#define AUDIT_LOG_PAGETABLE_UNMAP(domain, addr, result) \
-    audit_log_event(AUDIT_EVENT_PAGETABLE_UNMAP, domain, 0, 0, &addr, 1, result)
 
 #define AUDIT_LOG_SERVICE_START(domain, result) \
     audit_log_event(AUDIT_EVENT_SERVICE_START, domain, 0, 0, NULL, 0, result)
 
-#define AUDIT_LOG_SERVICE_STOP(domain, result) \
-    audit_log_event(AUDIT_EVENT_SERVICE_STOP, domain, 0, 0, NULL, 0, result)
+#define AUDIT_LOG_MODULE_LOAD(domain, code_size, data_size, code_phys, result) \
+    do { u64 _d[4] = {domain, code_size, data_size, code_phys}; \
+         audit_log_event(AUDIT_EVENT_MODULE_LOAD, domain, 0, 0, _d, 4, result); } while(0)
 
-#define AUDIT_LOG_SERVICE_CRASH(domain, reason) \
-    audit_log_event(AUDIT_EVENT_SERVICE_CRASH, domain, 0, 0, &reason, 1, false)
+#define AUDIT_LOG_SECURITY_VIOLATION(domain, reason) \
+do { u64 _r = reason; \
+audit_log_event(AUDIT_EVENT_SECURITY_VIOLATION, domain, 0, 0, &_r, 1, 0); } while(0)
 
-#define AUDIT_LOG_MODULE_LOAD(domain, instance_id, result) \
-    audit_log_event(AUDIT_EVENT_MODULE_LOAD, domain, 0, 0, &instance_id, 1, result)
-
-#define AUDIT_LOG_MODULE_UNLOAD(domain, instance_id, result) \
-    audit_log_event(AUDIT_EVENT_MODULE_UNLOAD, domain, 0, 0, &instance_id, 1, result)
-
-#define AUDIT_LOG_MONITOR_ACTION(action, domain, result) \
-    audit_log_event(AUDIT_EVENT_MONITOR_ACTION, domain, 0, 0, &action, 1, result)
-
-/* 获取统计信息 */
-u64 audit_get_entry_count(void);
-u64 audit_get_buffer_usage(void);
-
-/* ==================== 审计查询机制（机制层） ==================== */
-
-/* 审计查询过滤器 */
-typedef struct audit_query_filter {
-    domain_id_t domain;           /* 按域过滤（DOMAIN_ID_INVALID 表示不过滤） */
-    audit_event_type_t type;      /* 按事件类型过滤 */
-    u64 start_time;               /* 起始时间戳（0 表示不过滤） */
-    u64 end_time;                 /* 结束时间戳（0 表示不过滤） */
-    u32 max_results;              /* 最大返回数量 */
-    u32 offset;                   /* 结果偏移（分页） */
-} audit_query_filter_t;
-
-/* 审计查询结果 */
-typedef struct audit_query_result {
-    u32 count;                    /* 返回的条目数 */
-    u32 total_matches;            /* 总匹配数 */
-    bool has_more;                /* 是否还有更多结果 */
-    audit_entry_t entries[];      /* 条目数组（柔性数组） */
-} audit_query_result_t;
-
-/**
- * 查询审计日志（机制层）
- * 
- * @param filter 查询过滤器
- * @param buffer 输出缓冲区
- * @param buffer_size 缓冲区大小
- * @param out_size 实际写入大小
- * @return 状态码
- */
-hic_status_t audit_query(const audit_query_filter_t *filter,
-                          void *buffer, size_t buffer_size, size_t *out_size);
-
-/**
- * 按域查询审计日志（便捷接口）
- * 
- * @param domain 域ID
- * @param buffer 输出缓冲区
- * @param buffer_size 缓冲区大小
- * @param out_count 返回条目数
- * @return 状态码
- */
-hic_status_t audit_query_by_domain(domain_id_t domain,
-                                    audit_entry_t *buffer, 
-                                    u32 buffer_count,
-                                    u32 *out_count);
-
-/**
- * 按事件类型查询审计日志
- * 
- * @param type 事件类型
- * @param buffer 输出缓冲区
- * @param buffer_count 缓冲区能容纳的条目数
- * @param out_count 返回条目数
- * @return 状态码
- */
-hic_status_t audit_query_by_type(audit_event_type_t type,
-                                  audit_entry_t *buffer,
-                                  u32 buffer_count,
-                                  u32 *out_count);
-
-/**
- * 获取最新N条审计日志
- * 
- * @param buffer 输出缓冲区
- * @param count 请求条目数
- * @param out_count 实际返回条目数
- * @return 状态码
- */
-hic_status_t audit_query_latest(audit_entry_t *buffer, u32 count, u32 *out_count);
-
-/* 内存安全检测函数 */
-void audit_check_null_pointer(void* ptr, const char* context);
-void audit_check_buffer_overflow(void* ptr, size_t size, size_t max_size, const char* context);
-void audit_check_invalid_memory(void* ptr, const char* context);
-
-/* 便捷宏 */
-#define AUDIT_CHECK_NULL_PTR(ptr) audit_check_null_pointer(ptr, #ptr)
-#define AUDIT_CHECK_BUFFER_OVERFLOW(ptr, size, max) audit_check_buffer_overflow(ptr, size, max, #ptr)
-#define AUDIT_CHECK_INVALID_MEMORY(ptr) audit_check_invalid_memory(ptr, #ptr)
-
+#define AUDIT_LOG_DOMAIN_SWITCH(from, to, cap) \
+audit_log_event(AUDIT_EVENT_THREAD_SWITCH, to, cap, from, NULL, 0, 0)
 #endif /* HIC_KERNEL_AUDIT_H */

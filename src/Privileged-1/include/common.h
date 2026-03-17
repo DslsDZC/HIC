@@ -28,6 +28,20 @@ typedef int16_t  s16;
 typedef int32_t  s32;
 typedef int64_t  s64;
 
+/* 域和能力 ID 类型 */
+typedef u32 domain_id_t;
+typedef u32 cap_id_t;
+typedef u64 cap_handle_t;
+typedef u32 physical_core_id_t;
+typedef u32 logical_core_id_t;
+
+/* 布尔类型 - C23 中 bool 是关键字 */
+#if __STDC_VERSION__ < 202311L
+typedef _Bool bool;
+#define true  1
+#define false 0
+#endif
+
 /* NULL 定义 */
 #ifndef NULL
 #define NULL ((void*)0)
@@ -49,6 +63,13 @@ typedef u32 hic_status_t;
 #define HIC_BUFFER_TOO_SMALL 9
 #define HIC_PARSE_FAILED 10
 #define HIC_NOT_INITIALIZED 11
+#define HIC_INVALID_STATE 12
+#define HIC_INVALID_DATA 13
+#define HIC_CHECKSUM_MISMATCH 14
+#define HIC_VERSION_MISMATCH 15
+#define HIC_NOT_SUPPORTED 16
+#define HIC_ERROR_DEPENDENCY_NOT_MET 17
+#define HIC_ERROR_CIRCULAR_DEPENDENCY 18
 
 /* 服务 API 结构 */
 typedef struct service_api {

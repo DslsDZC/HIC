@@ -119,7 +119,9 @@ typedef struct crypto_sha_ctx {
     crypto_algo_t algo;            /* SHA 算法 */
     u8 state[256];                  /* 算法状态 */
     u32 state_size;                 /* 状态大小 */
+    u32 block_size;                 /* 块大小 (SHA-256: 64, SHA-512: 128) */
     u64 total_bytes;                /* 已处理字节数 */
+    u8 buffer[128];                 /* 未完成的块缓冲区 */
     bool finalized;                 /* 是否已最终化 */
 } crypto_sha_ctx_t;
 

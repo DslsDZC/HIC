@@ -415,3 +415,19 @@ u32 thread_get_bound_core(thread_id_t thread_id)
     thread_t *thread = &g_threads[thread_id];
     return thread->logical_core_id;
 }
+
+/**
+ * 根据逻辑核心 ID 查找线程
+ */
+thread_id_t thread_find_by_logical_core(u32 logical_core_id)
+{
+    for (thread_id_t i = 0; i < MAX_THREADS; i++) {
+        /* 检查线程是否有效且绑定到指定核心 */
+        if (g_threads[i].domain_id != HIC_INVALID_DOMAIN &&
+            g_threads[i].state != THREAD_STATE_TERMINATED &&
+            g_threads[i].logical_core_id == logical_core_id) {
+            return i;
+        }
+    }
+    return INVALID_THREAD;
+}

@@ -24,6 +24,8 @@
 #include "thread.h"
 #include "domain.h"
 #include "monitor.h"
+#include "include/hal.h"
+#include "domain_switch.h"
 
 /* ==================== 全局数据结构定义 ==================== */
 
@@ -975,16 +977,8 @@ void logical_core_update_quotas(void) {
                     core->flags |= LOGICAL_CORE_FLAG_QUOTA_EXCEEDED;
                     core->running_thread = INVALID_THREAD;
                     
-                    /* 通知监控服务 */
-                    monitor_event_t event;
-                    event.type = MONITOR_EVENT_RESOURCE_EXHAUSTED;
-                    event.domain = core->owner_domain;
-                    event.timestamp = current_time;
-                    event.data[0] = i;  /* 逻辑核心ID */
-                    event.data[1] = core->quota.used_time;
-                    event.data[2] = core->quota.allocated_time;
-                    event.data[3] = overage_percent;
-                    monitor_report_event(&event);
+                    /* 记录事件（使用机制层接口） */
+                    monitor_record_event(MONITOR_EVENT_TYPE_4, core->owner_domain);
                 }
             }
             

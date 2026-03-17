@@ -93,6 +93,9 @@ hic_status_t thread_bind_to_core(thread_id_t thread_id, u32 logical_core_id);
 /* 获取线程绑定的逻辑核心 */
 u32 thread_get_bound_core(thread_id_t thread_id);
 
+/* 根据逻辑核心 ID 查找线程 */
+thread_id_t thread_find_by_logical_core(u32 logical_core_id);
+
 /* 终止线程 */
 hic_status_t thread_terminate(thread_id_t thread_id);
 

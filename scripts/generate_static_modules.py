@@ -134,6 +134,7 @@ extern char __stop_static_svc_{safe_name}_bss[];
         auto_start = module.get('auto_start', False)
         critical = module.get('critical', False)
         privileged = module.get('privileged', False)
+        unloadable = module.get('unloadable', False)
         priority = module.get('priority', 100)
 
         # 转换为标志位（使用内核定义的宏）
@@ -144,6 +145,8 @@ extern char __stop_static_svc_{safe_name}_bss[];
             flags |= (1 << 0)  # STATIC_MODULE_FLAG_CRITICAL
         if privileged:
             flags |= (1 << 2)  # STATIC_MODULE_FLAG_PRIVILEGED
+        if unloadable:
+            flags |= (1 << 3)  # STATIC_MODULE_FLAG_UNLOADABLE
 
         # 生成类型编号
         type_num = 2  # 默认 service
@@ -166,6 +169,8 @@ static static_module_desc_t g_static_module_{safe_name} = {{
     .name = "{name_field}",
     .type = {type_num},
     .version = 1,
+    .priority = {priority},
+    ._pad = 0,
     .code_start = (void*)__start_static_svc_{safe_name}_text,
     .code_end = (void*)__stop_static_svc_{safe_name}_text,
     .data_start = (void*)__start_static_svc_{safe_name}_data,
@@ -173,7 +178,6 @@ static static_module_desc_t g_static_module_{safe_name} = {{
     .entry_offset = 0,           /* 默认入口点在代码段起始 */
     .capabilities = {{0}},       /* 运行时填充 */
     .flags = {flags}ULL,  /* STATIC_MODULE_FLAG_* */
-    ._reserved = 0,              /* 保留字段 */
 }};
 
 '''
@@ -185,6 +189,8 @@ static static_module_desc_t g_static_modules_end = {{
     .name = "",  /* 空名称表示结束 */
     .type = 0,
     .version = 0,
+    .priority = 0,
+    ._pad = 0,
     .code_start = NULL,
     .code_end = NULL,
     .data_start = NULL,
@@ -192,7 +198,6 @@ static static_module_desc_t g_static_modules_end = {{
     .entry_offset = 0,
     .capabilities = {{0}},
     .flags = 0,
-    ._reserved = 0,
 }};
 '''
 

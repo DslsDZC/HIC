@@ -69,6 +69,11 @@ typedef u32 hic_status_t;
 #define HIC_ERROR_NO_RESOURCE    14
 #define HIC_ERROR_ALREADY_EXISTS 15
 #define HIC_ERROR_BUFFER_TOO_SMALL 16
+#define HIC_ERROR_DEPENDENCY_NOT_MET 17  /* 依赖未满足 */
+#define HIC_ERROR_CIRCULAR_DEPENDENCY  18  /* 循环依赖 */
+
+/* 兼容性别名 */
+#define HIC_DEPENDENCY_NOT_MET HIC_ERROR_DEPENDENCY_NOT_MET
 
 /* 能力类型 */
 typedef u32 cap_id_t;

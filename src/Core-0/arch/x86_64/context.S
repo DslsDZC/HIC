@@ -121,11 +121,13 @@ x86_64_restore_context:
  *   4:  domain_id (u32, 4字节)
  *   8:  state (enum, 4字节)
  *   12: priority (u8, 1字节) + 3字节填充
- *   16: stack_base (8字节)
- *   24: stack_size (8字节)
- *   32: stack_ptr (8字节)     <-- 这是我们要保存/恢复的
- *   40: arch_context (8字节)
- *   48: time_slice (8字节)
+ *   16: logical_core_id (u32, 4字节)
+ *   20: core_affinity (u32, 4字节)
+ *   24: stack_base (8字节)
+ *   32: stack_size (8字节)
+ *   40: stack_ptr (8字节)     <-- 这是我们要保存/恢复的
+ *   48: arch_context (8字节)
+ *   56: time_slice (8字节)
  */
 context_switch:
     /* 检查 prev 是否为 NULL */
@@ -142,14 +144,14 @@ context_switch:
     pushq %r14
     pushq %r15
 
-    /* 保存栈指针到 prev->stack_ptr (偏移 32) */
-    movq %rsp, 32(%rdi)
+    /* 保存栈指针到 prev->stack_ptr (偏移 40) */
+    movq %rsp, 40(%rdi)
 
 .L_switch_to_new:
     /* 恢复next线程上下文 */
 
-    /* 恢复栈指针从 next->stack_ptr (偏移 32) */
-    movq 32(%rsi), %rsp
+    /* 恢复栈指针从 next->stack_ptr (偏移 40) */
+    movq 40(%rsi), %rsp
 
     /* 恢复调用者保存的寄存器 */
     popq %r15

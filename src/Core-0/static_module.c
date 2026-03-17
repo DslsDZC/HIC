@@ -7,14 +7,48 @@
 /**
  * HIC内核静态模块系统实现
  * 
+ * 静态模块特性：
+ * - 固定地址段，在内核内存之外 (0x200000)
+ * - 代码在原位置执行（execute in place）
+ * - 支持卸载，内存可重用
+ * - init_launcher 用完后可释放，纳入动态池
+ * 
+ * 内存布局：
+ * ┌─────────────────┐ 0x100000
+ * │ 内核 (Core-0)    │
+ * └─────────────────┘ _kernel_end
+ * ┌─────────────────┐ 0x200000 (STATIC_MODULES_BASE)
+ * │ 静态模块段       │
+ * │ - verifier      │
+ * │ - ide_driver    │
+ * │ - fat32_service │
+ * │ - memory_service│
+ * │ - device_manager│
+ * │ - security_mon  │
+ * │ - init_launcher │ ← 最后加载，用完可卸载
+ * └─────────────────┘ _static_modules_region_end
+ *         ↓
+ *   卸载后内存 → 动态池
+ * 
  * 加载流程：
  * 1. 解析内核映像的 .static_modules 段
- * 2. 为每个模块创建沙箱（域）
- * 3. 复制代码/数据段到沙箱内存
- * 4. 配置页表和内存权限
- * 5. 创建初始能力空间
- * 6. 注册服务端点
+ * 2. 按优先级排序加载
+ * 3. 为每个模块创建域（身份隔离）
+ * 4. 分配逻辑核心
+ * 5. 创建服务端点能力
+ * 6. 注册到服务注册表
  * 7. 启动模块主线程
+ * 
+ * 卸载流程：
+ * 1. 停止模块线程
+ * 2. 撤销域和能力
+ * 3. 从服务注册表移除
+ * 4. 标记内存可重用
+ * 5. 通知 PMM 回收内存
+ * 
+ * 信任链：
+ * 内核 → verifier → ide_driver → fat32_service → init_launcher
+ *      → module_manager_service（动态）→ 其他动态模块
  */
 
 #include "include/static_module.h"
@@ -37,12 +71,15 @@ extern static_module_desc_t __static_modules_end;
 
 /* 模块运行时状态 */
 typedef struct static_module_runtime {
-    domain_id_t domain_id;          /* 分配的域 ID */
-    cap_id_t endpoint_cap;          /* 服务端点能力 */
-    bool running;                   /* 是否正在运行 */
-    phys_addr_t code_phys;          /* 代码段加载地址（物理） */
-    u32 logical_core_id;            /* 分配的逻辑核心ID */
-    cap_handle_t logical_core_handle; /* 逻辑核心能力句柄 */
+    domain_id_t domain_id;              /* 分配的域 ID */
+    cap_id_t endpoint_cap;              /* 服务端点能力 */
+    bool running;                       /* 是否正在运行 */
+    phys_addr_t code_phys;              /* 代码段加载地址（物理） */
+    u32 logical_core_id;                /* 分配的逻辑核心ID */
+    cap_handle_t logical_core_handle;   /* 逻辑核心能力句柄 */
+    static_module_state_t state;        /* 模块状态 */
+    u64 memory_size;                    /* 模块占用内存大小 */
+    bool memory_freed;                  /* 内存是否已释放 */
 } static_module_runtime_t;
 
 #define MAX_STATIC_MODULES 16
@@ -67,34 +104,89 @@ void static_module_system_init(void)
 /* ==================== 核心加载流程 ==================== */
 
 /**
+ * 按优先级排序的模块索引表
+ * 用于实现优先级加载顺序
+ */
+typedef struct {
+    static_module_desc_t *module;
+    u32 original_idx;       /* 原始索引，用于运行时状态映射 */
+} module_sort_entry_t;
+
+static module_sort_entry_t g_sorted_modules[MAX_STATIC_MODULES];
+static u32 g_sorted_count = 0;
+
+/**
+ * 简单插入排序（按优先级升序）
+ * 优先级数值越小，越先加载
+ */
+static void sort_modules_by_priority(void)
+{
+    static_module_desc_t *module;
+    g_sorted_count = 0;
+    
+    /* 收集所有模块 */
+    for (module = &__static_modules_start; module < &__static_modules_end; module++) {
+        if (module->name[0] == '\0') {
+            continue;
+        }
+        if (g_sorted_count >= MAX_STATIC_MODULES) {
+            break;
+        }
+        g_sorted_modules[g_sorted_count].module = module;
+        g_sorted_modules[g_sorted_count].original_idx = g_sorted_count;
+        g_sorted_count++;
+    }
+    
+    /* 插入排序：按优先级升序 (0=最高优先级先加载) */
+    for (u32 i = 1; i < g_sorted_count; i++) {
+        module_sort_entry_t key = g_sorted_modules[i];
+        u32 priority = key.module->priority;
+        s32 j = (s32)i - 1;
+        
+        /* 向后移动优先级大于 key 的元素 */
+        while (j >= 0 && g_sorted_modules[j].module->priority > priority) {
+            g_sorted_modules[j + 1] = g_sorted_modules[j];
+            j--;
+        }
+        g_sorted_modules[j + 1] = key;
+    }
+}
+
+/**
  * 加载所有静态模块
  * 
- * 三个核心静态模块：
- * - fat32.hicmod: FAT32 文件系统服务
- * - module_signer.hicmod: 签名验证服务
- * - module_manager.hicmod: 模块管理器服务
+ * 按优先级顺序加载：
+ * - CRITICAL (0): fat32, signer 等核心服务
+ * - HIGH (1): 驱动服务
+ * - NORMAL (2): 一般服务
+ * - LOW (3): 后台服务
  */
 int static_module_load_all(void)
 {
-    static_module_desc_t *module;
     int loaded_count = 0;
     int failed_count = 0;
-    u32 module_idx = 0;
 
     console_puts("[STATIC_MODULE] Loading static modules...\n");
     console_puts("[STATIC_MODULE] Scanning .static_modules segment...\n");
 
-    /* 遍历所有静态模块 */
-    for (module = &__static_modules_start; module < &__static_modules_end; module++, module_idx++) {
-        /* 检查模块描述符是否有效 */
-        if (module->name[0] == '\0') {
-            continue;  /* 空描述符，跳过 */
-        }
+    /* 按优先级排序 */
+    sort_modules_by_priority();
+    
+    console_puts("[STATIC_MODULE] Found ");
+    console_putu32(g_sorted_count);
+    console_puts(" modules, sorted by priority\n");
+
+    /* 按排序后的顺序加载 */
+    for (u32 i = 0; i < g_sorted_count; i++) {
+        static_module_desc_t *module = g_sorted_modules[i].module;
+        u32 module_idx = i;  /* 使用排序后的索引 */
 
         console_puts("\n[STATIC_MODULE] ========================================\n");
-        console_puts("[STATIC_MODULE] Found module: ");
+        console_puts("[STATIC_MODULE] Loading module: ");
         console_puts(module->name);
-        console_puts("\n");
+        console_puts(" (priority=");
+        console_putu32(module->priority);
+        console_puts(")\n");
         console_puts("[STATIC_MODULE]   Type: ");
         console_putu64(module->type);
         console_puts(", Version: ");
@@ -162,16 +254,23 @@ int static_module_load_all(void)
 /* ==================== 沙箱创建 ==================== */
 
 /**
- * 创建静态模块的沙箱（扩展版本）
+ * 创建静态模块的运行环境
  * 
- * 重要：静态模块直接在内核镜像中的原始位置执行（位置相关代码）
- * 不复制代码到新内存，避免位置相关代码崩溃问题
- * 每个模块需要分配逻辑核心才能运行线程
+ * 静态模块特性：
+ * - 代码嵌入内核，使用固定地址段
+ * - 代码在固定地址段执行（execute in place）
+ * - 支持卸载，内存可重用
+ * - 创建域和能力进行身份隔离
+ * 
+ * @param module 模块描述符
+ * @param runtime_idx 运行时索引
+ * @return 成功返回 0
  */
 int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain;
-    u64 code_size, data_size;
+    u64 code_size;
+    u64 data_size = 0;
     phys_addr_t code_phys;
     domain_quota_t quota;
     hic_status_t status;
@@ -179,29 +278,28 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
 
     /* 计算模块大小 */
     code_size = (u64)((u8*)module->code_end - (u8*)module->code_start);
-    data_size = 0;
     if (module->data_start && module->data_end) {
         data_size = (u64)((u8*)module->data_end - (u8*)module->data_start);
     }
 
     console_puts("[STATIC_MODULE]     Code size: ");
     console_putu64(code_size);
-    console_puts(" bytes\n");
-    console_puts("[STATIC_MODULE]     Data size: ");
-    console_putu64(data_size);
-    console_puts(" bytes\n");
+    console_puts(" bytes at fixed address\n");
+    if (data_size > 0) {
+        console_puts("[STATIC_MODULE]     Data size: ");
+        console_putu64(data_size);
+        console_puts(" bytes\n");
+    }
 
-    /* 设置资源配额（只需栈空间，代码在内核中） */
-    quota.max_memory = PAGE_SIZE * 2;  /* 只需要栈空间 */
-    quota.max_threads = 4;             /* 最多4个线程 */
-    quota.max_caps = 32;               /* 最多32个能力 */
-    quota.cpu_quota_percent = 25;      /* 25% CPU 时间 */
+    /* 设置资源配额（栈空间 + 数据空间） */
+    quota.max_memory = PAGE_SIZE * 4 + data_size;  /* 栈空间 + 数据 */
+    quota.max_threads = 4;
+    quota.max_caps = 32;
+    quota.cpu_quota_percent = 25;
 
-    /* 创建域（沙箱） */
+    /* 创建域（身份隔离） */
     domain_type_t domain_type = DOMAIN_TYPE_PRIVILEGED;
-    if (module->type == STATIC_MODULE_TYPE_SYSTEM) {
-        domain_type = DOMAIN_TYPE_PRIVILEGED;
-    } else if (module->type == STATIC_MODULE_TYPE_USER) {
+    if (module->type == STATIC_MODULE_TYPE_USER) {
         domain_type = DOMAIN_TYPE_APPLICATION;
     }
 
@@ -220,14 +318,13 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     /* 为模块分配逻辑核心 */
     status = hic_logical_core_allocate(domain, 1, 
                                        0,     /* 无特殊标志 */
-                                       10,  /* 10% CPU 配额 */
-                                       NULL, /* 无亲和性限制 */
+                                       10,    /* 10% CPU 配额 */
+                                       NULL,  /* 无亲和性限制 */
                                        lcore_handles);
     if (status != HIC_SUCCESS) {
         console_puts("[STATIC_MODULE]     ERROR: Failed to allocate logical core (status=");
         console_putu64(status);
         console_puts(")\n");
-        /* 清理已创建的域 */
         domain_destroy(domain);
         return -1;
     }
@@ -248,21 +345,24 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
     console_putu64(lcore_id);
     console_puts("\n");
 
-    /* 静态模块：直接使用内核中的原始地址
-     * 静态模块嵌入在内核镜像中，是受信任的代码
-     * 使用原始链接地址，避免位置相关代码问题
+    /* 静态模块：使用固定地址段（在内核之外）
+     * 代码在 STATIC_MODULES_BASE 开始的固定地址段执行
+     * 支持卸载，内存可重用
      */
     code_phys = (phys_addr_t)module->code_start;
     
-    console_puts("[STATIC_MODULE]     Code at kernel addr 0x");
+    console_puts("[STATIC_MODULE]     Code at fixed addr 0x");
     console_puthex64(code_phys);
-    console_puts(" (execute in place)\n");
+    console_puts(" (execute in place, unloadable)\n");
 
     /* 保存运行时状态 */
     g_module_runtime[runtime_idx].domain_id = domain;
     g_module_runtime[runtime_idx].code_phys = code_phys;
     g_module_runtime[runtime_idx].logical_core_id = lcore_id;
     g_module_runtime[runtime_idx].logical_core_handle = lcore_handles[0];
+    g_module_runtime[runtime_idx].state = STATIC_MODULE_STATE_LOADING;
+    g_module_runtime[runtime_idx].memory_size = code_size + data_size;
+    g_module_runtime[runtime_idx].memory_freed = false;
 
     /* 记录审计日志 */
     u64 audit_data[4] = { domain, code_size, data_size, code_phys };
@@ -518,6 +618,7 @@ int static_module_start_ex(static_module_desc_t *module, u32 runtime_idx)
     
     /* 标记模块为运行状态 */
     g_module_runtime[runtime_idx].running = true;
+    g_module_runtime[runtime_idx].state = STATIC_MODULE_STATE_RUNNING;
 
     /* 记录审计日志 */
     audit_log_event(AUDIT_EVENT_SERVICE_START, domain, 0, 0, NULL, 0, true);
@@ -630,4 +731,243 @@ service_endpoint_t* static_module_get_service(const char *name)
 hic_status_t static_module_get_endpoint_handle(const char *name, cap_handle_t *handle)
 {
     return service_get_endpoint_handle(name, handle);
+}
+
+/* ==================== 卸载功能 ==================== */
+
+/**
+ * 获取模块状态
+ */
+static_module_state_t static_module_get_state(const char *name)
+{
+    static_module_desc_t *module = static_module_find(name);
+    if (!module) {
+        return STATIC_MODULE_STATE_UNLOADED;
+    }
+    
+    u32 idx = (u32)(module - &__static_modules_start);
+    if (idx < MAX_STATIC_MODULES) {
+        return g_module_runtime[idx].state;
+    }
+    
+    return STATIC_MODULE_STATE_UNLOADED;
+}
+
+/**
+ * 卸载静态模块
+ * 
+ * 停止模块线程，释放域和能力，内存可纳入动态池
+ */
+hic_status_t static_module_unload(const char *name)
+{
+    static_module_desc_t *module;
+    u32 idx;
+    static_module_runtime_t *runtime;
+    
+    module = static_module_find(name);
+    if (!module) {
+        console_puts("[STATIC_MODULE] Module not found: ");
+        console_puts(name);
+        console_puts("\n");
+        return HIC_ERROR_NOT_FOUND;
+    }
+    
+    idx = (u32)(module - &__static_modules_start);
+    if (idx >= MAX_STATIC_MODULES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    runtime = &g_module_runtime[idx];
+    
+    /* 检查模块状态 */
+    if (runtime->state == STATIC_MODULE_STATE_UNLOADED ||
+        runtime->state == STATIC_MODULE_STATE_UNLOADED_MEM_FREED) {
+        console_puts("[STATIC_MODULE] Module already unloaded: ");
+        console_puts(name);
+        console_puts("\n");
+        return HIC_SUCCESS;
+    }
+    
+    /* 检查是否可卸载 */
+    if (!(module->flags & STATIC_MODULE_FLAG_UNLOADABLE) &&
+        !(module->flags & STATIC_MODULE_FLAG_CRITICAL)) {
+        /* 只有标记为可卸载或非关键模块才能卸载 */
+        console_puts("[STATIC_MODULE] Module is not unloadable: ");
+        console_puts(name);
+        console_puts("\n");
+        return HIC_ERROR_PERMISSION_DENIED;
+    }
+    
+    /* 关键模块不允许卸载 */
+    if (module->flags & STATIC_MODULE_FLAG_CRITICAL) {
+        console_puts("[STATIC_MODULE] Cannot unload critical module: ");
+        console_puts(name);
+        console_puts("\n");
+        return HIC_ERROR_PERMISSION_DENIED;
+    }
+    
+    console_puts("[STATIC_MODULE] Unloading module: ");
+    console_puts(name);
+    console_puts("\n");
+    
+    runtime->state = STATIC_MODULE_STATE_UNLOADING;
+    
+    /* 步骤1: 停止模块线程 */
+    if (runtime->running) {
+        console_puts("[STATIC_MODULE]   Stopping module threads...\n");
+        
+        /* 通过逻辑核心 ID 找到并终止线程 */
+        if (runtime->logical_core_id != INVALID_LOGICAL_CORE) {
+            /* 查找并终止绑定到该逻辑核心的线程 */
+            extern thread_id_t thread_find_by_logical_core(u32 logical_core_id);
+            thread_id_t tid = thread_find_by_logical_core(runtime->logical_core_id);
+            if (tid != INVALID_THREAD) {
+                thread_terminate(tid);
+                console_puts("[STATIC_MODULE]   Thread terminated: ");
+                console_putu64(tid);
+                console_puts("\n");
+            }
+        }
+        runtime->running = false;
+    }
+    
+    /* 步骤2: 从服务注册表移除 */
+    console_puts("[STATIC_MODULE]   Unregistering service...\n");
+    service_unregister_endpoint(name);
+    
+    /* 步骤3: 撤销能力 */
+    console_puts("[STATIC_MODULE]   Revoking capabilities...\n");
+    if (runtime->endpoint_cap != 0) {
+        cap_revoke(runtime->endpoint_cap);
+        runtime->endpoint_cap = 0;
+    }
+    
+    /* 步骤4: 销毁域 */
+    console_puts("[STATIC_MODULE]   Destroying domain...\n");
+    if (runtime->domain_id != HIC_INVALID_DOMAIN) {
+        domain_destroy(runtime->domain_id);
+        runtime->domain_id = HIC_INVALID_DOMAIN;
+    }
+    
+    /* 步骤5: 标记内存可重用 */
+    runtime->memory_size = (u64)module->code_end - (u64)module->code_start;
+    if (module->data_start && module->data_end) {
+        runtime->memory_size += (u64)module->data_end - (u64)module->data_start;
+    }
+    
+    runtime->state = STATIC_MODULE_STATE_UNLOADED;
+    runtime->memory_freed = false;
+    
+    console_puts("[STATIC_MODULE] Module unloaded: ");
+    console_puts(name);
+    console_puts(", memory size: ");
+    console_putu64(runtime->memory_size);
+    console_puts(" bytes available for reuse\n");
+    
+    /* 记录审计日志 */
+    u64 audit_data[4] = { (u64)name[0], (u64)name[1], (u64)name[2], (u64)name[3] };
+    audit_log_event(AUDIT_EVENT_SERVICE_STOP, 0, 0, 0, audit_data, 4, true);
+    
+    return HIC_SUCCESS;
+}
+
+/**
+ * 卸载 init_launcher（引导完成后调用）
+ * 
+ * init_launcher 完成引导 module_manager 后，
+ * 调用此函数释放其内存，纳入动态池
+ */
+hic_status_t static_module_unload_init_launcher(void)
+{
+    console_puts("[STATIC_MODULE] Unloading init_launcher after bootstrap...\n");
+    return static_module_unload("init_launcher");
+}
+
+/**
+ * 释放已卸载模块的内存到动态池
+ * 
+ * @return 释放的字节数
+ */
+u64 static_module_release_memory(void)
+{
+    u64 total_released = 0;
+    
+    console_puts("[STATIC_MODULE] Releasing unloaded module memory...\n");
+    
+    for (u32 i = 0; i < g_sorted_count && i < MAX_STATIC_MODULES; i++) {
+        static_module_runtime_t *runtime = &g_module_runtime[i];
+        
+        /* 查找已卸载但内存未释放的模块 */
+        if (runtime->state == STATIC_MODULE_STATE_UNLOADED && 
+            !runtime->memory_freed &&
+            runtime->memory_size > 0) {
+            
+            console_puts("[STATIC_MODULE]   Releasing memory for module index ");
+            console_putu32(i);
+            console_puts(": ");
+            console_putu64(runtime->memory_size);
+            console_puts(" bytes at 0x");
+            console_puthex64(runtime->code_phys);
+            console_puts("\n");
+            
+            /* 计算页数 */
+            u32 page_count = (u32)((runtime->memory_size + PAGE_SIZE - 1) / PAGE_SIZE);
+            
+            /* 将静态模块内存区域标记为可用 */
+            /* 静态模块内存在固定地址段，需要添加到 PMM 的可用内存池 */
+            phys_addr_t mem_start = runtime->code_phys;
+            phys_addr_t mem_end = mem_start + runtime->memory_size;
+            
+            /* 验证地址范围在静态模块区域内 */
+            if (mem_start >= (phys_addr_t)_static_modules_region_start &&
+                mem_end <= (phys_addr_t)_static_modules_region_end) {
+                
+                /* 添加到 PMM 作为动态可用内存 */
+                hic_status_t status = pmm_add_region(mem_start, runtime->memory_size);
+                if (status == HIC_SUCCESS) {
+                    console_puts("[STATIC_MODULE]   Memory added to dynamic pool\n");
+                    total_released += runtime->memory_size;
+                } else {
+                    console_puts("[STATIC_MODULE]   WARNING: Failed to add memory to pool (status=");
+                    console_putu64(status);
+                    console_puts(")\n");
+                }
+            } else {
+                console_puts("[STATIC_MODULE]   WARNING: Memory outside static module region\n");
+            }
+            
+            runtime->state = STATIC_MODULE_STATE_UNLOADED_MEM_FREED;
+            runtime->memory_freed = true;
+        }
+    }
+    
+    if (total_released > 0) {
+        console_puts("[STATIC_MODULE] Total memory released: ");
+        console_putu64(total_released);
+        console_puts(" bytes\n");
+    } else {
+        console_puts("[STATIC_MODULE] No memory to release\n");
+    }
+    
+    return total_released;
+}
+
+/**
+ * 获取可释放的静态模块内存大小
+ */
+u64 static_module_get_reclaimable_memory(void)
+{
+    u64 total = 0;
+    
+    for (u32 i = 0; i < g_sorted_count && i < MAX_STATIC_MODULES; i++) {
+        static_module_runtime_t *runtime = &g_module_runtime[i];
+        
+        if (runtime->state == STATIC_MODULE_STATE_UNLOADED && 
+            !runtime->memory_freed &&
+            runtime->memory_size > 0) {
+            total += runtime->memory_size;
+        }
+    }
+    
+    return total;
 }
