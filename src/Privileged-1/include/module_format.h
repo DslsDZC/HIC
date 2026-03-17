@@ -117,7 +117,6 @@ typedef struct hicmod_metadata {
     
     /* 编译 */
     bool static_build;
-    u32 priority;
     bool autostart;
 } hicmod_metadata_t;
 

@@ -99,7 +99,7 @@ hic_status_t service_register_endpoint(const char *name,
     slot->owner = owner;
     slot->endpoint_cap = endpoint_cap;
     slot->type = type;
-    slot->state = SERVICE_STATE_RUNNING;
+    slot->state = SERVICE_STATE_ACTIVE;
     slot->version = version;
     slot->flags = 0;
     

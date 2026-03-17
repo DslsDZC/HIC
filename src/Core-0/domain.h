@@ -115,6 +115,7 @@ typedef struct domain {
 #define DOMAIN_FLAG_TRUSTED      (1U << 0)  /* 可信域 */
 #define DOMAIN_FLAG_CRITICAL     (1U << 1)  /* 关键域 */
 #define DOMAIN_FLAG_PRIVILEGED   (1U << 2)  /* 特权域（可绕过能力系统） */
+#define DOMAIN_FLAG_PRIMARY      (1U << 3)  /* 主实例（滚动更新） */
     
     /* 父域（用于资源继承） */
     domain_id_t parent_domain;
@@ -247,5 +248,89 @@ emergency_level_t domain_detect_emergency(void);
  * @return 受影响的域数量
  */
 u32 domain_trigger_emergency_action(emergency_level_t level, bool exclude_critical);
+
+/* ==================== 机制层：零停机更新原语 ==================== */
+
+/**
+ * @brief 并行域创建（机制层）
+ * 
+ * 基于模板域创建可并行运行的新域。
+ * 用于零停机更新场景。
+ * 
+ * 机制保证：
+ * 1. 新域与模板域共享必要的硬件能力
+ * 2. 新域有独立的物理内存区域
+ * 3. 新旧域可同时运行
+ * 4. 创建后可进行能力转移
+ * 
+ * @param template_domain 模板域ID（将继承配置）
+ * @param name 新域名称
+ * @param quota_override 配额覆盖（NULL则使用模板配额）
+ * @param out 新域ID输出
+ * @return 状态码
+ */
+hic_status_t domain_parallel_create(domain_id_t template_domain,
+                                     const char *name,
+                                     const domain_quota_t *quota_override,
+                                     domain_id_t *out);
+
+/**
+ * @brief 设置域的并行运行伙伴（机制层）
+ * 
+ * 将两个域标记为并行运行伙伴。
+ * 用于零停机更新期间跟踪新旧实例关系。
+ * 
+ * @param domain_a 域A
+ * @param domain_b 域B
+ * @return 状态码
+ */
+hic_status_t domain_set_parallel_partner(domain_id_t domain_a, domain_id_t domain_b);
+
+/**
+ * @brief 获取域的并行运行伙伴（机制层）
+ * 
+ * @param domain 域ID
+ * @param partner 输出伙伴域ID
+ * @return 状态码
+ */
+hic_status_t domain_get_parallel_partner(domain_id_t domain, domain_id_t *partner);
+
+/**
+ * @brief 原子性域切换（机制层）
+ * 
+ * 原子性地将执行权从一个域切换到另一个域。
+ * 用于零停机更新的最后一步。
+ * 
+ * @param from 当前活跃域
+ * @param to 目标域
+ * @param endpoint_caps 要重定向的端点能力数组
+ * @param cap_count 能力数量
+ * @return 状态码
+ */
+hic_status_t domain_atomic_switch(domain_id_t from,
+                                   domain_id_t to,
+                                   cap_id_t *endpoint_caps,
+                                   u32 cap_count);
+
+/**
+ * @brief 域优雅关闭（机制层）
+ * 
+ * 优雅关闭域，等待现有请求完成。
+ * 用于零停机更新后清理旧实例。
+ * 
+ * @param domain 域ID
+ * @param timeout_ms 等待超时（毫秒）
+ * @param force 超时后是否强制关闭
+ * @return 状态码
+ */
+hic_status_t domain_graceful_shutdown(domain_id_t domain,
+                                        u32 timeout_ms,
+                                        bool force);
+
+/* 域标志扩展（用于零停机更新） */
+#define DOMAIN_FLAG_UPDATING      (1U << 8)  /* 正在更新中 */
+#define DOMAIN_FLAG_NEW_INSTANCE  (1U << 9)  /* 新实例（更新目标） */
+#define DOMAIN_FLAG_OLD_INSTANCE  (1U << 10) /* 旧实例（待清理） */
+#define DOMAIN_FLAG_DRAINING      (1U << 11) /* 正在排空连接 */
 
 #endif /* HIC_KERNEL_DOMAIN_H */

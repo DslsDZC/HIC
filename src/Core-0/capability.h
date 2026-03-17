@@ -390,4 +390,129 @@ hic_status_t shmem_unmap(domain_id_t domain, cap_handle_t handle);
  */
 hic_status_t shmem_get_info(cap_id_t cap, shmem_region_t *info);
 
+/* ==================== 零停机更新机制层原语 ==================== */
+
+/**
+ * @brief 服务端点原子重定向（机制层）
+ * 
+ * 原子性地将端点能力重定向到新目标域。
+ * 这是零停机更新的核心原语。
+ * 
+ * 机制保证：
+ * 1. 单指令原子操作，无竞争窗口
+ * 2. 正在进行的调用继续完成
+ * 3. 新调用自动路由到新目标
+ * 4. 支持快速回滚
+ * 
+ * @param endpoint_cap 端点能力ID
+ * @param new_target 新目标域ID
+ * @param old_target 输出旧目标域ID（用于回滚）
+ * @return 状态码
+ */
+hic_status_t cap_endpoint_redirect(cap_id_t endpoint_cap,
+                                    domain_id_t new_target,
+                                    domain_id_t *old_target);
+
+/**
+ * @brief 创建状态迁移通道（机制层）
+ * 
+ * 创建域间状态迁移的安全通道。
+ * 基于共享内存实现零拷贝状态传输。
+ * 
+ * @param from 源域ID
+ * @param to 目标域ID
+ * @param buffer_size 缓冲区大小
+ * @param out_cap 输出的通道能力ID
+ * @param out_handle_from 源域句柄
+ * @param out_handle_to 目标域句柄
+ * @return 状态码
+ */
+hic_status_t cap_migration_channel_create(domain_id_t from,
+                                           domain_id_t to,
+                                           size_t buffer_size,
+                                           cap_id_t *out_cap,
+                                           cap_handle_t *out_handle_from,
+                                           cap_handle_t *out_handle_to);
+
+/**
+ * @brief 迁移连接能力（机制层）
+ * 
+ * 原子性地将连接能力从一个域迁移到另一个域。
+ * 保证连接状态完整性。
+ * 
+ * @param conn_cap 连接能力ID
+ * @param from 当前所有者域ID
+ * @param to 新所有者域ID
+ * @param state_data 状态数据（可选）
+ * @param state_size 状态数据大小
+ * @return 状态码
+ */
+hic_status_t cap_connection_migrate(cap_id_t conn_cap,
+                                     domain_id_t from,
+                                     domain_id_t to,
+                                     const void *state_data,
+                                     size_t state_size);
+
+/* ==================== 服务实例能力 ==================== */
+
+/* 服务实例状态 */
+typedef enum {
+    SERVICE_INSTANCE_INIT,       /* 初始化中 */
+    SERVICE_INSTANCE_WARMING,    /* 预热中 */
+    SERVICE_INSTANCE_ACTIVE,     /* 活跃（接收流量） */
+    SERVICE_INSTANCE_DRAINING,   /* 排空中（停止接收新请求） */
+    SERVICE_INSTANCE_MIGRATING,  /* 迁移中 */
+    SERVICE_INSTANCE_TERMINATING /* 终止中 */
+} service_instance_state_t;
+
+/* 服务实例能力标志 */
+#define CAP_SERVICE_PRIMARY    (1U << 16)  /* 主实例 */
+#define CAP_SERVICE_STANDBY    (1U << 17)  /* 备用实例 */
+#define CAP_SERVICE_DRAINABLE  (1U << 18)  /* 可排空 */
+
+/**
+ * @brief 创建服务实例能力（机制层）
+ * 
+ * 创建一个服务实例能力，用于零停机更新。
+ * 
+ * @param owner 所有者域ID
+ * @param service_name 服务名称
+ * @param version 服务版本
+ * @param flags 实例标志
+ * @param out 输出的能力ID
+ * @return 状态码
+ */
+hic_status_t cap_create_service_instance(domain_id_t owner,
+                                          const char *service_name,
+                                          u32 version,
+                                          u32 flags,
+                                          cap_id_t *out);
+
+/**
+ * @brief 切换服务主实例（机制层）
+ * 
+ * 原子性地切换服务的主实例。
+ * 旧的 Primary 变为 Standby，新的 Standby 变为 Primary。
+ * 
+ * @param service_cap 服务能力ID
+ * @param new_primary_cap 新主实例的能力ID
+ * @param old_primary_cap 输出旧主实例的能力ID
+ * @return 状态码
+ */
+hic_status_t cap_service_switch_primary(cap_id_t service_cap,
+                                         cap_id_t new_primary_cap,
+                                         cap_id_t *old_primary_cap);
+
+/**
+ * @brief 获取服务实例状态（机制层）
+ * 
+ * @param instance_cap 实例能力ID
+ * @param state 输出实例状态
+ * @param connection_count 输出当前连接数
+ * @return 状态码
+ */
+hic_status_t cap_get_service_instance_state(cap_id_t instance_cap,
+                                             service_instance_state_t *state,
+                                             u32 *connection_count);
+
 #endif /* HIC_KERNEL_CAPABILITY_H */

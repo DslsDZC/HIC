@@ -14,6 +14,7 @@
  */
 
 #include "service.h"
+#include <string.h>
 
 /* ==================== 服务入口点（必须在代码段最前面） ==================== */
 
@@ -206,12 +207,18 @@ static const uint8_t g_trusted_root_hash[48] = {
     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
 };
 
-/* ==================== 全局状态 ==================== */
+/* RSA-3072 公钥（固化，384字节） */
+/* 开发阶段：使用测试公钥 */
+static const uint8_t g_rsa_n[384] = {
+    /* 模数 n - 开发阶段填充 */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    /* ... 其余为填充 ... */
+};
 
-static int g_verifier_initialized = 0;
-static int g_verify_count = 0;
+static const uint8_t g_rsa_e[4] = { 0x00, 0x01, 0x00, 0x01 };  /* e = 65537 */
 
-/* ==================== 辅助函数 ==================== */
+/* ==================== 辅助函数（提前定义） ==================== */
 
 static int mem_eq(const void *a, const void *b, size_t len)
 {
@@ -233,6 +240,356 @@ static void mem_copy(void *dest, const void *src, size_t len)
         d[i] = s[i];
     }
 }
+
+/* ==================== RSA-3072 大数运算 ==================== */
+
+#define RSA3072_BYTES  384
+#define RSA3072_BITS   3072
+#define RSA3072_WORDS  (RSA3072_BYTES / sizeof(uint64_t))
+
+/* 大数结构 */
+typedef struct {
+    uint64_t data[RSA3072_WORDS];
+} bigint384_t;
+
+/* 大数从字节加载（大端） */
+static void bigint_load(bigint384_t *dst, const uint8_t *src, size_t len)
+{
+    memset(dst, 0, sizeof(*dst));
+    
+    /* 从大端字节转换到内部表示 */
+    size_t words = (len + 7) / 8;
+    for (size_t i = 0; i < words && i < RSA3072_WORDS; i++) {
+        size_t offset = len - 8 * (i + 1);
+        if (offset >= len) offset = 0;
+        
+        uint64_t val = 0;
+        for (size_t j = 0; j < 8 && (offset + j) < len; j++) {
+            val = (val << 8) | src[offset + j];
+        }
+        dst->data[i] = val;
+    }
+}
+
+/* 大数比较 */
+static int bigint_cmp(const bigint384_t *a, const bigint384_t *b)
+{
+    for (int i = RSA3072_WORDS - 1; i >= 0; i--) {
+        if (a->data[i] > b->data[i]) return 1;
+        if (a->data[i] < b->data[i]) return -1;
+    }
+    return 0;
+}
+
+/* 大数是否为零 */
+static int bigint_is_zero(const bigint384_t *a)
+{
+    for (size_t i = 0; i < RSA3072_WORDS; i++) {
+        if (a->data[i] != 0) return 0;
+    }
+    return 1;
+}
+
+/* 大数减法：result = a - b (假设 a >= b) */
+static void bigint_sub(bigint384_t *result, const bigint384_t *a, const bigint384_t *b)
+{
+    uint64_t borrow = 0;
+    
+    for (size_t i = 0; i < RSA3072_WORDS; i++) {
+        uint64_t diff = a->data[i] - b->data[i] - borrow;
+        
+        /* 检测借位 */
+        if (a->data[i] < b->data[i] + borrow) {
+            borrow = 1;
+        } else if (a->data[i] - borrow < b->data[i]) {
+            borrow = 1;
+        } else {
+            borrow = 0;
+        }
+        
+        result->data[i] = diff;
+    }
+}
+
+/* 大数模减：result = a - b mod n */
+static void bigint_mod_sub(bigint384_t *result, const bigint384_t *a, 
+                           const bigint384_t *b, const bigint384_t *n)
+{
+    bigint_sub(result, a, b);
+    
+    /* 如果结果为负，加 n */
+    if (bigint_is_zero(result) == 0 && bigint_cmp(a, b) < 0) {
+        /* result = result + n */
+        uint64_t carry = 0;
+        for (size_t i = 0; i < RSA3072_WORDS; i++) {
+            uint64_t sum = result->data[i] + n->data[i] + carry;
+            carry = (sum < result->data[i]) ? 1 : 0;
+            result->data[i] = sum;
+        }
+    }
+}
+
+/* 大数模乘（Montgomery 乘法简化版） */
+static void bigint_mod_mul(bigint384_t *result, const bigint384_t *a,
+                           const bigint384_t *b, const bigint384_t *n)
+{
+    bigint384_t temp;
+    memset(&temp, 0, sizeof(temp));
+    
+    /* 简化实现：使用标准乘法后模归约 */
+    /* 对于开发阶段，使用简化的线性同余方法 */
+    
+    for (int i = RSA3072_WORDS - 1; i >= 0; i--) {
+        for (int bit = 63; bit >= 0; bit--) {
+            /* 左移 */
+            uint64_t carry = 0;
+            for (size_t j = 0; j < RSA3072_WORDS; j++) {
+                uint64_t new_carry = temp.data[j] >> 63;
+                temp.data[j] = (temp.data[j] << 1) | carry;
+                carry = new_carry;
+            }
+            
+            /* 模归约 */
+            if (bigint_cmp(&temp, n) >= 0) {
+                bigint_sub(&temp, &temp, n);
+            }
+            
+            /* 如果 b 的当前位为 1，加 a */
+            if ((b->data[i] >> bit) & 1) {
+                carry = 0;
+                for (size_t j = 0; j < RSA3072_WORDS; j++) {
+                    uint64_t sum = temp.data[j] + a->data[j] + carry;
+                    carry = (sum < temp.data[j]) ? 1 : 0;
+                    temp.data[j] = sum;
+                }
+                
+                /* 模归约 */
+                while (bigint_cmp(&temp, n) >= 0) {
+                    bigint_sub(&temp, &temp, n);
+                }
+            }
+        }
+    }
+    
+    mem_copy(result, &temp, sizeof(*result));
+}
+
+/* 大数模幂：result = base^exp mod n */
+static void bigint_mod_exp(bigint384_t *result, const bigint384_t *base,
+                           const uint8_t *exp, size_t exp_len,
+                           const bigint384_t *n)
+{
+    bigint384_t temp;
+    bigint384_t base_temp;
+    
+    /* 初始化 result = 1 */
+    memset(result, 0, sizeof(*result));
+    result->data[0] = 1;
+    
+    mem_copy(&base_temp, base, sizeof(base_temp));
+    
+    /* 从最高位开始处理指数 */
+    for (size_t i = 0; i < exp_len; i++) {
+        uint8_t byte = exp[i];
+        
+        for (int bit = 7; bit >= 0; bit--) {
+            /* 平方 */
+            bigint_mod_mul(result, result, result, n);
+            
+            /* 乘 */
+            if ((byte >> bit) & 1) {
+                bigint_mod_mul(result, result, &base_temp, n);
+            }
+        }
+    }
+}
+
+/* ==================== MGF1 掩码生成函数 ==================== */
+
+/**
+ * MGF1 掩码生成函数 (RFC 2437)
+ * 
+ * @param seed 种子
+ * @param seed_len 种子长度
+ * @param mask 输出掩码
+ * @param mask_len 掩码长度
+ */
+static void mgf1(const uint8_t *seed, size_t seed_len,
+                 uint8_t *mask, size_t mask_len)
+{
+    uint8_t counter[4] = { 0, 0, 0, 0 };
+    uint8_t hash[48];
+    size_t done = 0;
+    
+    while (done < mask_len) {
+        /* 计算 hash = SHA-384(seed || counter) */
+        /* 使用简化的哈希计算 */
+        uint8_t temp[256];
+        size_t temp_len = 0;
+        
+        /* 复制种子 */
+        for (size_t i = 0; i < seed_len && temp_len < sizeof(temp); i++) {
+            temp[temp_len++] = seed[i];
+        }
+        
+        /* 添加计数器 */
+        for (int i = 0; i < 4 && temp_len < sizeof(temp); i++) {
+            temp[temp_len++] = counter[i];
+        }
+        
+        sha384_internal(temp, (uint32_t)temp_len, hash);
+        
+        /* 复制到掩码 */
+        size_t copy_len = (mask_len - done < 48) ? (mask_len - done) : 48;
+        for (size_t i = 0; i < copy_len; i++) {
+            mask[done + i] = hash[i];
+        }
+        
+        done += copy_len;
+        
+        /* 增加计数器 */
+        for (int i = 3; i >= 0; i--) {
+            if (++counter[i] != 0) break;
+        }
+    }
+}
+
+/* ==================== RSA-3072 PSS 验证 ==================== */
+
+/**
+ * RSA-3072 PSS 签名验证
+ * 
+ * @param hash 消息哈希 (48 字节, SHA-384)
+ * @param hash_len 哈希长度
+ * @param signature 签名 (384 字节)
+ * @param sig_len 签名长度
+ * @return 验证状态
+ */
+static verify_status_t rsa3072_pss_verify(const uint8_t *hash, size_t hash_len,
+                                          const uint8_t *signature, size_t sig_len)
+{
+    bigint384_t n, s, m;
+    uint8_t em[RSA3072_BYTES];
+    uint8_t masked_seed[48], seed[48];
+    uint8_t masked_db[RSA3072_BYTES - 48 - 1], db[RSA3072_BYTES - 48 - 1];
+    uint8_t m_hash[48];
+    uint8_t p_salt[32];  /* 盐值 */
+    uint8_t m_prime[8 + 48 + 32];  /* M' = 0x00..00 || mHash || salt */
+    uint8_t h_prime[48];
+    
+    /* 参数检查 */
+    if (hash_len != 48 || sig_len != RSA3072_BYTES) {
+        return VERIFY_ERR_INVALID_PARAM;
+    }
+    
+    /* 加载公钥和签名 */
+    bigint_load(&n, g_rsa_n, sizeof(g_rsa_n));
+    bigint_load(&s, signature, sig_len);
+    
+    /* RSA 解密：m = s^e mod n */
+    bigint_mod_exp(&m, &s, g_rsa_e, sizeof(g_rsa_e), &n);
+    
+    /* 将结果转换为字节（大端） */
+    for (size_t i = 0; i < RSA3072_WORDS; i++) {
+        uint64_t val = m.data[i];
+        size_t offset = RSA3072_BYTES - 8 * (i + 1);
+        if (offset < RSA3072_BYTES) {
+            em[offset + 0] = (uint8_t)(val >> 56);
+            em[offset + 1] = (uint8_t)(val >> 48);
+            em[offset + 2] = (uint8_t)(val >> 40);
+            em[offset + 3] = (uint8_t)(val >> 32);
+            em[offset + 4] = (uint8_t)(val >> 24);
+            em[offset + 5] = (uint8_t)(val >> 16);
+            em[offset + 6] = (uint8_t)(val >> 8);
+            em[offset + 7] = (uint8_t)val;
+        }
+    }
+    
+    /* PSS 解码 */
+    /* EM = maskedDB || H || 0xbc */
+    /* 其中 maskedDB = DB XOR MGF(H), DB = PS || 0x01 || salt */
+    
+    /* 检查尾部标记 */
+    if (em[RSA3072_BYTES - 1] != 0xbc) {
+        return VERIFY_ERR_SIGNATURE_INVALID;
+    }
+    
+    /* 分离 maskedDB 和 H */
+    size_t em_len = RSA3072_BYTES;
+    size_t h_len = 48;
+    size_t db_len = em_len - h_len - 1;
+    
+    for (size_t i = 0; i < db_len; i++) {
+        masked_db[i] = em[i];
+    }
+    for (size_t i = 0; i < h_len; i++) {
+        masked_seed[i] = em[db_len + i];
+    }
+    
+    /* MGF 掩码恢复 */
+    mgf1(masked_seed, h_len, db, db_len);
+    
+    /* XOR 恢复 DB */
+    for (size_t i = 0; i < db_len; i++) {
+        db[i] ^= masked_db[i];
+    }
+    
+    /* 恢复 seed */
+    mgf1(db, db_len, seed, h_len);
+    for (size_t i = 0; i < h_len; i++) {
+        seed[i] ^= masked_seed[i];
+    }
+    
+    /* 验证 DB 格式 */
+    /* DB = PS || 0x01 || salt */
+    /* PS = 0x00 填充 */
+    
+    /* 跳过前导零 */
+    size_t salt_start = 0;
+    while (salt_start < db_len - 1 && db[salt_start] == 0x00) {
+        salt_start++;
+    }
+    
+    /* 检查分隔符 0x01 */
+    if (db[salt_start] != 0x01) {
+        return VERIFY_ERR_SIGNATURE_INVALID;
+    }
+    salt_start++;
+    
+    /* 提取盐值 */
+    size_t salt_len = db_len - salt_start;
+    if (salt_len > sizeof(p_salt)) {
+        salt_len = sizeof(p_salt);
+    }
+    for (size_t i = 0; i < salt_len; i++) {
+        p_salt[i] = db[salt_start + i];
+    }
+    
+    /* 计算 M' = 0x00..00 || mHash || salt */
+    memset(m_prime, 0, sizeof(m_prime));
+    /* 8 字节前导零 */
+    for (size_t i = 0; i < hash_len; i++) {
+        m_prime[8 + i] = hash[i];
+    }
+    for (size_t i = 0; i < salt_len; i++) {
+        m_prime[8 + hash_len + i] = p_salt[i];
+    }
+    
+    /* 计算 H' = SHA-384(M') */
+    sha384_internal(m_prime, (uint32_t)(8 + hash_len + salt_len), h_prime);
+    
+    /* 比较 H 和 H' */
+    if (!mem_eq(masked_seed, h_prime, h_len)) {
+        return VERIFY_ERR_SIGNATURE_INVALID;
+    }
+    
+    return VERIFY_OK;
+}
+
+/* ==================== 全局状态 ==================== */
+
+static int g_verifier_initialized = 0;
+static int g_verify_count = 0;
 
 /* ==================== 服务接口实现 ==================== */
 
@@ -347,15 +704,22 @@ verify_status_t verifier_verify_module(
         return VERIFY_OK;
     }
     
-    /* RSA-3072 PSS 验证（待完整实现） */
+    /* RSA-3072 PSS 验证 */
     if (sign_header->sign_alg == SIGN_ALG_RSA3072_PSS) {
-        /* TODO: 实现完整的 RSA-3072 PSS 验证 */
-        /* 需要从内核迁移 pkcs1.c 中的 pkcs1_verify_pss 函数 */
+        verify_status_t status = rsa3072_pss_verify(
+            computed_hash, 48,
+            sign_header->signature, sign_header->signature_len
+        );
         
-        /* 目前：接受模块 */
+        if (status != VERIFY_OK) {
+            result->status = status;
+            result->error_msg = "RSA-3072 PSS verification failed";
+            return status;
+        }
+        
         g_verify_count++;
         result->status = VERIFY_OK;
-        result->error_msg = "RSA verification (dev mode)";
+        result->error_msg = "OK";
         return VERIFY_OK;
     }
     

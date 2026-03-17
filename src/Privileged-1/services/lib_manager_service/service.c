@@ -45,16 +45,7 @@ static lib_manager_t g_lib_manager;
 
 /* ========== 内部辅助函数 ========== */
 
-/**
- * 内存清零（安全清除敏感数据）
- */
-static void secure_memzero(void *ptr, size_t len)
-{
-    volatile uint8_t *p = (volatile uint8_t *)ptr;
-    while (len--) {
-        *p++ = 0;
-    }
-}
+/* secure_memzero 由 crypto_service.h 提供 */
 
 /**
  * 内存比较

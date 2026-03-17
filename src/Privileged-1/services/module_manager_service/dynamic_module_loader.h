@@ -29,6 +29,8 @@
 
 /* modules.list 最大行数 */
 #define MAX_MODULES_LIST_ENTRIES 64
+/* 每个模块最大依赖数 */
+#define MAX_MODULE_DEPENDENCIES 8
 
 /* 模块加载状态 */
 typedef enum {
@@ -46,10 +48,16 @@ typedef enum {
 typedef struct {
     char name[64];              /* 模块名称（来自 modules.list） */
     char path[256];             /* 模块路径 */
+    char dependencies[MAX_MODULE_DEPENDENCIES][64]; /* 依赖列表 */
+    u8 dep_count;               /* 依赖数量 */
+    u8 dep_satisfied;           /* 已满足的依赖数 */
     dynamic_load_state_t state; /* 当前状态 */
     u32 retry_count;            /* 重试次数 */
     u32 domain;                 /* 分配的域 */
     u32 endpoint;               /* 端点能力 */
+    u64 entry_point;            /* 入口点地址 (ELF 解析获得) */
+    u64 code_base;              /* 代码段基址 */
+    u64 code_size;              /* 代码段大小 */
     hic_status_t last_error;    /* 最后错误 */
 } dynamic_module_entry_t;
 

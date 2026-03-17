@@ -15,10 +15,19 @@
 
 #include "../types.h"
 #include "../capability.h"
-#include "../monitor.h"  /* service_state_t */
 
 /* 最大服务数 */
 #define SERVICE_REGISTRY_SIZE 64
+
+/* 服务状态 */
+typedef enum service_state {
+    SERVICE_STATE_INACTIVE = 0,  /* 未激活 */
+    SERVICE_STATE_STARTING,      /* 启动中 */
+    SERVICE_STATE_ACTIVE,        /* 活跃 */
+    SERVICE_STATE_STOPPING,      /* 停止中 */
+    SERVICE_STATE_STOPPED,       /* 已停止 */
+    SERVICE_STATE_ERROR,         /* 错误状态 */
+} service_state_t;
 
 /* 端点类型 */
 typedef enum endpoint_type {

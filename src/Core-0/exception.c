@@ -80,14 +80,8 @@ exception_handler_result_t exception_handle(exception_context_t* ctx)
         return EXCEPT_HANDLER_PANIC;
     }
     
-    /* 完整实现：通知监控服务 */
-    monitor_event_t event;
-    event.type = MONITOR_EVENT_SERVICE_CRASH;
-    event.domain = ctx->domain;
-    event.timestamp = hal_get_timestamp();
-    event.data[0] = ctx->type;
-    event.data[1] = ctx->error_code;
-    monitor_report_event(&event);
+    /* 使用机制层接口记录异常事件 */
+    monitor_record_event(MONITOR_EVENT_TYPE_5, ctx->domain);
     
     return EXCEPT_HANDLER_TERMINATE;
 }

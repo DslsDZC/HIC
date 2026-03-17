@@ -295,6 +295,8 @@ void kernel_main(void *info)
     
     /* ==================== 第八阶段：主循环 ==================== */
     
+    console_puts("[BOOT] Starting main loop, calling schedule()...\n");
+    
     while (1) {
         /* 中断直接送达服务，无需主循环轮询（精简设计） */
         

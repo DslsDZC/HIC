@@ -466,10 +466,10 @@ void boot_info_copy_hardware_info(hic_boot_info_t* boot_info) {
         console_putu64(g_boot_state.hw.memory.total_usable / (1024 * 1024));
         console_puts(" MB usable\n");
     } else {
-        console_puts("[BOOT] No hardware info from bootloader, performing detection...\n");
+        console_puts("[BOOT] No hardware info from bootloader, performing minimal detection...\n");
         
-        /* 执行最小化硬件探测 */
-        detect_cpu_info(&g_boot_state.hw.cpu);
+        /* 执行最小化硬件探测（机制层） */
+        detect_cpu_info_minimal(&g_boot_state.hw.cpu);
         detect_memory_topology(&g_boot_state.hw.memory);
         
         /* 设置默认值 */
@@ -509,4 +509,33 @@ void boot_info_print_summary(void) {
     console_puts(" MB\n");
     
     console_puts("[BOOT] ===================================\n\n");
+}
+
+/* ==================== 内核维护任务 ==================== */
+
+/**
+ * 内核维护任务
+ * 
+ * 执行周期性维护任务：
+ * - 审计日志刷新
+ * - 监控统计更新
+ * - 能力清理
+ */
+void kernel_maintenance_tasks(void) {
+    /* 周期性维护任务 */
+    static u64 last_maintenance = 0;
+    u64 now = hal_get_timestamp();
+    
+    /* 每 1 秒执行一次维护 */
+    if (now - last_maintenance < 1000000000ULL) {
+        return;
+    }
+    last_maintenance = now;
+    
+    /* TODO: 实现以下维护任务：
+     * 1. 审计日志刷新到持久存储
+     * 2. 监控统计信息更新
+     * 3. 过期能力清理
+     * 4. 内存碎片整理检查
+     */
 }
