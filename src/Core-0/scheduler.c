@@ -27,6 +27,8 @@
 #include "lib/mem.h"
 #include "lib/console.h"
 #include "logical_core.h"
+#include "domain_switch.h"
+#include "pagetable.h"
 
 /* ==================== 配置参数 ==================== */
 
@@ -39,6 +41,29 @@
 
 /* 模式检查频率：每 N 次入队检查一次 */
 #define MODE_CHECK_INTERVAL        100
+
+/* 
+ * 调试级别控制（策略：默认关闭以优化性能）
+ * 0 = 关闭所有调试输出
+ * 1 = 模式切换和错误信息
+ * 2 = 详细调度信息（仅开发调试用）
+ */
+#ifndef SCHED_DEBUG_LEVEL
+#define SCHED_DEBUG_LEVEL 0
+#endif
+
+/* 调试输出宏（机制：条件编译，零开销） */
+#if SCHED_DEBUG_LEVEL >= 1
+#define SCHED_LOG_BASIC(fmt, ...) console_puts(fmt)
+#else
+#define SCHED_LOG_BASIC(fmt, ...) ((void)0)
+#endif
+
+#if SCHED_DEBUG_LEVEL >= 2
+#define SCHED_LOG_VERBOSE(fmt, ...) console_puts(fmt)
+#else
+#define SCHED_LOG_VERBOSE(fmt, ...) ((void)0)
+#endif
 
 /* ==================== 调度模式 ==================== */
 
@@ -104,6 +129,9 @@ static ready_queue_t g_ready_queues[5];
 /* 空闲线程 */
 thread_t idle_thread;
 
+/* 空闲线程栈（全局静态，多核安全） */
+static u64 g_idle_stack[1024] __attribute__((aligned(16)));  /* 8KB 栈 */
+
 /* ==================== 调度器初始化 ==================== */
 
 void scheduler_init(void)
@@ -139,12 +167,11 @@ void scheduler_init(void)
     idle_thread.priority = HIC_PRIORITY_IDLE;
     idle_thread.logical_core_id = INVALID_LOGICAL_CORE;
     
-    /* 为 idle_thread 分配栈空间（静态分配，避免动态内存） */
-    static u64 idle_stack[1024];  /* 8KB 栈 */
-    idle_thread.stack_base = (virt_addr_t)idle_stack;
-    idle_thread.stack_size = sizeof(idle_stack);
-    /* 栈顶指针：指向数组末尾，为 ret 预留一个位置 */
-    u64 *stack_top = &idle_stack[1024];
+    /* 使用全局静态栈（多核安全） */
+    idle_thread.stack_base = (virt_addr_t)g_idle_stack;
+    idle_thread.stack_size = sizeof(g_idle_stack);
+    /* 栈顶指针：指向数组末尾 */
+    u64 *stack_top = &g_idle_stack[1024];
     stack_top--;  /* 预留一个位置 */
     *stack_top = (u64)hal_halt;  /* idle 线程入口 = hal_halt */
     stack_top -= 6;  /* 为 callee-saved 寄存器预留空间 */
@@ -155,10 +182,7 @@ void scheduler_init(void)
     g_perf.active_threads = 0;
     g_perf.mode_check_counter = 0;
 
-    console_puts("[SCHED] Scheduler initialized (mode: SIMPLE)\n");
-    console_puts("[SCHED] idle_thread stack: 0x");
-    console_puthex64(idle_thread.stack_ptr);
-    console_puts("\n");
+    SCHED_LOG_BASIC("[SCHED] Scheduler initialized\n");
 }
 
 /* ==================== 模式选择逻辑 ==================== */
@@ -192,11 +216,9 @@ static void update_sched_mode(void)
     /* 模式切换时输出日志 */
     if (new_mode != g_perf.current_mode) {
         const char *mode_names[] = {"SIMPLE", "CACHED", "ORIGINAL"};
-        console_puts("[SCHED] Mode: ");
-        console_puts(mode_names[new_mode]);
-        console_puts(" (threads: ");
-        console_putu32(active_count);
-        console_puts(")\n");
+        SCHED_LOG_BASIC("[SCHED] Mode: ");
+        SCHED_LOG_BASIC(mode_names[new_mode]);
+        SCHED_LOG_BASIC("\n");
         g_perf.current_mode = new_mode;
     }
 }
@@ -205,8 +227,14 @@ static void update_sched_mode(void)
 
 static void simple_enqueue(thread_t *thread)
 {
-    if (thread == NULL) return;
-    if (g_simple_queue.count >= MAX_READY_THREADS) return;
+    if (thread == NULL) {
+        SCHED_LOG_BASIC("[SCHED] ERROR: enqueue NULL thread\n");
+        return;
+    }
+    if (g_simple_queue.count >= MAX_READY_THREADS) {
+        SCHED_LOG_BASIC("[SCHED] ERROR: queue full\n");
+        return;
+    }
 
     u32 tail = g_simple_queue.tail;
     g_simple_queue.threads[tail] = thread->thread_id;
@@ -214,6 +242,10 @@ static void simple_enqueue(thread_t *thread)
     g_simple_queue.count++;
     thread->state = THREAD_STATE_READY;
     g_perf.enqueue_count++;
+    
+    /* 详细调试输出（仅SCHED_DEBUG_LEVEL >= 2时启用） */
+    SCHED_LOG_VERBOSE("[SCHED] Enqueued tid=");
+    /* 省略详细输出以保持性能 */
 }
 
 static thread_t *simple_pick_next(void)
@@ -221,10 +253,10 @@ static thread_t *simple_pick_next(void)
     if (g_simple_queue.count == 0) return &idle_thread;
 
     /* O(n)查找最高优先级 */
-    u32 best_idx = 0;
+    u32 best_idx = MAX_READY_THREADS;  /* 无效索引 */
     u8 best_prio = 0;
     u32 compare_count = 0;
-
+    
     for (u32 i = 0; i < g_simple_queue.count; i++) {
         u32 pos = (g_simple_queue.head + i) % MAX_READY_THREADS;
         thread_id_t tid = g_simple_queue.threads[pos];
@@ -232,6 +264,11 @@ static thread_t *simple_pick_next(void)
         if (tid >= MAX_THREADS) continue;
 
         thread_t *t = &g_threads[tid];
+        
+        /* 防御性检查：跳过非 READY 状态的线程 */
+        if (t->state != THREAD_STATE_READY) {
+            continue;
+        }
         
         if (t->priority > best_prio) {
             best_prio = t->priority;
@@ -242,6 +279,11 @@ static thread_t *simple_pick_next(void)
 
     if (compare_count > g_perf.pick_max_compare) {
         g_perf.pick_max_compare = compare_count;
+    }
+
+    /* 没有找到可运行的线程 */
+    if (best_idx >= MAX_READY_THREADS) {
+        return &idle_thread;
     }
 
     /* 取出线程 */
@@ -346,20 +388,20 @@ static thread_t *original_pick_next(void)
     for (int prio = 4; prio >= 0; prio--) {
         ready_queue_t *queue = &g_ready_queues[prio];
 
-        if (queue->count > 0) {
+        /* 遍历队列找到第一个 READY 状态的线程 */
+        while (queue->count > 0) {
             u32 head = queue->head;
             thread_id_t tid = queue->threads[head];
             queue->head = (head + 1) % MAX_READY_THREADS;
             queue->count--;
 
+            if (tid >= MAX_THREADS) continue;
+            
             thread_t *thread = &g_threads[tid];
 
-            /* 轮转调度 */
-            if (queue->count > 0) {
-                u32 tail = queue->tail;
-                queue->threads[tail] = tid;
-                queue->tail = (tail + 1) % MAX_READY_THREADS;
-                queue->count++;
+            /* 防御性检查：跳过非 READY 状态的线程 */
+            if (thread->state != THREAD_STATE_READY) {
+                continue;
             }
 
             g_perf.dequeue_count++;
@@ -430,30 +472,6 @@ void schedule(void)
     thread_t *prev = (thread_t*)g_current_thread;
     thread_t *next = pick_next_thread();
     
-    /* 调试输出：前10次调度 */
-    static u32 debug_counter = 0;
-    debug_counter++;
-    if (debug_counter <= 10) {
-        console_puts("[SCHED] #");
-        console_putu32(debug_counter);
-        console_puts(" queue=");
-        console_putu32(g_simple_queue.count);
-        console_puts(" prev=");
-        if (prev == NULL) console_puts("NULL");
-        else if (prev == &idle_thread) console_puts("IDLE");
-        else { console_putu64(prev->thread_id); }
-        console_puts(" next=");
-        if (next == &idle_thread) console_puts("IDLE");
-        else { 
-            console_putu64(next->thread_id);
-            console_puts(" lcore=");
-            console_putu64(next->logical_core_id);
-            console_puts(" stack_ptr=");
-            console_puthex64(next->stack_ptr);
-        }
-        console_puts("\n");
-    }
-    
     if (next == prev) {
         atomic_exit_critical(irq_state);
         return;
@@ -478,26 +496,11 @@ void schedule(void)
     if (next != &idle_thread && next->logical_core_id != INVALID_LOGICAL_CORE) {
         logical_core_t *core = &g_logical_cores[next->logical_core_id];
         
-        /* 调试输出：逻辑核心状态 */
-        if (debug_counter == 0) {
-            console_puts("[SCHED] Thread ");
-            console_putu64(next->thread_id);
-            console_puts(" lcore ");
-            console_putu64(next->logical_core_id);
-            console_puts(" state: ");
-            console_putu32(core->state);
-            console_puts("\n");
-        }
-        
         if (core->state != LOGICAL_CORE_STATE_ALLOCATED &&
             core->state != LOGICAL_CORE_STATE_ACTIVE &&
             core->state != LOGICAL_CORE_STATE_MIGRATING) {
             /* 核心不可用，跳过此线程 */
-            console_puts("[SCHED] WARN: lcore ");
-            console_putu64(next->logical_core_id);
-            console_puts(" unavailable (state=");
-            console_putu32(core->state);
-            console_puts("), skipping thread\n");
+            SCHED_LOG_BASIC("[SCHED] WARN: lcore unavailable\n");
             next->state = THREAD_STATE_READY;
             enqueue_thread(next);
             next = &idle_thread;
@@ -514,9 +517,21 @@ void schedule(void)
         logical_core_schedule_notify(next->logical_core_id, next->thread_id, true);
     }
     
+    /* 切换到目标线程所属域的页表 */
+    if (next != &idle_thread) {
+        page_table_t *next_pagetable = domain_switch_get_pagetable(next->domain_id);
+        if (next_pagetable != NULL) {
+            /* 启用页表切换（已修复内核映射问题） */
+            pagetable_switch(next_pagetable);
+        }
+        domain_switch_set_current(next->domain_id);
+    }
+    
     atomic_exit_critical(irq_state);
     
     context_switch(prev, next);
+    
+    /* 这里的代码在新线程上下文中执行 */
 
     u64 end_cycles = hal_get_timestamp();
     u64 cycles = end_cycles - start_cycles;

@@ -4,8 +4,45 @@
  * SPDX-License-Identifier: GPL-2.0-only WITH LicenseRef-HIC-service-exception
  */
 
+/**
+ * VGA 服务实现
+ * 
+ * 作为静态模块加载，为其他特权层服务提供屏幕输出能力
+ * 其他服务可以通过 extern 声明调用 vga_service_puts() 等函数
+ */
+
 #include "service.h"
 #include <string.h>
+
+/* ==================== 服务入口点（必须在代码段最前面） ==================== */
+
+/**
+ * 服务入口点 - 必须放在代码段最前面
+ * 使用 section 属性确保此函数在链接时位于 .static_svc.vga_service.text 的开头
+ */
+__attribute__((section(".static_svc.vga_service.text"), used, noinline))
+int _vga_service_entry(void)
+{
+    /* 初始化 VGA 服务 */
+    vga_service_init();
+    
+    /* 输出启动信息 */
+    vga_service_puts("[VGA] VGA service initialized\n");
+    
+    /* VGA 服务不需要主循环，初始化后即可提供服务 */
+    return 0;
+}
+
+/**
+ * 服务启动函数（供静态模块系统调用）
+ */
+int vga_service_start(void) {
+    vga_service_init();
+    vga_service_puts("[VGA] VGA service started\n");
+    return 0;
+}
+
+/* ==================== VGA 核心实现 ==================== */
 
 /* VGA 显存指针（物理地址） */
 volatile uint16_t *vga_buffer = (volatile uint16_t *)VGA_MEMORY;

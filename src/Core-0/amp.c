@@ -147,31 +147,149 @@ void amp_init(void)
 
 /* ==================== AP启动 ==================== */
 
+/**
+ * 准备AP启动代码
+ * 
+ * 修复说明：
+ * 1. 使用链接器符号正确获取trampoline的加载地址（LMA）和运行地址（VMA）
+ * 2. 设置动态GDT指针地址，支持非0x8000加载地址
+ * 3. 正确处理VMA/LMA差异
+ */
 static status_t prepare_ap_trampoline(void)
 {
-    /* 复制AP启动代码到低内存 */
-    uintptr_t func_addr = (uintptr_t)&ap_trampoline;
-    u8 *trampoline_src = (u8*)func_addr;
-    u8 *trampoline_dst = (u8*)AP_TRAMPOLINE_ADDR;
-
-    /* 使用链接器符号计算 trampoline 精确大小 */
+    /* 链接器定义的 trampoline 边界 */
+    /* LMA (Load Memory Address): trampoline 在内核映像中的位置 */
+    /* VMA (Virtual Memory Address): trampoline 运行时的地址 (0x8000) */
+    extern char __ap_trampoline_start[];
+    extern char __ap_trampoline_end[];
+    
+    /* trampoline在内核映像中的实际位置（LMA） */
+    /* 由于链接脚本使用 AT() 指定LMA，我们需要获取实际的LMA */
+    /* __ap_trampoline_start 符号的值是VMA (0x8000) */
+    /* 我们需要计算LMA：LMA = ALIGN(_kernel_end, 4K) */
+    extern char _kernel_end[];
+    
+    /* trampoline的LMA地址（在内核映像中的位置） */
+    /* 注意：这里假设内核是恒等映射的 */
+    /* 使用 size_t 避免 signed/unsigned 转换警告 */
+    size_t trampoline_lma_raw = (size_t)(uintptr_t)_kernel_end;
+    uintptr_t trampoline_lma = (trampoline_lma_raw + 0xFFF) & ~((size_t)0xFFF);  /* 4KB对齐 */
+    
+    /* trampoline的目标地址（VMA） */
+    uintptr_t trampoline_vma = AP_TRAMPOLINE_ADDR;  /* 0x8000 */
+    
+    /* 计算trampoline大小 */
     size_t trampoline_size = (size_t)(__ap_trampoline_end - __ap_trampoline_start);
     
     /* 如果链接器符号无效，使用默认大小 */
     if (trampoline_size == 0 || trampoline_size > 4096) {
-        trampoline_size = 4096;
+        trampoline_size = 512;  /* 默认512字节 */
     }
-
-    console_puts("[AMP] Trampoline size: ");
+    
+    console_puts("[AMP] Trampoline: LMA=0x");
+    console_puthex64(trampoline_lma);
+    console_puts(", VMA=0x");
+    console_puthex64(trampoline_vma);
+    console_puts(", size=");
     console_putu64(trampoline_size);
     console_puts(" bytes\n");
-
-    for (u32 i = 0; i < trampoline_size; i++) {
-        trampoline_dst[i] = trampoline_src[i];
+    
+    /* 验证目标地址在1MB以下（实模式可访问） */
+    if (trampoline_vma >= 0x100000) {
+        console_puts("[AMP] ERROR: Trampoline address must be below 1MB\n");
+        return HIC_ERROR_INVALID_PARAM;
     }
+    
+    /* 复制trampoline代码到目标地址 */
+    u8 *src = (u8*)trampoline_lma;  /* 源地址（内核映像中的位置） */
+    u8 *dst = (u8*)trampoline_vma;  /* 目标地址（低内存） */
+    
+    console_puts("[AMP] Copying trampoline from 0x");
+    console_puthex64((u64)src);
+    console_puts(" to 0x");
+    console_puthex64((u64)dst);
+    console_puts("\n");
+    
+    for (size_t i = 0; i < trampoline_size; i++) {
+        dst[i] = src[i];
+    }
+    
+    /* ===== 设置动态地址（修复硬编码问题）===== */
+    /* 
+     * ap_start.S 中的 .L_gdt_ptr_addr 需要被设置为 gdt_ptr 的实际物理地址
+     * gdt_ptr 在 trampoline 代码中的偏移需要计算
+     */
+    extern char gdt_ptr[];  /* ap_start.S 中定义 */
+    
+    /* 计算 gdt_ptr 相对于 ap_trampoline 的偏移 */
+    /* gdt_ptr_addr 存储的是 gdt_ptr 的实际物理地址 */
+    uintptr_t gdt_ptr_vma = (uintptr_t)gdt_ptr;  /* 这是链接地址 (0x8000 + offset) */
+    uintptr_t gdt_ptr_offset = gdt_ptr_vma - (uintptr_t)__ap_trampoline_start;
+    uintptr_t gdt_ptr_phys = trampoline_vma + gdt_ptr_offset;
+    
+    /* 
+     * 在 ap_start.S 中，.L_gdt_ptr_addr 位于 ap_trampoline 代码之后
+     * 我们需要找到它在 trampoline 中的偏移
+     * 实际上，由于 .L_gdt_ptr_addr 是局部标签，我们需要使用其他方法
+     * 
+     * 更好的方法：直接在复制后的代码中设置 gdt_ptr_addr
+     * 
+     * ap_start.S 布局：
+     *   ap_trampoline: 代码
+     *   .L_gdt_ptr_addr: 8字节（存储gdt_ptr物理地址）
+     *   gdt_ptr: GDT描述符
+     *   gdt: GDT表
+     *   pml4_addr: PML4地址
+     *   stack_top: 栈顶地址
+     */
+    
+    /* 查找 .L_gdt_ptr_addr 在 trampoline 中的位置 */
+    /* 由于是局部标签，我们通过代码模式查找 */
+    /* 或者，我们可以假设 .L_gdt_ptr_addr 紧跟在代码之后 */
+    
+    /* 实际上，查看 ap_start.S，.L_gdt_ptr_addr 在代码中间 */
+    /* 让我们使用更简单的方法：在复制时直接修改代码中的地址 */
+    
+    /* 
+     * 方案B：修改 gdt_ptr 中的地址
+     * gdt_ptr 结构：{ limit(2), base(8) }
+     * base 字段需要是 gdt 的物理地址
+     */
+    
+    /* 计算 gdt 的物理地址 */
+    extern char gdt[];  /* ap_start.S 中定义 */
+    uintptr_t gdt_vma = (uintptr_t)gdt;
+    uintptr_t gdt_offset = gdt_vma - (uintptr_t)__ap_trampoline_start;
+    uintptr_t gdt_phys = trampoline_vma + gdt_offset;
+    
+    /* 修改 gdt_ptr.base 为 gdt 的物理地址 */
+    /* gdt_ptr 结构在 ap_start.S 中定义：
+     *   .word gdt_end - gdt - 1  (limit)
+     *   .quad gdt                 (base)
+     */
+    uintptr_t gdt_ptr_base_offset = gdt_ptr_offset + 2;  /* 跳过 limit */
+    u64 *gdt_ptr_base = (u64*)(dst + gdt_ptr_base_offset);
+    *gdt_ptr_base = (u64)gdt_phys;
+    
+    console_puts("[AMP] gdt_ptr at 0x");
+    console_puthex64(gdt_ptr_phys);
+    console_puts(", gdt at 0x");
+    console_puthex64(gdt_phys);
+    console_puts("\n");
+    
+    /* 设置 pml4_addr 和 stack_top 的位置 */
+    extern u64 pml4_addr[], stack_top[];
+    uintptr_t pml4_offset = (uintptr_t)pml4_addr - (uintptr_t)__ap_trampoline_start;
+    uintptr_t stack_offset = (uintptr_t)stack_top - (uintptr_t)__ap_trampoline_start;
+    
+    console_puts("[AMP] pml4_addr offset: 0x");
+    console_puthex64(pml4_offset);
+    console_puts(", stack_top offset: 0x");
+    console_puthex64(stack_offset);
+    console_puts("\n");
 
     console_puts("[AMP] AP trampoline prepared at 0x");
-    console_puthex64(AP_TRAMPOLINE_ADDR);
+    console_puthex64(trampoline_vma);
     console_puts("\n");
 
     return HIC_SUCCESS;

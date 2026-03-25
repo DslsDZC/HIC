@@ -13,11 +13,7 @@
 #define HIC_KERNEL_TYPES_H
 
 #include <stdint.h>
-
-/* C23标准：bool已经是关键字，不需要定义 */
-#if !defined(__cplusplus) && !defined(__bool_true_false_are_defined)
-/* bool、true、false在C23中是关键字，无需定义 */
-#endif
+#include <stdbool.h>
 
 /* 基础类型 */
 typedef uint8_t  u8;

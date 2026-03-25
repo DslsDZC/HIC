@@ -298,7 +298,7 @@ cap_handle_t logical_core_allocate_to_domain(logical_core_id_t logical_core_id,
     cap_id_t cap_id;
     hic_status_t status = cap_create_logical_core(domain_id, logical_core_id,
                                                  flags, quota,
-                                                 CAP_LCORE_USE | CAP_LCORE_QUERY,
+                                                 CAP_LCORE_USE | CAP_LCORE_QUERY | CAP_LCORE_BORROW,
                                                  &cap_id);
     if (status != HIC_SUCCESS) {
         /* 回滚分配 */

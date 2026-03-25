@@ -110,6 +110,18 @@ typedef struct domain {
     u64    cpu_time_total;       /* 总CPU时间 */
     u64    syscalls_total;       /* 总系统调用数 */
     
+    /* 域私有审计计数器（可通过只读能力授予审计服务） */
+    struct {
+        u64 privileged_mem_access;  /* 特权内存访问次数 */
+        u64 ipc_calls;              /* IPC 调用次数 */
+        u64 thread_creates;         /* 线程创建次数 */
+        u64 memory_allocs;          /* 内存分配次数 */
+        u64 cap_transfers;          /* 能力传递次数 */
+        u64 cap_derives;            /* 能力派生次数 */
+        u64 cap_revokes;            /* 能力撤销次数 */
+        u64 reserved[1];            /* 预留对齐 */
+    } audit_counters;
+    
     /* 标志 */
     u32    flags;
 #define DOMAIN_FLAG_TRUSTED      (1U << 0)  /* 可信域 */
@@ -120,6 +132,9 @@ typedef struct domain {
     /* 父域（用于资源继承） */
     domain_id_t parent_domain;
 } domain_t;
+
+/* 全局域数组（供其他模块访问域私有数据） */
+extern domain_t g_domains[];
 
 /* 域管理接口 */
 void domain_system_init(void);

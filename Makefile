@@ -379,27 +379,22 @@ img-run: qcow2
 	@sleep 1
 	@echo " 准备 OVMF 变量文件 "
 	@cp $(QEMU_OVMF_VARS) OVMF_VARS.4m.fd 2>/dev/null || touch OVMF_VARS.4m.fd
+	@echo " 启动 QEMU (图形化界面)"
 	@qemu-system-x86_64 \
 		-drive if=pflash,format=raw,readonly=on,file=$(QEMU_OVMF_CODE) \
 		-drive if=pflash,format=raw,file=OVMF_VARS.4m.fd \
 		-drive if=ide,format=qcow2,file=output/hic-uefi-disk.qcow2 \
 		-m $(QEMU_MEM) \
-		-nographic \
-		-s -S \
-		> qemu_output.log 2>&1 &
-	@sleep 3
-	@echo " 连接GDB..."
-	@gdb -batch -x gdb_commands.txt $(BUILD_DIR)/bin/hic-kernel.elf > gdb_output.log 2>&1
-	@echo "GDB调试完成"
+		-display gtk \
+		-vga std \
+		-serial file:qemu_output.log \
+		-monitor none \
+		> /dev/null 2>&1 &
+	@echo "QEMU 已在后台启动 (PID: $$!)"
+	@echo "VGA 输出将显示在图形窗口中"
+	@echo "串口输出保存到 qemu_output.log"
 	@echo ""
-	@echo "GDB 输出"
-	@cat gdb_output.log
-	@echo ""
-	@echo "QEMU 输出"
-	@cat qemu_output.log | tail -50
-	@echo ""
-	@sleep 5
-	@killall -9 qemu-system-x86_64 2>/dev/null || true
+	@echo "按 Ctrl+C 或运行 'killall qemu-system-x86_64' 停止"
 # 帮助信息
 
 help:

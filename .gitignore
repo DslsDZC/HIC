@@ -1,5 +1,5 @@
 # HIC 项目 .gitignore
-
+formal/
 .cache/
 *.idx
 AGENTS.md

@@ -79,8 +79,16 @@ static_modules:
   # - 2 (NORMAL): 一般服务
   # - 3 (LOW): 最后加载，引导动态模块
   #
-  # 信任链：内核 → verifier → ide_driver → fat32_service → init_launcher
+  # 信任链：内核 → vga_service → verifier → ide_driver → fat32_service → init_launcher
   #         → module_manager_service（动态）→ 其他动态模块
+
+  # 0. VGA 输出服务（最先加载，供其他服务使用）
+  - name: vga_service
+    type: driver
+    priority: 0                    # CRITICAL - 最先加载
+    auto_start: true
+    critical: true
+    privileged: true
 
   # 1. 固化验证服务（信任链起点）
   - name: verifier

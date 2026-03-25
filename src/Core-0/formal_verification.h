@@ -13,6 +13,7 @@
 #define FORMAL_VERIFICATION_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "types.h"
 
 /* 形式化验证错误码 */

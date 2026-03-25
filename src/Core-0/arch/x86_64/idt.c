@@ -42,8 +42,23 @@ extern void isr_20(void);
 extern void isr_30(void);
 extern void isr_128(void);
 
-/* 快速中断处理存根（在 fast_path.S 中实现） */
-extern void isr_fast_stub(void);
+/* IRQ 入口点（在 fast_path.S 中实现，每个 IRQ 有独立的入口） */
+extern void irq_32(void);
+extern void irq_33(void);
+extern void irq_34(void);
+extern void irq_35(void);
+extern void irq_36(void);
+extern void irq_37(void);
+extern void irq_38(void);
+extern void irq_39(void);
+extern void irq_40(void);
+extern void irq_41(void);
+extern void irq_42(void);
+extern void irq_43(void);
+extern void irq_44(void);
+extern void irq_45(void);
+extern void irq_46(void);
+extern void irq_47(void);
 
 /* 外部函数声明 */
 extern void irq_dispatch(u32 irq_vector);
@@ -119,14 +134,42 @@ void idt_init(void)
     idt_set_gate(IDT_VECTOR_SYSCALL, (uint64_t)isr_128, GDT_KERNEL_CS << 3,
                  IDT_TYPE_INTERRUPT_GATE, IDT_DPL3);
     
-    /* 设置IRQ处理程序（使用快速路径）
-     * 注意：IRQ映射到向量32-47，使用统一的快速处理存根
-     * 每个 IRQ 入口必须先压入向量号，然后调用 isr_fast_stub
+    /* 设置IRQ处理程序（向量 32-47）
+     * 每个 IRQ 有独立的入口点，入口点负责压入向量号后调用 isr_fast_stub
+     * 这是必要的，因为硬件中断不会自动压入向量号
      */
-    for (u32 i = 32; i < 48; i++) {
-        idt_set_gate((uint8_t)i, (uint64_t)isr_fast_stub, GDT_KERNEL_CS << 3,
-                     IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
-    }
+    idt_set_gate(32, (uint64_t)irq_32, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(33, (uint64_t)irq_33, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(34, (uint64_t)irq_34, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(35, (uint64_t)irq_35, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(36, (uint64_t)irq_36, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(37, (uint64_t)irq_37, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(38, (uint64_t)irq_38, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(39, (uint64_t)irq_39, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(40, (uint64_t)irq_40, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(41, (uint64_t)irq_41, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(42, (uint64_t)irq_42, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(43, (uint64_t)irq_43, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(44, (uint64_t)irq_44, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(45, (uint64_t)irq_45, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(46, (uint64_t)irq_46, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
+    idt_set_gate(47, (uint64_t)irq_47, GDT_KERNEL_CS << 3,
+                 IDT_TYPE_INTERRUPT_GATE, IDT_DPL0);
     
     /* 加载IDT */
     idt_load(&idt_ptr);

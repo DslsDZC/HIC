@@ -705,7 +705,7 @@ uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point)
     console_putu32(thread_id);
     console_puts(" created for domain ");
     console_putu32(domain_id);
-    console_puts("\n");
+    console_puts(" (already enqueued by thread_create)\n");
     
     /* 恢复域运行 */
     status = domain_resume((domain_id_t)domain_id);
@@ -714,16 +714,7 @@ uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point)
         return (uint64_t)status;
     }
     
-    /* 将线程加入调度 */
-    status = thread_ready(thread_id);
-    if (status != HIC_SUCCESS) {
-        console_puts("[PRIMITIVES] Failed to ready thread\n");
-        return (uint64_t)status;
-    }
-    
-    console_puts("[PRIMITIVES] Thread ");
-    console_putu32(thread_id);
-    console_puts(" added to scheduler queue\n");
+    /* 注意：thread_create 已经将线程加入调度队列，无需再次调用 thread_ready */
     
     return 0;  /* 成功 */
 }

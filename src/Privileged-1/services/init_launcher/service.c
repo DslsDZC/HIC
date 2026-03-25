@@ -33,11 +33,7 @@ int _init_launcher_entry(void)
     /* 启动服务主循环 */
     init_launcher_start();
     
-    /* 服务不应返回，如果返回则进入无限循环 */
-    while (1) {
-        __asm__ volatile("hlt");
-    }
-    
+    /* 服务完成，返回让调度器继续 */
     return 0;
 }
 

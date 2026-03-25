@@ -20,6 +20,7 @@
 #include "atomic.h"
 #include "lib/mem.h"
 #include "hal.h"
+#include "thread.h"  /* 用于域切换时的线程状态管理 */
 
 /* 外部引用：内核代码段地址范围 */
 extern u8 _text_start[];
@@ -28,6 +29,7 @@ extern u8 _rodata_start[];
 extern u8 _rodata_end[];
 extern u8 _data_start[];
 extern u8 _data_end[];
+extern u8 _kernel_end[];  /* 内核结束地址，用于 Core-0 域内存范围 */
 
 /* 全局域表 */
 domain_t g_domains[MAX_DOMAINS];
@@ -113,38 +115,51 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     
     domain_t *domain = &g_domains[domain_id];
     
-    /* 分配能力空间 */
+    /* 分配能力空间（Core-0 域不需要额外分配） */
     domain->cap_capacity = quota->max_caps;
-    phys_addr_t cap_space_phys;
-    u32 cap_pages = (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
-    if (pmm_alloc_frames(HIC_DOMAIN_CORE, cap_pages, PAGE_FRAME_CORE, &cap_space_phys) != HIC_SUCCESS) {
-        return HIC_ERROR_NO_RESOURCE;
+    
+    if (type == DOMAIN_TYPE_CORE) {
+        /* Core-0 域：使用内核固定内存，不额外分配 */
+        domain->cap_space = NULL;  /* Core-0 使用全局能力表 */
+        domain->phys_base = (phys_addr_t)_text_start;
+        domain->phys_size = (size_t)(_kernel_end - _text_start);
+    } else {
+        /* 其他域：分配独立的能力空间 */
+        phys_addr_t cap_space_phys;
+        u32 cap_pages = (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
+        if (pmm_alloc_frames(domain_id, cap_pages, PAGE_FRAME_PRIVILEGED, &cap_space_phys) != HIC_SUCCESS) {
+            return HIC_ERROR_NO_RESOURCE;
+        }
+        domain->cap_space = (cap_handle_t *)cap_space_phys;
     }
     
-    /* 将物理地址映射到虚拟地址 */
-    /* 使用直接映射（虚拟地址 = 物理地址） */
-    domain->cap_space = (cap_handle_t *)cap_space_phys;
-    if (!domain->cap_space) {
-        pmm_free_frames(cap_space_phys, cap_pages);
-        return HIC_ERROR_NO_RESOURCE;
-    }
-    
-    /* 分配物理内存 */
-    phys_addr_t mem_base;
+    /* 分配物理内存（Core-0 域不需要额外分配） */
+    phys_addr_t mem_base = 0;
     size_t mem_size = quota->max_memory;
-    if (pmm_alloc_frames(domain_id, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE),
-                         PAGE_FRAME_PRIVILEGED, &mem_base) != HIC_SUCCESS) {
-        pmm_free_frames((phys_addr_t)domain->cap_space,
-                        (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
-        return HIC_ERROR_NO_RESOURCE;
+    
+    if (type != DOMAIN_TYPE_CORE) {
+        if (pmm_alloc_frames(domain_id, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE),
+                             PAGE_FRAME_PRIVILEGED, &mem_base) != HIC_SUCCESS) {
+            if (domain->cap_space) {
+                pmm_free_frames((phys_addr_t)domain->cap_space,
+                                (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
+            }
+            return HIC_ERROR_NO_RESOURCE;
+        }
+    } else {
+        /* Core-0 使用内核内存范围 */
+        mem_base = domain->phys_base;
+        mem_size = domain->phys_size;
     }
     
     /* 初始化域 */
     domain->domain_id = domain_id;
     domain->type = type;
     domain->state = DOMAIN_STATE_READY;
-    domain->phys_base = mem_base;
-    domain->phys_size = mem_size;
+    if (type != DOMAIN_TYPE_CORE) {
+        domain->phys_base = mem_base;
+        domain->phys_size = mem_size;
+    }
     domain->cap_count = 0;
     domain->thread_list = 0;
     domain->thread_count = 0;
@@ -203,6 +218,93 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
         console_puts(" - 0x");
         console_puthex64(mem_base + mem_size);
         console_puts("\n");
+        
+        /* 映射内核代码段到域页表（机制：确保切换页表后内核代码仍可执行） */
+        {
+            size_t text_size = (size_t)(_text_end - _text_start);
+            if (text_size > 0) {
+                hic_status_t kernel_map_status = pagetable_map(
+                    domain_pagetable,
+                    (virt_addr_t)_text_start,
+                    (phys_addr_t)_text_start,
+                    text_size,
+                    PERM_RX,           /* 只读可执行 */
+                    MAP_TYPE_KERNEL    /* 内核映射 */
+                );
+                if (kernel_map_status != HIC_SUCCESS) {
+                    console_puts("[Domain] WARN: Failed to map kernel text for domain\n");
+                    /* 继续执行，非致命错误 */
+                }
+            }
+            
+            /* 映射内核只读数据段 */
+            size_t rodata_size = (size_t)(_rodata_end - _rodata_start);
+            if (rodata_size > 0) {
+                pagetable_map(domain_pagetable,
+                    (virt_addr_t)_rodata_start,
+                    (phys_addr_t)_rodata_start,
+                    rodata_size,
+                    PERM_READ,
+                    MAP_TYPE_KERNEL);
+            }
+            
+            /* 
+             * 安全限制：内核数据段仅映射为只读
+             * 
+             * .data/.bss 包含敏感数据：
+             * - g_global_cap_table[]：全局能力表
+             * - g_domain_keys[]：能力句柄混淆密钥
+             * - g_domains[]：域管理结构
+             * - g_privileged_domain_bitmap[]：特权位图
+             * 
+             * 允许非 Core-0 域写入这些数据将导致：
+             * - 能力伪造/篡改
+             * - 权限提升
+             * - 安全机制完全失效
+             * 
+             * Core-0 是唯一可信主体，负责所有写操作。
+             * 特权域需要修改内核数据时，必须通过 IPC 调用 Core-0。
+             */
+            size_t data_size = (size_t)(_data_end - _data_start);
+            if (data_size > 0) {
+                pagetable_map(domain_pagetable,
+                    (virt_addr_t)_data_start,
+                    (phys_addr_t)_data_start,
+                    data_size,
+                    PERM_READ,  /* 只读！防止权限提升攻击 */
+                    MAP_TYPE_KERNEL);
+            }
+            
+            /* BSS 段同样只读 */
+            extern char __bss_start[], __bss_end[];
+            size_t bss_size = (size_t)(__bss_end - __bss_start);
+            if (bss_size > 0) {
+                pagetable_map(domain_pagetable,
+                    (virt_addr_t)__bss_start,
+                    (phys_addr_t)__bss_start,
+                    bss_size,
+                    PERM_READ,
+                    MAP_TYPE_KERNEL);
+            }
+            
+            /* 大型 BSS 段（.lbss）同样只读 */
+            extern char __lbss_start[], __lbss_end[];
+            size_t lbss_size = (size_t)(__lbss_end - __lbss_start);
+            if (lbss_size > 0) {
+                pagetable_map(domain_pagetable,
+                    (virt_addr_t)__lbss_start,
+                    (phys_addr_t)__lbss_start,
+                    lbss_size,
+                    PERM_READ,
+                    MAP_TYPE_KERNEL);
+            }
+        }
+        
+        /* 注册域页表到 domain_switch 子系统 */
+        pagetable_setup_domain(domain_id, domain_pagetable);
+        console_puts("[Domain] Registered page table for domain ");
+        console_putu32(domain_id);
+        console_puts(" (with kernel regions mapped)\n");
     }
     
     /* 特权域标记（Privileged-1 服务默认为特权域） */
@@ -1039,6 +1141,12 @@ hic_status_t domain_get_parallel_partner(domain_id_t domain, domain_id_t *partne
 
 /**
  * 原子性域切换（机制层）
+ * 
+ * 安全保证：
+ * 1. 旧域线程立即停止调度（设置为 BLOCKED）
+ * 2. 新域线程可被调度（设置为 READY）
+ * 3. 端点原子重定向
+ * 4. 整个过程在临界区保护内
  */
 hic_status_t domain_atomic_switch(domain_id_t from,
                                    domain_id_t to,
@@ -1068,7 +1176,38 @@ hic_status_t domain_atomic_switch(domain_id_t from,
     from_domain->flags |= DOMAIN_FLAG_DRAINING | DOMAIN_FLAG_OLD_INSTANCE;
     from_domain->state = DOMAIN_STATE_SUSPENDED;
     
-    /* 2. 原子性重定向所有端点 */
+    /* 2. 阻塞旧域的所有线程（防止继续调度） */
+    extern thread_t g_threads[];
+    u32 blocked_count = 0;
+    u32 woken_count = 0;
+    
+    for (u32 i = 0; i < MAX_THREADS; i++) {
+        thread_t *t = &g_threads[i];
+        
+        /* 跳过无效线程 */
+        if (t->thread_id != (thread_id_t)i) {
+            continue;
+        }
+        
+        /* 处理旧域线程：设置为 BLOCKED */
+        if (t->domain_id == from) {
+            if (t->state == THREAD_STATE_READY || t->state == THREAD_STATE_RUNNING) {
+                t->state = THREAD_STATE_BLOCKED;
+                blocked_count++;
+            }
+        }
+        
+        /* 处理新域线程：唤醒 */
+        if (t->domain_id == to) {
+            if (t->state == THREAD_STATE_BLOCKED || t->state == THREAD_STATE_WAITING) {
+                t->state = THREAD_STATE_READY;
+                t->time_slice = 100;  /* 重置时间片 */
+                woken_count++;
+            }
+        }
+    }
+    
+    /* 3. 原子性重定向所有端点 */
     for (u32 i = 0; i < cap_count && endpoint_caps; i++) {
         if (endpoint_caps[i] != HIC_CAP_INVALID) {
             domain_id_t old_target;
@@ -1082,11 +1221,11 @@ hic_status_t domain_atomic_switch(domain_id_t from,
         }
     }
     
-    /* 3. 标记新域为主实例 */
+    /* 4. 标记新域为主实例 */
     to_domain->flags &= ~DOMAIN_FLAG_NEW_INSTANCE;
     to_domain->flags |= DOMAIN_FLAG_PRIMARY;
     
-    /* 4. 确保所有写入可见 */
+    /* 5. 确保所有写入可见 */
     atomic_release_barrier();
     
     atomic_exit_critical(irq);
@@ -1095,9 +1234,13 @@ hic_status_t domain_atomic_switch(domain_id_t from,
     console_putu32(from);
     console_puts(" -> domain ");
     console_putu32(to);
-    console_puts(" (");
+    console_puts(" (blocked ");
+    console_putu32(blocked_count);
+    console_puts(" threads, woken ");
+    console_putu32(woken_count);
+    console_puts(", ");
     console_putu32(cap_count);
-    console_puts(" endpoints redirected)\n");
+    console_puts(" endpoints)\n");
     
     return HIC_SUCCESS;
 }
@@ -1126,13 +1269,24 @@ hic_status_t domain_graceful_shutdown(domain_id_t domain,
     console_putu32(timeout_ms);
     console_puts("ms\n");
     
-    /* 1. 标记为终止中 */
-    target->state = DOMAIN_STATE_TERMINATED;
+    /* 1. 阻塞域的所有线程（防止新活动） */
+    extern thread_t g_threads[];
+    bool irq = atomic_enter_critical();
+    for (u32 i = 0; i < MAX_THREADS; i++) {
+        thread_t *t = &g_threads[i];
+        if (t->domain_id == domain && 
+            (t->state == THREAD_STATE_READY || t->state == THREAD_STATE_RUNNING)) {
+            t->state = THREAD_STATE_BLOCKED;
+        }
+    }
+    target->state = DOMAIN_STATE_SUSPENDED;
     target->flags |= DOMAIN_FLAG_OLD_INSTANCE;
+    atomic_exit_critical(irq);
     
-    /* 2. 等待连接排空（简化版：直接使用超时） */
+    /* 2. 等待资源释放（带调度让步） */
     u64 start_time = hal_get_timestamp();
     u64 timeout_ns = (u64)timeout_ms * 1000000ULL;
+    u32 check_count = 0;
     
     while (target->usage.thread_used > 0 || target->usage.cap_used > 0) {
         u64 elapsed = hal_get_timestamp() - start_time;
@@ -1147,8 +1301,16 @@ hic_status_t domain_graceful_shutdown(domain_id_t domain,
             break;
         }
         
-        /* 短暂等待 */
-        hal_udelay(1000);  /* 1ms */
+        /* 每隔一段时间让调度器运行其他线程 */
+        check_count++;
+        if ((check_count % 10) == 0) {
+            /* 让其他线程有机会执行（可能正在释放资源） */
+            extern void thread_yield(void);
+            thread_yield();
+        } else {
+            /* 短暂延迟避免忙等待 */
+            hal_udelay(100);  /* 100us */
+        }
     }
     
     /* 3. 销毁域 */

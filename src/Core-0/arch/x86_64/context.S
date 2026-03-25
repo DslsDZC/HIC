@@ -113,6 +113,16 @@ x86_64_restore_context:
 .global context_switch
 .type context_switch, @function
 
+/* 外部函数：获取域页表 */
+.extern domain_switch_get_pagetable
+.extern domain_switch_set_current
+
+/* 外部变量：全局域表 */
+.extern g_domains
+
+/* 域结构体偏移 (domain.h) */
+#define DOMAIN_PAGE_TABLE_OFFSET 56  /* page_table 字段在 domain_t 中的偏移 */
+
 /* 上下文切换函数（多核支持）
  * 参数: rdi = prev线程指针(thread_t*), rsi = next线程指针(thread_t*)
  *
@@ -128,6 +138,8 @@ x86_64_restore_context:
  *   40: stack_ptr (8字节)     <-- 这是我们要保存/恢复的
  *   48: arch_context (8字节)
  *   56: time_slice (8字节)
+ *
+ * 修复：添加 CR3 切换逻辑，确保跨域线程切换时正确切换页表
  */
 context_switch:
     /* 检查 prev 是否为 NULL */
@@ -148,7 +160,58 @@ context_switch:
     movq %rsp, 40(%rdi)
 
 .L_switch_to_new:
-    /* 恢复next线程上下文 */
+    /* ===== CR3 切换逻辑（跨域线程切换修复）===== */
+    
+    /* 保存 next 线程指针 */
+    pushq %rsi
+    
+    /* 获取 next 线程的 domain_id (偏移 4) */
+    movq 4(%rsi), %rdi           /* %rdi = next->domain_id */
+    
+    /* 检查域ID是否有效 */
+    cmpq $256, %rdi              /* HIC_DOMAIN_MAX = 256 */
+    jae .L_skip_cr3_switch       /* 无效域ID，跳过CR3切换 */
+    
+    /* 调用 domain_switch_get_pagetable(domain_id) 获取目标域页表
+     * 注意：这可能返回 NULL（Core-0 域使用内核页表）
+     */
+    call domain_switch_get_pagetable
+    
+    /* 检查返回的页表是否有效 */
+    testq %rax, %rax
+    jz .L_skip_cr3_switch        /* NULL 页表，跳过切换（Core-0 域） */
+    
+    /* 获取页表物理地址（返回的是 page_table_t*，即物理地址） */
+    /* 页表地址已经是物理地址（恒等映射） */
+    movq %rax, %rbx
+    
+    /* 获取当前 CR3 并清除低位标志进行比较
+     * CR3 低 12 位包含 PCID、PWT、PCD 等标志，页表地址需 4KB 对齐
+     * 注意：andq 不支持64位立即数，需使用寄存器间接操作
+     */
+    movq %cr3, %rax
+    movq $0xFFFFFFFFF000, %rcx   /* 页表地址掩码（高52位） */
+    andq %rcx, %rax              /* 清除低位标志位 */
+    andq %rcx, %rbx              /* 同样处理目标页表地址 */
+    
+    /* 比较是否需要切换 */
+    cmpq %rax, %rbx
+    je .L_skip_cr3_switch        /* 相同页表，无需切换 */
+    
+    /* 切换 CR3
+     * 
+     * 注意：写入 CR3 时 CPU 会自动刷新 TLB（除非使用 PCID）
+     * 无需手动 TLB 刷新。
+     * 
+     * 若将来启用 PCID 优化，需使用 invpcid 指令选择性刷新
+     */
+    movq %rbx, %cr3
+    
+.L_skip_cr3_switch:
+    /* 恢复 next 线程指针 */
+    popq %rsi
+    
+    /* ===== 恢复线程上下文 ===== */
 
     /* 恢复栈指针从 next->stack_ptr (偏移 40) */
     movq 40(%rsi), %rsp

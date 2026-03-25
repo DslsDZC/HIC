@@ -14,7 +14,7 @@
 .macro ISR_NOERRCODE num
 .global isr_\num
 isr_\num:
-    push $0        /* 压入错误码占位符 */
+    push $0        /* 压入错误码占位符（无错误码异常需要此占位符） */
     push $\num    /* 压入中断向量号 */
     jmp isr_common_stub
 .endm
@@ -22,7 +22,7 @@ isr_\num:
 .macro ISR_ERRCODE num
 .global isr_\num
 isr_\num:
-    push $0        /* 压入错误码占位符（与 ISR_NOERRCODE 保持一致）*/
+    /* 有错误码的异常：CPU已自动压入错误码，不需要再压入占位符 */
     push $\num    /* 压入中断向量号 */
     jmp isr_common_stub
 .endm

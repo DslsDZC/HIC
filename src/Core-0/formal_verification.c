@@ -200,7 +200,7 @@ static const u64 g_invariant_specs_count = sizeof(g_invariant_specs) / sizeof(g_
 /* 不变式依赖关系 */
 static invariant_dependency_t g_invariant_deps[] = {
     /* 不变式ID: 依赖的不变式列表 */
-    {1, {}, 0},      /* 能力守恒性 - 无依赖 */
+    {1, {0}, 0},      /* 能力守恒性 - 无依赖 */
     {2, {1}, 1},     /* 内存隔离性 - 依赖能力守恒性 */
     {3, {1}, 1},     /* 能力权限单调性 - 依赖能力守恒性 */
     {4, {1, 2}, 2},  /* 资源配额守恒性 - 依赖能力守恒性、内存隔离性 */
@@ -339,7 +339,7 @@ static bool invariant_capability_monotonicity(void) {
         
         // 获取该能力的所有派生
         cap_id_t* derivatives = get_capability_derivatives(cap1);
-        for (u64 i = 0; derivatives[i] != INVALID_CAP_ID; i++) {
+        for (u64 i = 0; derivatives[i] != HIC_CAP_INVALID; i++) {
             cap_id_t cap2 = derivatives[i];
             
             // 检查权限是否是子集
@@ -1224,13 +1224,13 @@ static bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type) {
 
         [CAP_SHARED]      = {true,  false, false, false, true },  // 共享内存能力
 
-        [CAP_CAP_DERIVE]  = {false, false, false, false, false},  // 派生能力（元能力）
+        [CAP_CAP_DERIVE]  = {true,  true,  true,  true,  true },  // 派生能力（元能力，可派生任何类型）
 
         [CAP_IRQ]         = {false, true,  false, false, false},  // 中断能力（设备相关）
 
         [CAP_ENDPOINT]    = {false, false, true,  false, false},  // IPC端点
 
-        [CAP_SERVICE]     = {false, false, false, false, false},  // 服务能力
+        [CAP_SERVICE]     = {false, false, true,  true,  false},  // 服务能力（通过IPC通信，需要线程执行）
 
         [CAP_MMIO]        = {true,  true,  false, false, false},  // MMIO区域（内存/设备）
 

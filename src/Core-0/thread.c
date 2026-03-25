@@ -20,6 +20,74 @@
 /* 全局线程表 */
 thread_t g_threads[MAX_THREADS];
 
+/* 全局线程ID位图 - 用于线程槽分配 */
+static u64 g_thread_bitmap[(MAX_THREADS + 63) / 64] = {0};
+
+/* 前向声明 */
+static void thread_exit_handler(void);
+
+/**
+ * 线程启动包装函数
+ * 
+ * 这个函数被 context_switch 的 ret 调用。
+ * 它会调用实际的线程入口函数，然后在函数返回时调用 thread_exit_handler。
+ * 
+ * 栈布局（进入此函数时）:
+ *   [callee-saved 空间]  <- RSP 指向这里
+ *   entry_point          <- 栈顶（将被弹出）
+ */
+__attribute__((naked)) static void thread_entry_wrapper(void)
+{
+    /*
+     * 这个函数使用 naked 属性，不生成任何函数序言/尾声代码。
+     * 
+     * 进入时：
+     * - RSP 指向 callee-saved 空间的末尾
+     * - 栈顶（RSP 指向的位置）是入口点地址
+     * - 其下方是 thread_exit_handler 地址
+     * 
+     * 我们需要：
+     * 1. 弹出入口点地址到 RAX
+     * 2. 调用入口函数（使用 call，这样返回地址会被压栈）
+     * 3. 入口函数返回后，跳转到 thread_exit_handler
+     */
+    __asm__ volatile (
+        /* 弹出入口点地址 */
+        "popq %%rax\n\t"          /* RAX = entry_point */
+        /* 调用入口函数 */
+        "call *%%rax\n\t"         /* 调用 entry_point() */
+        /* 入口函数返回，跳转到退出处理 */
+        "movq %0, %%rax\n\t"      /* 将退出处理函数地址加载到 RAX */
+        "jmp *%%rax\n\t"          /* 跳转到 thread_exit_handler */
+        :
+        : "r" (thread_exit_handler)
+        : "memory", "rax"
+    );
+}
+
+/* 线程退出处理函数 - 当线程入口函数返回时调用 */
+static void thread_exit_handler(void)
+{
+    /* 使用串口输出调试信息 */
+    extern void serial_print(const char*);
+    extern thread_t idle_thread;
+    serial_print("[THREAD_EXIT] Thread completed, calling schedule()\n");
+    
+    /* 线程完成，标记为终止状态 */
+    if (g_current_thread != NULL && g_current_thread != &idle_thread) {
+        g_current_thread->state = THREAD_STATE_TERMINATED;
+    }
+    
+    /* 让出CPU，调度下一个线程 */
+    schedule();
+    
+    /* 不应该到达这里 */
+    serial_print("[THREAD_EXIT] ERROR: Returned from schedule()!\n");
+    while (1) {
+        __asm__ volatile("hlt");
+    }
+}
+
 /* 线程系统初始化 */
 void thread_system_init(void)
 {
@@ -165,9 +233,7 @@ hic_status_t thread_create_bound(domain_id_t domain_id,
         return HIC_ERROR_INVALID_STATE;
     }
     
-    /* 使用位图快速查找空闲线程槽 */
-    static u64 g_thread_bitmap[(MAX_THREADS + 63) / 64] = {0};
-    
+    /* 使用全局位图快速查找空闲线程槽 */
     thread_id_t free_slot = MAX_THREADS;
     bool irq = atomic_enter_critical();
     
@@ -222,13 +288,19 @@ hic_status_t thread_create_bound(domain_id_t domain_id,
     thread->time_slice = 100;  /* 默认时间片 */
     thread->wait_flags = 0;
     
-    /* 初始化栈：设置入口点
-     * context_switch 会恢复以下寄存器：rbx, rbp, r12-r15
-     * 然后执行 ret，所以需要在栈顶放置入口点地址
+    /* 初始化栈：设置入口点和退出处理
+     * 栈布局（从高到低）:
+     *   thread_exit_handler  <- 入口函数返回时跳转到这里
+     *   entry_point          <- context_switch ret 后跳转到这里
+     *   [callee-saved 空间]  <- stack_ptr 指向这里
      */
     u64 *stack_top = (u64 *)(stack_phys + 2 * PAGE_SIZE);
     
-    /* 压入入口点地址（作为 ret 的返回地址） */
+    /* 压入线程退出处理函数地址 */
+    stack_top--;
+    *stack_top = (u64)thread_exit_handler;
+    
+    /* 压入入口点地址（作为首次调度的返回地址） */
     stack_top--;
     *stack_top = (u64)entry_point;
     
@@ -246,6 +318,19 @@ hic_status_t thread_create_bound(domain_id_t domain_id,
     }
     
     atomic_exit_critical(irq);
+    
+    /* 调试：打印栈关键地址（在关键区外） */
+    {
+        console_puts("[STACK_INIT] thread=");
+        console_puthex64(free_slot);
+        console_puts(" exit_handler=0x");
+        console_puthex64((u64)thread_exit_handler);
+        console_puts(" entry=0x");
+        console_puthex64((u64)entry_point);
+        console_puts(" stack_ptr=0x");
+        console_puthex64(thread->stack_ptr);
+        console_puts("\n");
+    }
     
     /* 将线程加入调度队列 */
     thread_ready(free_slot);
@@ -297,9 +382,7 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
         }
     }
     
-    /* 使用位图快速查找空闲线程槽 */
-    static u64 g_thread_bitmap[(MAX_THREADS + 63) / 64] = {0};
-    
+    /* 使用全局位图快速查找空闲线程槽 */
     thread_id_t free_slot = MAX_THREADS;
     bool irq = atomic_enter_critical();
     
@@ -354,10 +437,14 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     thread->time_slice = 100;  /* 默认时间片 */
     thread->wait_flags = 0;
     
-    /* 初始化栈：设置入口点 */
+    /* 初始化栈：设置入口点和退出处理 */
     u64 *stack_top = (u64 *)(stack_phys + 2 * PAGE_SIZE);
     
-    /* 压入入口点地址（作为 ret 的返回地址） */
+    /* 压入线程退出处理函数地址 */
+    stack_top--;
+    *stack_top = (u64)thread_exit_handler;
+    
+    /* 压入入口点地址（作为首次调度的返回地址） */
     stack_top--;
     *stack_top = (u64)entry_point;
     

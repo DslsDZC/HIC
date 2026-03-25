@@ -432,10 +432,7 @@ int _device_manager_entry(void) {
     
     device_manager_start();
     
-    /* 服务主循环 */
-    while (1) {
-        __asm__ volatile("hlt");
-    }
-    
+    /* 服务初始化完成，返回让调度器继续 */
+    serial_print("[DEV_MGR] Service ready\n");
     return 0;
 }

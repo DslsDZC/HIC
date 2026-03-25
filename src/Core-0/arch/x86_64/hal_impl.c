@@ -197,21 +197,43 @@ void x86_64_breakpoint(void)
 
 /**
  * 加载GDT
+ * 
+ * 修复：使用对齐安全的方式读取gdt_ptr结构
+ * 避免未对齐内存访问（虽然x86-64支持，但可能导致性能问题）
  */
-void gdt_load(void *gdt_ptr)
+void gdt_load(void *gdt_ptr_arg)
 {
-    uint16_t limit = *(uint16_t*)gdt_ptr;
-    uint64_t base = *(uint64_t*)((uint8_t*)gdt_ptr + 2);
-
+    /*
+     * gdt_ptr_arg 指向 gdt_ptr_t 结构：
+     *   uint16_t limit;  // 偏移 0-1
+     *   uint64_t base;   // 偏移 2-9 (packed, 无对齐填充)
+     * 
+     * 由于结构体是 packed，base 字段从偏移 2 开始
+     * 直接读取可能导致未对齐访问
+     */
+    
+    /* 方法1：使用 memcpy 安全读取（推荐） */
+    uint16_t limit;
+    uint64_t base;
+    
+    /* 读取 limit (偏移 0-1) */
+    __builtin_memcpy(&limit, gdt_ptr_arg, sizeof(limit));
+    
+    /* 读取 base (偏移 2-9) */
+    __builtin_memcpy(&base, (uint8_t*)gdt_ptr_arg + 2, sizeof(base));
+    
+    /* 方法2：构造对齐的 GDT 指针结构（用于 lgdt 指令） */
+    /* lgdt 需要 10 字节的结构：{ limit(2), base(8) } */
+    /* 注意：lgdt 指令本身对结构的对齐有要求 */
     struct {
         uint16_t limit;
         uint64_t base;
-    } __attribute__((packed)) gdt_ptr_struct;
+    } __attribute__((packed, aligned(16))) gdt_desc;
+    
+    gdt_desc.limit = limit;
+    gdt_desc.base = base;
 
-    gdt_ptr_struct.limit = limit;
-    gdt_ptr_struct.base = base;
-
-    __asm__ volatile("lgdt %0" : : "m"(gdt_ptr_struct));
+    __asm__ volatile("lgdt %0" : : "m"(gdt_desc));
 }
 
 /* ==================== 多核支持 ==================== */

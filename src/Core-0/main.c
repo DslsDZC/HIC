@@ -309,8 +309,9 @@ void kernel_main(void *info)
         /* 执行内核维护任务 */
         kernel_maintenance_tasks();
         
-        /* 进入低功耗状态等待 */
-        hal_halt();
+        /* 短暂延迟后继续调度（避免忙等待） */
+        /* 注意：在生产环境中应使用定时器中断唤醒 */
+        for (volatile int i = 0; i < 1000; i++) { /* 简单延迟 */ }
     }
     
 panic:

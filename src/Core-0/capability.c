@@ -21,6 +21,7 @@
  */
 
 #include "capability.h"
+#include "domain.h"
 #include "pmm.h"
 #include "atomic.h"
 #include "lib/mem.h"
@@ -30,6 +31,12 @@
 
 /* ==================== 全局能力表 ==================== */
 __capability cap_entry_t g_global_cap_table[CAP_TABLE_SIZE];
+
+/* ==================== 共享内存区域配置 ==================== */
+#define MAX_SHMEM_REGIONS  64
+
+/* 共享内存区域表（前置声明供机制层使用） */
+static shmem_region_t g_shmem_regions[MAX_SHMEM_REGIONS];
 
 /* ==================== 域密钥表（每个域一个） ==================== */
 domain_key_t g_domain_keys[HIC_DOMAIN_MAX];
@@ -54,6 +61,9 @@ void capability_system_init(void) {
     console_puts("[CAP] Global capability table cleared (");
     console_putu32(CAP_TABLE_SIZE);
     console_puts(" entries)\n");
+    
+    memzero(g_derivatives, sizeof(g_derivatives));
+    console_puts("[CAP] Derivative table cleared\n");
     
     memzero(g_domain_keys, sizeof(g_domain_keys));
     console_puts("[CAP] Domain key table cleared (");
@@ -187,15 +197,158 @@ hic_status_t cap_grant(domain_id_t domain, cap_id_t cap, cap_handle_t *out) {
     return HIC_SUCCESS;
 }
 
-/* ==================== 能力撤销 ==================== */
+/* ==================== 能力撤销（递归实现） ==================== */
 
+/* 最大派生深度限制，防止无限递归 */
+#define CAP_REVOKE_MAX_DEPTH  16
+
+/**
+ * @brief 检查并释放共享内存资源
+ * 
+ * 如果能力对应共享内存区域，减少引用计数，
+ * 引用计数为0时释放物理内存。
+ * 
+ * 注意：调用者必须持有原子锁
+ */
+static void cap_release_shmem_if_needed(cap_id_t cap) {
+    /* 外部引用：共享内存区域表（定义在后面的共享内存机制层） */
+    extern shmem_region_t g_shmem_regions[];
+    
+    if (cap >= CAP_TABLE_SIZE) return;
+    
+    cap_entry_t *entry = &g_global_cap_table[cap];
+    
+    /* 检查是否为内存能力 */
+    if (entry->memory.base == 0 || entry->memory.size == 0) return;
+    
+    /* 检查是否属于共享内存区域 */
+    for (u32 i = 0; i < MAX_SHMEM_REGIONS; i++) {
+        if (g_shmem_regions[i].phys_base == entry->memory.base) {
+            /* 找到匹配的共享内存区域 */
+            if (g_shmem_regions[i].ref_count > 0) {
+                g_shmem_regions[i].ref_count--;
+                
+                /* 引用计数为0，释放物理内存 */
+                if (g_shmem_regions[i].ref_count == 0) {
+                    u32 pages = (u32)((g_shmem_regions[i].size + PAGE_SIZE - 1) / PAGE_SIZE);
+                    pmm_free_frames(g_shmem_regions[i].phys_base, pages);
+                    g_shmem_regions[i].phys_base = 0;
+                    g_shmem_regions[i].size = 0;
+                }
+            }
+            break;
+        }
+    }
+}
+
+/**
+ * @brief 递归撤销能力及其所有派生能力
+ * 
+ * 安全保证：
+ * 1. 先设置 CAP_FLAG_REVOKED 标志，避免重复撤销
+ * 2. 检查子能力是否已被撤销，防止死循环
+ * 3. 深度限制防止栈溢出
+ * 4. 撤销完成后清零 cap_id，使槽位可重用
+ * 5. 自动处理共享内存引用计数
+ * 6. 从父能力的子列表中移除，保持一致性
+ * 
+ * 注意：调用者必须持有原子锁
+ */
+static void cap_revoke_recursive_impl(cap_id_t cap, u32 depth) {
+    /* 深度限制检查 */
+    if (depth > CAP_REVOKE_MAX_DEPTH) {
+        return;
+    }
+    
+    /* 边界检查 */
+    if (cap >= CAP_TABLE_SIZE) {
+        return;
+    }
+    
+    /* 检查能力是否存在 */
+    if (g_global_cap_table[cap].cap_id != cap) {
+        return;
+    }
+    
+    /* 先设置撤销标志，避免重复撤销 */
+    if (g_global_cap_table[cap].flags & CAP_FLAG_REVOKED) {
+        return;  /* 已撤销，跳过 */
+    }
+    g_global_cap_table[cap].flags |= CAP_FLAG_REVOKED;
+    
+    /* 递归撤销所有派生能力（在清零 cap_id 之前） */
+    cap_derivative_t *deriv = &g_derivatives[cap];
+    for (u32 i = 0; i < deriv->child_count && i < MAX_DERIVATIVES_PER_CAP; i++) {
+        cap_id_t child = deriv->children[i];
+        
+        /* 检查子能力是否已被撤销，防止死循环 */
+        if (child != HIC_CAP_INVALID && child < CAP_TABLE_SIZE) {
+            if (!(g_global_cap_table[child].flags & CAP_FLAG_REVOKED)) {
+                cap_revoke_recursive_impl(child, depth + 1);
+            }
+        }
+    }
+    
+    /* 检查并释放共享内存资源 */
+    cap_release_shmem_if_needed(cap);
+    
+    /* 从父能力的子列表中移除当前能力 */
+    cap_id_t parent = deriv->parent;
+    if (parent != HIC_CAP_INVALID && parent < CAP_TABLE_SIZE) {
+        cap_derivative_t *parent_deriv = &g_derivatives[parent];
+        for (u32 i = 0; i < parent_deriv->child_count && i < MAX_DERIVATIVES_PER_CAP; i++) {
+            if (parent_deriv->children[i] == cap) {
+                /* 找到，用最后一个元素覆盖（避免移动数组） */
+                parent_deriv->children[i] = parent_deriv->children[parent_deriv->child_count - 1];
+                parent_deriv->child_count--;
+                break;
+            }
+        }
+    }
+    
+    /* 清空子能力列表 */
+    deriv->child_count = 0;
+    deriv->parent = HIC_CAP_INVALID;
+    
+    /* 清零 cap_id，使槽位可重用 */
+    g_global_cap_table[cap].cap_id = 0;
+    g_global_cap_table[cap].flags = 0;
+    g_global_cap_table[cap].rights = 0;
+    g_global_cap_table[cap].owner = 0;
+}
+
+/**
+ * @brief 撤销能力及其所有派生能力
+ * 
+ * 满足"撤销立即生效"的安全规范：
+ * - 撤销父能力时，所有派生能力同步失效
+ * - 整个递归过程在原子操作保护内
+ * 
+ * @param cap 要撤销的能力ID
+ * @return 状态码
+ */
 hic_status_t cap_revoke(cap_id_t cap) {
     if (cap >= CAP_TABLE_SIZE) {
         return HIC_ERROR_INVALID_PARAM;
     }
     
     bool irq = atomic_enter_critical();
-    g_global_cap_table[cap].flags |= CAP_FLAG_REVOKED;
+    
+    /* 检查能力是否存在 */
+    if (g_global_cap_table[cap].cap_id != cap) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_CAP_INVALID;
+    }
+    
+    /* 检查是否已被撤销 */
+    if (g_global_cap_table[cap].flags & CAP_FLAG_REVOKED) {
+        atomic_exit_critical(irq);
+        return HIC_SUCCESS;  /* 幂等操作：已撤销视为成功 */
+    }
+    
+    /* 递归撤销 */
+    cap_revoke_recursive_impl(cap, 0);
+    
     atomic_exit_critical(irq);
     
     return HIC_SUCCESS;
@@ -311,6 +464,11 @@ hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, cap_rights_t sub_rig
         return HIC_ERROR_PERMISSION;
     }
     
+    /* 检查权限单调性：派生权限必须是父权限的子集 */
+    if ((sub_rights & ~g_global_cap_table[parent].rights) != 0) {
+        return HIC_ERROR_PERMISSION;  /* 派生权限超出父权限范围 */
+    }
+    
     /* 查找空闲能力槽 */
     bool irq = atomic_enter_critical();
     
@@ -333,12 +491,15 @@ hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, cap_rights_t sub_rig
     g_global_cap_table[cap].owner = owner;
     g_global_cap_table[cap].flags = 0;
     
-    /* 复制父能力的数据 */
+    /* 复制父能力的完整数据（联合体的所有字段） */
     g_global_cap_table[cap].memory = g_global_cap_table[parent].memory;
+    g_global_cap_table[cap].endpoint = g_global_cap_table[parent].endpoint;
+    g_global_cap_table[cap].logical_core = g_global_cap_table[parent].logical_core;
     
     /* 记录派生关系 */
     if (g_derivatives[parent].child_count < MAX_DERIVATIVES_PER_CAP) {
         g_derivatives[parent].children[g_derivatives[parent].child_count++] = cap;
+        g_derivatives[cap].parent = parent;  /* 记录父能力 */
     }
     
     atomic_exit_critical(irq);
@@ -402,8 +563,8 @@ phys_addr_t g_usable_memory_end   = 0xFFFFFFFF;
 /* 特权域位图（运行时验证，防止标志位被篡改） */
 u32 g_privileged_domain_bitmap[HIC_DOMAIN_MAX / 32];
 
-/* 特权访问审计计数器（用于监控） */
-u64 g_privileged_access_count[HIC_DOMAIN_MAX];
+/* 特权访问审计计数器（已废弃：使用 domain_t.audit_counters.privileged_mem_access) */
+u64 g_privileged_access_count[HIC_DOMAIN_MAX] __attribute__((deprecated));
 
 /* 检查域是否为特权域（使用位图快速查找） */
 bool cap_is_privileged_domain(domain_id_t domain) {
@@ -464,8 +625,10 @@ bool privileged_check_access(domain_id_t domain, phys_addr_t addr, cap_rights_t 
         return false;
     }
     
-    /* 4. 记录访问计数（审计） */
-    g_privileged_access_count[domain]++;
+    /* 4. 记录访问计数（使用域私有审计计数器） */
+    if (domain < HIC_DOMAIN_MAX && g_domains[domain].state != DOMAIN_STATE_INIT) {
+        g_domains[domain].audit_counters.privileged_mem_access++;
+    }
     
     return true;
 }
@@ -849,8 +1012,11 @@ hic_status_t shmem_unmap(domain_id_t domain, cap_handle_t handle) {
         }
     }
     
-    /* 撤销能力 */
-    entry->flags |= CAP_FLAG_REVOKED;
+    /* 撤销能力并清零 cap_id，使槽位可重用 */
+    entry->flags = 0;
+    entry->rights = 0;
+    entry->owner = 0;
+    entry->cap_id = 0;  /* 清零使槽位可重用 */
     
     atomic_exit_critical(irq);
     
@@ -911,6 +1077,11 @@ static struct {
 
 /**
  * 服务端点原子重定向（机制层）
+ * 
+ * 安全保证：
+ * 1. 验证端点能力有效性
+ * 2. 验证目标域存在且活跃
+ * 3. 原子性更新目标
  */
 hic_status_t cap_endpoint_redirect(cap_id_t endpoint_cap,
                                     domain_id_t new_target,
@@ -933,6 +1104,23 @@ hic_status_t cap_endpoint_redirect(cap_id_t endpoint_cap,
     if (entry->flags & CAP_FLAG_REVOKED) {
         atomic_exit_critical(irq);
         return HIC_ERROR_CAP_REVOKED;
+    }
+    
+    /* 验证目标域存在且活跃 */
+    extern domain_t g_domains[];
+    domain_t *target_domain = &g_domains[new_target];
+    
+    /* 检查域是否存在 */
+    if (target_domain->domain_id != new_target) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_INVALID_DOMAIN;
+    }
+    
+    /* 检查域是否处于活跃状态（READY 或 RUNNING） */
+    if (target_domain->state != DOMAIN_STATE_READY &&
+        target_domain->state != DOMAIN_STATE_RUNNING) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_INVALID_STATE;
     }
     
     /* 记录旧目标（用于回滚） */
@@ -1136,6 +1324,11 @@ hic_status_t cap_create_service_instance(domain_id_t owner,
 
 /**
  * 切换服务主实例（机制层）
+ * 
+ * 安全保证：
+ * 1. 验证服务能力有效性
+ * 2. 验证新主实例属于同一服务（必须是当前备用实例）
+ * 3. 原子性切换
  */
 hic_status_t cap_service_switch_primary(cap_id_t service_cap,
                                          cap_id_t new_primary_cap,
@@ -1159,6 +1352,12 @@ hic_status_t cap_service_switch_primary(cap_id_t service_cap,
     if (idx == MAX_SERVICE_INSTANCES) {
         atomic_exit_critical(irq);
         return HIC_ERROR_NOT_FOUND;
+    }
+    
+    /* 验证新主实例属于同一服务（必须是当前备用实例） */
+    if (g_service_instances[idx].standby_cap != new_primary_cap) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_INVALID_PARAM;  /* 新主实例不属于该服务 */
     }
     
     /* 记录旧主实例 */

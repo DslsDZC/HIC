@@ -38,16 +38,20 @@ SECTIONS
     . = KERNEL_BASE;
 
     .text ALIGN(4K) : AT(ADDR(.text)) {
+        _text_start = .;
         *(.text.start)  /* 确保 _start 在最前面 */
         *(.multiboot)
         *(.text)
         *(.text.*)
+        _text_end = .;
     }
 
     /* 只读数据段 */
     .rodata ALIGN(4K) : AT(ADDR(.rodata)) {
+        _rodata_start = .;
         *(.rodata)
         *(.rodata.*)
+        _rodata_end = .;
     }
 
     /* 初始化代码段（启动后可丢弃） */
@@ -60,8 +64,10 @@ SECTIONS
 
     /* 数据段 */
     .data ALIGN(4K) : AT(ADDR(.data)) {
+        _data_start = .;
         *(.data)
         *(.data.*)
+        _data_end = .;
     }
 
     /* BSS段（零初始化数据） */
@@ -83,8 +89,11 @@ SECTIONS
 
     /* 大型 BSS 段（限制在内核段内） */
     .lbss ALIGN(4K) : AT(ADDR(.lbss)) {
+        __lbss_start = .;
         *(.lbss)
         *(.lbss.*)
+        . = ALIGN(4K);
+        __lbss_end = .;
     }
 
     /* ==================== 内核结束 ==================== */
@@ -126,6 +135,12 @@ SECTIONS
         _static_modules_text_start = .;
         
         /* @STATIC_MODULES_TEXT_START@ - 自动生成 */
+        /* vga_service 服务段 */
+        __start_static_svc_vga_service_text = .;
+        KEEP(*(.static_svc.vga_service.text))
+        KEEP(*(.static_svc.vga_service.rodata))
+        __stop_static_svc_vga_service_text = .;
+
         /* verifier 服务段 */
         __start_static_svc_verifier_text = .;
         KEEP(*(.static_svc.verifier.text))
@@ -181,6 +196,10 @@ SECTIONS
         _static_modules_data_start = .;
         
         /* @STATIC_MODULES_DATA_START@ - 自动生成 */
+        __start_static_svc_vga_service_data = .;
+        KEEP(*(.static_svc.vga_service.data))
+        __stop_static_svc_vga_service_data = .;
+
         __start_static_svc_verifier_data = .;
         KEEP(*(.static_svc.verifier.data))
         __stop_static_svc_verifier_data = .;
@@ -220,6 +239,10 @@ SECTIONS
         _static_modules_bss_start = .;
         
         /* @STATIC_MODULES_BSS_START@ - 自动生成 */
+        __start_static_svc_vga_service_bss = .;
+        KEEP(*(.static_svc.vga_service.bss))
+        __stop_static_svc_vga_service_bss = .;
+
         __start_static_svc_verifier_bss = .;
         KEEP(*(.static_svc.verifier.bss))
         __stop_static_svc_verifier_bss = .;

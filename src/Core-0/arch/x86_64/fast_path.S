@@ -9,11 +9,42 @@
  * 目标延迟：0.5-1微秒
  */
 
+/* ==================== IRQ 入口存根宏 ==================== */
+/**
+ * 为每个 IRQ 创建单独的入口点
+ * 必须先压入向量号，因为硬件中断不会自动压入向量号
+ */
+.macro IRQ_ENTRY num
+.global irq_\num
+irq_\num:
+    pushq $\num      /* 压入 IRQ 向量号 */
+    jmp isr_fast_stub
+.endm
+
+/* IRQ 入口点（向量 32-47） */
+IRQ_ENTRY 32
+IRQ_ENTRY 33
+IRQ_ENTRY 34
+IRQ_ENTRY 35
+IRQ_ENTRY 36
+IRQ_ENTRY 37
+IRQ_ENTRY 38
+IRQ_ENTRY 39
+IRQ_ENTRY 40
+IRQ_ENTRY 41
+IRQ_ENTRY 42
+IRQ_ENTRY 43
+IRQ_ENTRY 44
+IRQ_ENTRY 45
+IRQ_ENTRY 46
+IRQ_ENTRY 47
+
+/* ==================== 快速中断处理存根 ==================== */
 /* 快速中断处理存根（仅保存必要寄存器）
- * 注意：每个中断入口必须先压入向量号，然后调用此存根
- * 示例：
- *   push $0x20  ; 中断向量号
- *   jmp isr_fast_stub
+ * 注意：调用前必须已压入向量号（见上面的 IRQ_ENTRY 宏）
+ * 
+ * 重要：此存根仅用于 IRQ（硬件中断），不用于异常！
+ * 异常使用 interrupts.S 中的 isr_common_stub，支持错误码。
  */
 .global isr_fast_stub
 isr_fast_stub:
@@ -27,23 +58,28 @@ isr_fast_stub:
     pushq %rbp           /* RBP: 栈指针 */
 
     /* 从栈中获取IRQ向量号
-     * 栈布局（从下到上）：
-     *   [向量号]       <- 被中断入口压入
-     *   [返回地址]     <- CPU压入
-     *   [RFLAGS]       <- CPU压入
-     *   [CS]           <- CPU压入
-     *   [RIP]          <- CPU压入
-     *   [错误码]       <- 可选（某些异常）
-     *   [RAX]          <- pushq %rax
-     *   [RBX]          <- pushq %rbx
-     *   [RCX]          <- pushq %rcx
-     *   [RDX]          <- pushq %rdx
-     *   [RSI]          <- pushq %rsi
-     *   [RDI]          <- pushq %rdi
-     *   [RBP]          <- pushq %rbp
-     *   [RSP]          <- 当前栈顶
+     * 
+     * 栈布局（从高地址到低地址，即从栈底到栈顶）：
+     * 
+     *   高地址 ─────────────────────────────
+     *   RFLAGS        <- CPU压入（中断发生时）
+     *   CS            <- CPU压入
+     *   RIP           <- CPU压入（中断返回地址）
+     *   向量号        <- IRQ_ENTRY宏压入 (pushq $num)
+     *   RAX           <- pushq %rax
+     *   RBX           <- pushq %rbx
+     *   RCX           <- pushq %rcx
+     *   RDX           <- pushq %rdx
+     *   RSI           <- pushq %rsi
+     *   RDI           <- pushq %rdi
+     *   RBP           <- pushq %rbp <-- 当前 RSP
+     *   低地址 ─────────────────────────────
      *
-     * 向量号位于 RSP + 7*8 = RSP + 56
+     * 偏移计算：
+     *   向量号 = RSP + 7*8 = RSP + 56
+     * 
+     * 警告：若修改压入的寄存器数量，必须同步更新偏移！
+     * 定义常量可避免此问题，但会增加代码复杂度。
      */
     movq 56(%rsp), %rdi
 
@@ -64,73 +100,108 @@ isr_fast_stub:
 
     iretq
 
-/* 系统调用快速路径 */
+/* 系统调用快速路径
+ * 
+ * 修复：添加FS基址保存/恢复，支持用户态TLS
+ * 
+ * syscall指令后的寄存器状态：
+ *   RAX = 系统调用号（不变）
+ *   RCX = 用户空间返回地址（被syscall保存）
+ *   R11 = 用户空间RFLAGS（被syscall保存）
+ *   RDI, RSI, RDX, R10, R8, R9 = 系统调用参数
+ *
+ * FS寄存器：用户态TLS基址，需要保存/恢复
+ * GS寄存器：通过swapgs切换内核/用户基址
+ */
 .global syscall_fast_entry
 syscall_fast_entry:
-    /* 使用syscall/sysret指令优化 */
-    /* 寄存器约定（syscall指令进入后）：
-     * RAX = 系统调用号
-     * RDI = 参数1
-     * RSI = 参数2
-     * RDX = 参数3
-     * R10 = 参数4（不是RCX！）
-     * R8  = 参数5
-     * R9  = 参数6
-     * RCX = 用户空间返回地址（由syscall指令自动保存）
-     * R11 = RFLAGS（由syscall指令自动保存）
-     */
+    /* 交换GS基址 */
+    swapgs
 
+    /* ===== 第一步：保存用户态关键寄存器 ===== */
+    /* 使用栈帧布局：
+     *   [FS基址]       <- RSP+0 (8字节)
+     *   [RCX用户地址]  <- RSP+8
+     *   [R11用户标志]  <- RSP+16
+     *   [RBX]          <- RSP+24
+     *   [RBP]          <- RSP+32
+     *   [R12]          <- RSP+40
+     *   [R13]          <- RSP+48
+     *   [R14]          <- RSP+56
+     *   [R15]          <- RSP+64
+     */
+    
+    /* 分配栈空间：FS基址(8) + RCX(8) + R11(8) + callee-saved(48) = 72字节 */
+    subq $72, %rsp
+    
+    /* 保存FS基址（用户态TLS） */
+    movl $0xC0000100, %ecx      /* IA32_FS_BASE MSR */
+    rdmsr                       /* EDX:EAX = FS base */
+    movl %eax, 0(%rsp)          /* 保存低32位 */
+    movl %edx, 4(%rsp)          /* 保存高32位 */
+    
+    /* 保存用户态返回地址和RFLAGS */
+    movq %rcx, 8(%rsp)          /* 用户空间返回地址 */
+    movq %r11, 16(%rsp)         /* 用户空间RFLAGS */
+    
     /* 保存被调用者保存的寄存器 */
-    pushq %rbx
-    pushq %rbp
-    pushq %r12
-    pushq %r13
-    pushq %r14
-    pushq %r15
+    movq %rbx, 24(%rsp)
+    movq %rbp, 32(%rsp)
+    movq %r12, 40(%rsp)
+    movq %r13, 48(%rsp)
+    movq %r14, 56(%rsp)
+    movq %r15, 64(%rsp)
 
-    /* 保存syscall特殊寄存器 */
-    pushq %rcx           /* 用户空间返回地址 */
-    pushq %r11           /* 用户空间RFLAGS */
-
-    /* 传递参数给C函数
-     * 方法：在栈上创建寄存器快照，然后传递结构体指针
-     * 这样避免寄存器冲突，且简化C函数实现
-     */
-    subq $64, %rsp       /* 分配64字节栈空间 */
-
-    /* 保存所有系统调用相关寄存器到栈 */
-    movq %rax, 0(%rsp)   /* 系统调用号 */
-    movq %rdi, 8(%rsp)   /* 参数1 */
-    movq %rsi, 16(%rsp)  /* 参数2 */
-    movq %rdx, 24(%rsp)  /* 参数3 */
-    movq %r10, 32(%rsp)  /* 参数4 */
-    movq %r8,  40(%rsp)  /* 参数5 */
-    movq %r9,  48(%rsp)  /* 参数6 */
-
-    /* 将栈指针作为参数传递给C函数 */
+    /* ===== 第二步：准备调用C处理函数 ===== */
+    /* 分配参数结构体空间 */
+    subq $64, %rsp              /* 64字节用于参数结构体 */
+    
+    /* 保存系统调用参数到结构体 */
+    movq %rax, 0(%rsp)          /* 系统调用号 */
+    movq %rdi, 8(%rsp)          /* 参数1 */
+    movq %rsi, 16(%rsp)         /* 参数2 */
+    movq %rdx, 24(%rsp)         /* 参数3 */
+    movq %r10, 32(%rsp)         /* 参数4 */
+    movq %r8,  40(%rsp)         /* 参数5 */
+    movq %r9,  48(%rsp)         /* 参数6 */
+    
+    /* 将结构体指针传给C函数 */
     movq %rsp, %rdi
-
-    /* 调用系统调用处理函数
-     * C函数原型：void syscall_handler(void *regs)
-     */
+    
+    /* 调用系统调用处理函数 */
     call syscall_handler
-
-    /* 释放栈空间 */
+    
+    /* ===== 第三步：恢复并返回用户态 ===== */
+    /* 返回值在RAX中 */
+    
+    /* 释放参数结构体 */
     addq $64, %rsp
-
-    /* 恢复syscall特殊寄存器 */
-    popq %r11
-    popq %rcx
-
+    
     /* 恢复被调用者保存的寄存器 */
-    popq %r15
-    popq %r14
-    popq %r13
-    popq %r12
-    popq %rbp
-    popq %rbx
-
-    /* 返回值在RAX中，返回用户空间 */
+    movq 24(%rsp), %rbx
+    movq 32(%rsp), %rbp
+    movq 40(%rsp), %r12
+    movq 48(%rsp), %r13
+    movq 56(%rsp), %r14
+    movq 64(%rsp), %r15
+    
+    /* 恢复用户态返回地址和RFLAGS */
+    movq 8(%rsp), %rcx          /* 用户空间返回地址 */
+    movq 16(%rsp), %r11         /* 用户空间RFLAGS */
+    
+    /* 恢复FS基址（用户态TLS） */
+    movl 0(%rsp), %eax          /* 低32位 */
+    movl 4(%rsp), %edx          /* 高32位 */
+    movl $0xC0000100, %ecx      /* IA32_FS_BASE MSR */
+    wrmsr
+    
+    /* 释放栈空间 */
+    addq $72, %rsp
+    
+    /* 恢复GS基址 */
+    swapgs
+    
+    /* 返回用户空间 */
     sysretq
 
 /* 快速上下文切换

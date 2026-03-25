@@ -17,6 +17,7 @@
 #define HIC_KERNEL_CRYPTO_ACCEL_H
 
 #include "types.h"
+#include <stdbool.h>
 
 #include "security_ext.h"
 

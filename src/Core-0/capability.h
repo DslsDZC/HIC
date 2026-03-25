@@ -23,16 +23,7 @@
 #define HIC_KERNEL_CAPABILITY_H
 
 #include "types.h"
-
-/* Clang Static Analyzer兼容性：确保bool类型可用 */
-/* 注意：GCC使用c23标准，bool已经是关键字，不需要定义 */
-#ifndef __cplusplus
-#if !defined(__bool_true_false_are_defined) && !defined(bool) && !defined(__GNUC__)
-typedef unsigned char bool;
-#define true 1
-#define false 0
-#endif
-#endif
+#include <stdbool.h>
 
 /* 能力表大小 - 优化以减少内核BSS段大小 */
 #define CAP_TABLE_SIZE     2048   /* 从65536减小到2048，满足形式化验证要求 */
@@ -257,21 +248,11 @@ static inline bool cap_privileged_access_check(domain_id_t domain, phys_addr_t a
 /**
  * @brief 特权内存访问检查（带审计）
  * 
- * 完整版本，包含访问计数器更新。
- * 用于需要审计的场景。
+ * 已废弃：非 Core-0 域无法写入内核 .data 段。
+ * 审计统计通过系统调用委托给 Core-0 完成。
+ * 
+ * @deprecated 使用 cap_privileged_access_check() 或通过 syscall 审计
  */
-static inline bool cap_privileged_access_check_audited(domain_id_t domain, phys_addr_t addr, 
-                                                        cap_rights_t access_type) {
-    if (!cap_privileged_access_check(domain, addr, access_type)) {
-        return false;
-    }
-    
-    /* 更新访问计数器 */
-    extern u64 g_privileged_access_count[];
-    g_privileged_access_count[domain]++;
-    
-    return true;
-}
 
 /* 特权内存访问接口（供特权域使用） */
 void *privileged_phys_to_virt(phys_addr_t addr);  /* 物理地址转虚拟地址 */

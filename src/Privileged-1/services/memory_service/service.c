@@ -195,10 +195,9 @@ int _memory_service_entry(void)
     
     memory_service_start();
     
-    while (1) {
-        /* 服务主循环 - 等待请求 */
-        __asm__ volatile("hlt");
-    }
+    /* 服务初始化完成，返回让调度器继续执行其他线程 */
+    /* 后续通过中断或轮询处理请求 */
+    serial_print("[MEM_SVC] Service ready, yielding to scheduler\n");
     
     return 0;
 }
