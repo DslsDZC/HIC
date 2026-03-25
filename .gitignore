@@ -66,4 +66,4 @@ build.log
 # 平台配置（包含敏感信息）
 platform.yaml.local
 
-src/bootloader/src/embedded_kernel.h
+src/bootloader/src/embedded_kernel.hsrc/bootloader/src/embedded_kernel.h
