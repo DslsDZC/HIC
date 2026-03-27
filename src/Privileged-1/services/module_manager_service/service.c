@@ -194,45 +194,51 @@ hic_status_t module_manager_service_init(void) {
     return HIC_SUCCESS;
 }
 
+/* 串口输出函数 - 直接操作串口端口 COM1 (0x3F8) */
+static void serial_puts(const char *str) {
+    while (*str) {
+        serial_putchar(*str++);
+    }
+}
+
 /* 服务启动 */
 hic_status_t module_manager_service_start(void) {
-    /* 尝试从 modules.list 加载模块 */
-    int loaded_count = dynamic_module_load_all();
+    /* 自动加载所有模块 */
+    const char *module_dir = "/modules/";
+    const char *modules[] = {
+        "libc_service.hicmod",              /* 优先级1 - 基础库 */
+        "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
+        "serial_service.hicmod",            /* 优先级3 - 串口服务 */
+        "vga_service.hicmod",               /* 优先级4 - VGA服务 */
+        "config_service.hicmod",            /* 优先级5 - 配置服务 */
+        "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
+        "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
+        "cli_service.hicmod"                /* 优先级8 - CLI服务 */
+    };
+    int i;
     
-    /* 如果没有从 modules.list 加载任何模块，则使用默认加载列表 */
-    if (loaded_count <= 0) {
-        /* 自动加载所有模块 */
-        const char *module_dir = "/modules/";
-        const char *modules[] = {
-            "libc_service.hicmod",              /* 优先级1 - 基础库 */
-            "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
-            "serial_service.hicmod",            /* 优先级3 - 串口服务 */
-            "vga_service.hicmod",               /* 优先级4 - VGA服务 */
-            "config_service.hicmod",            /* 优先级5 - 配置服务 */
-            "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
-            "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
-            "cli_service.hicmod"                /* 优先级8 - CLI服务 */
-        };
-        int i;
+    /* 按优先级顺序加载所有模块 */
+    for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
+        char module_path[256];
         
-        /* 按优先级顺序加载所有模块 */
-        for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
-            char module_path[256];
-            
-            /* 构建完整路径 */
-            strcpy(module_path, module_dir);
-            strcat(module_path, modules[i]);
-            
-            /* 加载模块 */
-            hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
-            if (status != HIC_SUCCESS) {
-                /* 加载失败，记录但继续 */
-                /* TODO: 添加日志记录 */
-                (void)status;
-            }
+        /* 构建完整路径 */
+        strcpy(module_path, module_dir);
+        strcat(module_path, modules[i]);
+        
+        vga_service_puts("[MOD_MGR] Loading: ");
+        vga_service_puts(modules[i]);
+        vga_service_puts("...\n");
+        
+        /* 加载模块 */
+        hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
+        if (status != HIC_SUCCESS) {
+            vga_service_puts("[MOD_MGR] Failed to load module\n");
+        } else {
+            vga_service_puts("[MOD_MGR] Module loaded successfully\n");
         }
     }
     
+    vga_service_puts("[MOD_MGR] Module manager service started\n");
     return HIC_SUCCESS;
 }
 

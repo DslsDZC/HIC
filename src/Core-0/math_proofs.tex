@@ -520,6 +520,150 @@
     因此，系统调用的原子性得到保证：要么完全成功，要么完全失败，不会处于中间状态。$\qed$
 \end{proof}
 
+\section{定理8：物理内存管理器正确性}
+
+\subsection{状态定义}
+
+\begin{definition}[PMM状态]
+    物理内存管理器状态定义为三元组：
+    \[
+    \Sigma_{PMM} = (B, F_{free}, F_{total})
+    \]
+    其中：
+    \begin{itemize}
+        \item $B: \mathbb{N} \to \{0, 1\}$：位图函数，$B(i) = 1$表示帧$i$已分配
+        \item $F_{free} \in \mathbb{N}$：当前空闲帧数
+        \item $F_{total} \in \mathbb{N}$：总可用帧数
+    \end{itemize}
+\end{definition}
+
+\subsection{关键不变式}
+
+\begin{theorem}[帧计数一致性]
+    对于任意PMM状态$\sigma = (B, F_{free}, F_{total})$，以下不变式恒成立：
+    \[
+    F_{free} = |\{i \in [0, F_{total}) : B(i) = 0\}|
+    \]
+    即空闲帧计数等于位图中未分配位的数量。
+\end{theorem}
+
+\begin{proof}
+    通过对PMM操作进行归纳证明：
+
+    \textbf{基础情况}：初始化时，$B(i) = 1$对所有$i$，$F_{free} = 0$，$F_{total} = 0$。不变式成立。
+
+    \textbf{归纳步骤}：
+    \begin{enumerate}
+        \item \textbf{添加区域}：$pmm\_add\_region(base, size)$
+        \begin{itemize}
+            \item 设$n = size / PAGE\_SIZE$为新帧数
+            \item 对每个新帧$i$，设置$B(i) = 0$
+            \item 更新$F_{free}' = F_{free} + n$
+            \item 更新$F_{total}' = F_{total} + n$
+            \item 不变式保持：新增的$n$个0位对应$F_{free}$增加$n$
+        \end{itemize}
+
+        \item \textbf{分配帧}：$pmm\_alloc\_frames(count)$
+        \begin{itemize}
+            \item 找到连续$count$个空闲帧，起始索引$s$
+            \item 对$i \in [s, s+count)$，设置$B(i) = 1$
+            \item 更新$F_{free}' = F_{free} - count$
+            \item 不变式保持：$count$个0位变为1，$F_{free}$减少$count$
+        \end{itemize}
+
+        \item \textbf{释放帧}：$pmm\_free\_frames(addr, count)$
+        \begin{itemize}
+            \item 设$s = addr / PAGE\_SIZE$
+            \item 对$i \in [s, s+count)$，设置$B(i) = 0$
+            \item 更新$F_{free}' = F_{free} + count$
+            \item 不变式保持：$count$个1位变为0，$F_{free}$增加$count$
+        \end{itemize}
+
+        \item \textbf{标记已使用}：$pmm\_mark\_used(base, size)$
+        \begin{itemize}
+            \item 仅当$B(i) = 0$时，设置$B(i) = 1$并减少$F_{free}$
+            \item 若$B(i) = 1$，则不修改$F_{free}$
+            \item 不变式保持：只对实际状态变更更新计数
+        \end{itemize}
+    \end{enumerate}
+    因此，帧计数一致性在所有操作后保持成立。$\qed$
+\end{proof}
+
+\begin{theorem}[分配安全性]
+    对于任意分配操作$pmm\_alloc\_frames(count)$返回地址$a$：
+    \[
+    \forall i \in [a, a + count \cdot PAGE\_SIZE), \quad i \in \bigcup_{r \in Regions} [r.base, r.base + r.size)
+    \]
+    即分配的内存必定落在已注册的可用内存区域内。
+\end{theorem}
+
+\begin{proof}
+    \begin{enumerate}
+        \item 位图初始化时，所有位设为1（不可用）
+        \item 只有$pmm\_add\_region$将区域内位设为0（可用）
+        \item $pmm\_alloc\_frames$只分配$B(i) = 0$的帧
+        \item 因此，分配的帧必然来自$pmm\_add\_region$注册的区域
+    \end{enumerate}
+    $\qed$
+\end{proof}
+
+\begin{theorem}[无重复分配]
+    对于任意两个成功的分配操作：
+    \[
+    alloc_1 \to (a_1, n_1) \land alloc_2 \to (a_2, n_2) \Rightarrow [a_1, a_1 + n_1 \cdot P) \cap [a_2, a_2 + n_2 \cdot P) = \emptyset
+    \]
+    其中$P = PAGE\_SIZE$。
+\end{theorem}
+
+\begin{proof}
+    \begin{enumerate}
+        \item 分配前，$B(i) = 0$（帧$i$空闲）
+        \item 分配后，$B(i) = 1$（帧$i$已分配）
+        \item 下次分配只选择$B(j) = 0$的帧
+        \item 由于位操作互斥，同一帧不会被两次分配选中
+    \end{enumerate}
+    $\qed$
+\end{proof}
+
+\subsection{内存区域链表正确性}
+
+\begin{definition}[区域链表]
+    内存区域链表定义为：
+    \[
+    Regions = \{r_1, r_2, \ldots, r_n : r_i.next = r_{i+1} \land r_n.next = NULL\}
+    \]
+\end{definition}
+
+\begin{theorem}[区域完整性]
+    所有通过$pmm\_add\_region$添加的区域都在链表中：
+    \[
+    \forall r, Added(r) \Rightarrow r \in Regions
+    \]
+\end{theorem}
+
+\begin{proof}
+    由链表插入操作保证：新区域总是被添加到链表末尾。$\qed$
+\end{proof}
+
+\subsection{边界条件]
+
+\begin{theorem}[边界安全性]
+    对于任意帧索引$i$：
+    \[
+    i \ge F_{total} \Rightarrow \neg Allocatable(i)
+    \]
+    即超出总帧数范围的帧不可分配。
+\end{theorem}
+
+\begin{proof}
+    \begin{enumerate}
+        \item $pmm\_alloc\_frames$扫描范围限制在$[0, F_{total})$
+        \item $pmm\_mark\_used$检查$frame\_index < max\_frames$
+        \item 超出范围的帧从未被标记为可用
+    \end{enumerate}
+    $\qed$
+\end{proof}
+
 \section{结论}
 
 本文档证明了HIC内核核心机制的数学正确性：

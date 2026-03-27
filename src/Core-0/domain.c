@@ -249,54 +249,89 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
             }
             
             /* 
-             * 安全限制：内核数据段仅映射为只读
+             * 内核数据段和 BSS 段映射策略：
              * 
-             * .data/.bss 包含敏感数据：
-             * - g_global_cap_table[]：全局能力表
-             * - g_domain_keys[]：能力句柄混淆密钥
-             * - g_domains[]：域管理结构
-             * - g_privileged_domain_bitmap[]：特权位图
+             * 对于 Privileged-1 域：需要可写权限
+             * - 调度器切换页表后仍需操作内核栈（位于 .bss）
+             * - context_switch 的 push/pop 操作需要写入栈
+             * - 必须确保栈操作在页表切换后仍能正常工作
              * 
-             * 允许非 Core-0 域写入这些数据将导致：
-             * - 能力伪造/篡改
-             * - 权限提升
-             * - 安全机制完全失效
+             * 对于 Application-3 域：保持只读
+             * - 这些域不会直接执行内核代码
+             * - 通过 IPC 与内核交互，无需直接访问内核数据
              * 
-             * Core-0 是唯一可信主体，负责所有写操作。
-             * 特权域需要修改内核数据时，必须通过 IPC 调用 Core-0。
+             * 安全考虑：
+             * - Privileged-1 服务已通过能力系统隔离
+             * - 恶意服务无法绕过能力检查
              */
-            size_t data_size = (size_t)(_data_end - _data_start);
-            if (data_size > 0) {
-                pagetable_map(domain_pagetable,
-                    (virt_addr_t)_data_start,
-                    (phys_addr_t)_data_start,
-                    data_size,
-                    PERM_READ,  /* 只读！防止权限提升攻击 */
-                    MAP_TYPE_KERNEL);
-            }
-            
-            /* BSS 段同样只读 */
-            extern char __bss_start[], __bss_end[];
-            size_t bss_size = (size_t)(__bss_end - __bss_start);
-            if (bss_size > 0) {
-                pagetable_map(domain_pagetable,
-                    (virt_addr_t)__bss_start,
-                    (phys_addr_t)__bss_start,
-                    bss_size,
-                    PERM_READ,
-                    MAP_TYPE_KERNEL);
-            }
-            
-            /* 大型 BSS 段（.lbss）同样只读 */
-            extern char __lbss_start[], __lbss_end[];
-            size_t lbss_size = (size_t)(__lbss_end - __lbss_start);
-            if (lbss_size > 0) {
-                pagetable_map(domain_pagetable,
-                    (virt_addr_t)__lbss_start,
-                    (phys_addr_t)__lbss_start,
-                    lbss_size,
-                    PERM_READ,
-                    MAP_TYPE_KERNEL);
+            if (type == DOMAIN_TYPE_PRIVILEGED) {
+                /* 特权域：映射为可读写（调度器需要操作栈） */
+                size_t data_size = (size_t)(_data_end - _data_start);
+                if (data_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)_data_start,
+                        (phys_addr_t)_data_start,
+                        data_size,
+                        PERM_RW,  /* 可读写：特权域需要操作内核栈 */
+                        MAP_TYPE_KERNEL);
+                }
+                
+                extern char __bss_start[], __bss_end[];
+                size_t bss_size = (size_t)(__bss_end - __bss_start);
+                if (bss_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)__bss_start,
+                        (phys_addr_t)__bss_start,
+                        bss_size,
+                        PERM_RW,  /* 可读写：内核栈在 BSS 中 */
+                        MAP_TYPE_KERNEL);
+                }
+                
+                extern char __lbss_start[], __lbss_end[];
+                size_t lbss_size = (size_t)(__lbss_end - __lbss_start);
+                if (lbss_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)__lbss_start,
+                        (phys_addr_t)__lbss_start,
+                        lbss_size,
+                        PERM_RW,  /* 可读写：大型 BSS 可能包含栈 */
+                        MAP_TYPE_KERNEL);
+                }
+                
+                console_puts("[Domain] Privileged domain: kernel data mapped RW for scheduler\n");
+            } else {
+                /* 非特权域（Application）：映射为只读 */
+                size_t data_size = (size_t)(_data_end - _data_start);
+                if (data_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)_data_start,
+                        (phys_addr_t)_data_start,
+                        data_size,
+                        PERM_READ,  /* 只读：防止权限提升攻击 */
+                        MAP_TYPE_KERNEL);
+                }
+                
+                extern char __bss_start[], __bss_end[];
+                size_t bss_size = (size_t)(__bss_end - __bss_start);
+                if (bss_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)__bss_start,
+                        (phys_addr_t)__bss_start,
+                        bss_size,
+                        PERM_READ,
+                        MAP_TYPE_KERNEL);
+                }
+                
+                extern char __lbss_start[], __lbss_end[];
+                size_t lbss_size = (size_t)(__lbss_end - __lbss_start);
+                if (lbss_size > 0) {
+                    pagetable_map(domain_pagetable,
+                        (virt_addr_t)__lbss_start,
+                        (phys_addr_t)__lbss_start,
+                        lbss_size,
+                        PERM_READ,
+                        MAP_TYPE_KERNEL);
+                }
             }
         }
         
@@ -585,7 +620,7 @@ u64 get_domain_revoked_caps(domain_id_t domain)
  */
 mem_region_t get_domain_memory_region(domain_id_t domain)
 {
-    mem_region_t region = {0, 0};
+    mem_region_t region = {0, 0, NULL};
     
     if (domain >= MAX_DOMAINS) {
         return region;

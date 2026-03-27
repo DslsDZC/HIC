@@ -228,11 +228,9 @@ static void update_sched_mode(void)
 static void simple_enqueue(thread_t *thread)
 {
     if (thread == NULL) {
-        SCHED_LOG_BASIC("[SCHED] ERROR: enqueue NULL thread\n");
         return;
     }
     if (g_simple_queue.count >= MAX_READY_THREADS) {
-        SCHED_LOG_BASIC("[SCHED] ERROR: queue full\n");
         return;
     }
 
@@ -242,10 +240,6 @@ static void simple_enqueue(thread_t *thread)
     g_simple_queue.count++;
     thread->state = THREAD_STATE_READY;
     g_perf.enqueue_count++;
-    
-    /* 详细调试输出（仅SCHED_DEBUG_LEVEL >= 2时启用） */
-    SCHED_LOG_VERBOSE("[SCHED] Enqueued tid=");
-    /* 省略详细输出以保持性能 */
 }
 
 static thread_t *simple_pick_next(void)
@@ -265,7 +259,7 @@ static thread_t *simple_pick_next(void)
 
         thread_t *t = &g_threads[tid];
         
-        /* 防御性检查：跳过非 READY 状态的线程 */
+        /* 跳过非 READY 状态的线程 */
         if (t->state != THREAD_STATE_READY) {
             continue;
         }
@@ -472,6 +466,17 @@ void schedule(void)
     thread_t *prev = (thread_t*)g_current_thread;
     thread_t *next = pick_next_thread();
     
+    /* 调试日志：显示队列状态 */
+    console_puts("[SCHED] queue_count=");
+    console_putu32(g_simple_queue.count);
+    console_puts(", prev_tid=");
+    console_putu32(prev ? prev->thread_id : 999);
+    console_puts(", next_tid=");
+    console_putu32(next ? next->thread_id : 999);
+    console_puts(", next_prio=");
+    console_putu32(next ? next->priority : 99);
+    console_puts("\n");
+    
     if (next == prev) {
         atomic_exit_critical(irq_state);
         return;
@@ -517,15 +522,10 @@ void schedule(void)
         logical_core_schedule_notify(next->logical_core_id, next->thread_id, true);
     }
     
-    /* 切换到目标线程所属域的页表 */
-    if (next != &idle_thread) {
-        page_table_t *next_pagetable = domain_switch_get_pagetable(next->domain_id);
-        if (next_pagetable != NULL) {
-            /* 启用页表切换（已修复内核映射问题） */
-            pagetable_switch(next_pagetable);
-        }
-        domain_switch_set_current(next->domain_id);
-    }
+    /* 注意：页表切换由 context_switch 内部处理
+     * 调度器 C 代码始终运行在 Core-0 页表下，确保能安全访问内核全局数据
+     * 只有新线程开始执行时才切换到其私有页表
+     */
     
     atomic_exit_critical(irq_state);
     

@@ -14,6 +14,12 @@
 #include "service.h"
 #include <string.h>
 
+/* 串口输出函数 - 直接操作串口端口 COM1 (0x3F8) */
+static inline void serial_putchar(char c) {
+    uint16_t port = 0x3F8;
+    __asm__ volatile("outb %0, %w1" : : "a"(c), "Nd"(port));
+}
+
 /* ==================== 服务入口点（必须在代码段最前面） ==================== */
 
 /**
@@ -91,11 +97,18 @@ void vga_service_get_cursor(uint8_t *x, uint8_t *y) {
 
 /* 清空屏幕 */
 void vga_service_clear(void) {
+    /* 清空 VGA 显存 */
     for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
         write_mem16((void *)&vga_buffer[i], (uint16_t)((current_color << 8) | ' '));
     }
     cursor_x = 0;
     cursor_y = 0;
+    
+    /* 同时发送 ANSI 清屏序列到串口 */
+    const char *clear_seq = "\033[2J\033[H";
+    while (*clear_seq) {
+        serial_putchar(*clear_seq++);
+    }
 }
 
 /* 向上滚动一行 */
@@ -117,6 +130,9 @@ void vga_service_scroll_up(void) {
 
 /* 输出一个字符 */
 void vga_service_putchar(char c) {
+    /* 同时输出到串口 */
+    serial_putchar(c);
+    
     switch (c) {
         case '\n':
             /* 换行 */

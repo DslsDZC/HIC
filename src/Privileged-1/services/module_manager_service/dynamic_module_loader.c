@@ -42,6 +42,11 @@
 #include "dynamic_module_loader.h"
 #include "service_registry.h"
 #include "crypto_service.h"
+#include "module_primitives.h"
+
+/* ========== 前向声明 ========== */
+static void log_info(const char *msg);
+static void log_error(const char *msg);
 
 /* ========== ELF64 结构体定义 ========== */
 
@@ -131,9 +136,7 @@ typedef struct {
 
 /* ========== 外部接口 ========== */
 
-/* Core-0 原语接口 */
-extern uint64_t module_memory_alloc(uint32_t domain_id, uint64_t size, uint64_t *phys_addr);
-extern void module_memory_free(uint32_t domain_id, uint64_t phys_addr, uint64_t size);
+/* Core-0 原语接口 (通过 module_primitives.h 声明) */
 extern uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain);
 extern uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id);
 extern uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point);
@@ -141,10 +144,108 @@ extern uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point);
 /* FAT32 服务接口 */
 extern int fat32_read_file(const char *path, void *buffer, uint32_t buffer_size, uint32_t *bytes_read);
 
-/* ========== 全局状态 ========== */
+/* ELF 程序头标志 */
+#define PF_X    0x1    /* 可执行 */
+#define PF_W    0x2    /* 可写 */
+#define PF_R    0x4    /* 可读 */
+
+/* ========== 安全验证辅助函数 ========== */
+
+/**
+ * 验证 ELF 入口点是否在有效的加载段内
+ * 
+ * @param ehdr ELF 头
+ * @param entry_point 入口点地址（虚拟地址）
+ * @return true 入口点有效，false 无效
+ */
+static bool elf_validate_entry_point(const elf64_ehdr_t *ehdr, uint64_t entry_point)
+{
+    const elf64_phdr_t *phdrs = (const elf64_phdr_t *)
+        ((const uint8_t *)ehdr + ehdr->e_phoff);
+    
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdrs[i].p_type == 1) {  /* PT_LOAD */
+            uint64_t seg_start = phdrs[i].p_vaddr;
+            uint64_t seg_end = seg_start + phdrs[i].p_memsz;
+            
+            /* 入口点必须在此段内 */
+            if (entry_point >= seg_start && entry_point < seg_end) {
+                /* 检查段是否有执行权限 */
+                if (phdrs[i].p_flags & PF_X) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * 验证 ELF 段权限是否安全
+ * 
+ * 安全规则（W^X）：
+ * - 可执行段不可写（PF_X && !PF_W）
+ * - 可写段不可执行（PF_W && !PF_X）
+ * - 拒绝同时可写可执行的段
+ * 
+ * @param p_flags 段权限标志
+ * @return true 权限安全，false 存在安全风险
+ */
+static bool elf_validate_segment_permissions(uint32_t p_flags)
+{
+    /* 拒绝同时可写可执行的段（W^X 违规） */
+    if ((p_flags & PF_X) && (p_flags & PF_W)) {
+        log_error("安全违规：段同时可写可执行（W^X 违规）");
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * 计算加载段所需的内存大小（按类型分离）
+ * 
+ * @param ehdr ELF 头
+ * @param code_size 输出代码段总大小
+ * @param data_size 输出数据段总大小
+ * @return 成功返回 true
+ */
+static bool elf_calculate_segment_sizes(const elf64_ehdr_t *ehdr,
+                                         uint64_t *code_size,
+                                         uint64_t *data_size)
+{
+    *code_size = 0;
+    *data_size = 0;
+    
+    const elf64_phdr_t *phdrs = (const elf64_phdr_t *)
+        ((const uint8_t *)ehdr + ehdr->e_phoff);
+    
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdrs[i].p_type == 1) {  /* PT_LOAD */
+            /* 验证段权限 */
+            if (!elf_validate_segment_permissions(phdrs[i].p_flags)) {
+                return false;
+            }
+            
+            uint64_t seg_size = phdrs[i].p_memsz;
+            
+            /* 分类：可执行段归入代码段，其他归入数据段 */
+            if (phdrs[i].p_flags & PF_X) {
+                *code_size += seg_size;
+            } else {
+                *data_size += seg_size;
+            }
+        }
+    }
+    
+    return true;
+}
+
+#define MODULE_BUFFER_SIZE (4 * 1024 * 1024)  /* 4MB 模块缓冲区，支持更大模块 */
 
 static dynamic_load_ctx_t g_load_ctx;
-static uint8_t g_module_buffer[1024 * 1024]; /* 1MB 模块缓冲区 */
+static uint8_t g_module_buffer[MODULE_BUFFER_SIZE]; /* 模块缓冲区 */
 
 /* 前向声明 */
 static hic_status_t dynamic_module_load_internal(dynamic_module_entry_t *entry);
@@ -153,19 +254,19 @@ static hic_status_t dynamic_module_load_internal(dynamic_module_entry_t *entry);
 
 static void log_info(const char *msg)
 {
-    /* 通过串口输出日志 */
-    extern void serial_print(const char *msg);
-    serial_print("[DLOAD] ");
-    serial_print(msg);
-    serial_print("\n");
+    /* 通过 VGA 服务输出日志 */
+    extern void vga_service_puts(const char *str);
+    vga_service_puts("[DLOAD] ");
+    vga_service_puts(msg);
+    vga_service_puts("\n");
 }
 
 static void log_error(const char *msg)
 {
-    extern void serial_print(const char *msg);
-    serial_print("[DLOAD ERROR] ");
-    serial_print(msg);
-    serial_print("\n");
+    extern void vga_service_puts(const char *str);
+    vga_service_puts("[DLOAD ERROR] ");
+    vga_service_puts(msg);
+    vga_service_puts("\n");
 }
 
 /* ========== 字符串解析辅助函数 ========== */
@@ -660,6 +761,12 @@ int dynamic_read_modules_list(dynamic_module_entry_t *entries, u32 max_entries)
 
 /**
  * 读取模块文件
+ * 
+ * @param path 文件路径
+ * @param buffer 目标缓冲区
+ * @param buffer_size 缓冲区大小
+ * @param bytes_read 实际读取字节数
+ * @return HIC_SUCCESS 成功，HIC_OUT_OF_MEMORY 文件太大，HIC_NOT_FOUND 文件不存在
  */
 hic_status_t dynamic_read_module_file(const char *path, void *buffer, 
                                        u32 buffer_size, u32 *bytes_read)
@@ -669,6 +776,12 @@ hic_status_t dynamic_read_module_file(const char *path, void *buffer,
     if (result != 0) {
         log_error("读取模块文件失败");
         return HIC_NOT_FOUND;
+    }
+    
+    /* 检查是否文件被截断（读取了完整缓冲区但可能还有更多数据） */
+    if (*bytes_read >= buffer_size) {
+        log_error("模块文件太大，缓冲区不足");
+        return HIC_OUT_OF_MEMORY;
     }
     
     return HIC_SUCCESS;
@@ -776,7 +889,7 @@ hic_status_t dynamic_create_sandbox(const void *module_data, u32 module_size,
         total_size = (total_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
         
         /* 分配内存 */
-        result = module_memory_alloc(new_domain, total_size, &phys_addr);
+        result = module_memory_alloc(new_domain, total_size, MODULE_PAGE_CODE, &phys_addr);
         if (result != 0) {
             log_error("分配模块内存失败");
             return HIC_OUT_OF_MEMORY;
@@ -784,7 +897,6 @@ hic_status_t dynamic_create_sandbox(const void *module_data, u32 module_size,
         
         /* 复制代码段 */
         const uint8_t *code_src = (const uint8_t *)module_data + sizeof(hicmod_header_t);
-        extern void module_memcpy(void *dst, const void *src, uint64_t size);
         module_memcpy((void *)phys_addr, code_src, code_size);
         
         /* 入口点在代码段起始 */
@@ -797,55 +909,153 @@ hic_status_t dynamic_create_sandbox(const void *module_data, u32 module_size,
         log_info("检测到 ELF 模块格式");
         
         /* 解析 ELF 获取入口点 */
-        entry->entry_point = elf_find_entry_point(module_data);
-        if (entry->entry_point == 0) {
+        uint64_t elf_entry = elf_find_entry_point(module_data);
+        
+        /* 验证入口点是否在有效的可执行段内 */
+        if (elf_entry == 0) {
             log_error("无法找到 ELF 入口点");
             entry->entry_point = ehdr->e_entry;
+            /* 继续使用 ELF 头入口点，但需要验证 */
+            elf_entry = ehdr->e_entry;
         }
         
-        /* 计算 ELF 各段的总大小 */
-        total_size = 0;
+        if (!elf_validate_entry_point(ehdr, elf_entry)) {
+            log_error("入口点不在有效的可执行段内，拒绝加载");
+            return HIC_INVALID_PARAM;
+        }
+        
+        /* 计算代码段和数据段大小（分离以实现 W^X） */
+        uint64_t total_code_size = 0;
+        uint64_t total_data_size = 0;
+        
+        if (!elf_calculate_segment_sizes(ehdr, &total_code_size, &total_data_size)) {
+            log_error("ELF 段权限验证失败");
+            return HIC_INVALID_PARAM;
+        }
+        
+        /* 对齐到页 */
+        #define PAGE_SIZE 4096
+        total_code_size = (total_code_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
+        total_data_size = (total_data_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
+        
+        /* 分别分配代码段和数据段内存（W^X 保护） */
+        uint64_t code_phys = 0;
+        uint64_t data_phys = 0;
+        
+        if (total_code_size > 0) {
+            result = module_memory_alloc(new_domain, total_code_size, MODULE_PAGE_CODE, &code_phys);
+            if (result != 0) {
+                log_error("分配代码段内存失败");
+                return HIC_OUT_OF_MEMORY;
+            }
+            /* 清零代码段 */
+            extern void module_memset(void *dst, int value, uint64_t size);
+            module_memset((void *)code_phys, 0, total_code_size);
+        }
+        
+        if (total_data_size > 0) {
+            result = module_memory_alloc(new_domain, total_data_size, MODULE_PAGE_DATA, &data_phys);
+            if (result != 0) {
+                log_error("分配数据段内存失败");
+                return HIC_OUT_OF_MEMORY;
+            }
+            /* 清零数据段（包括 BSS） */
+            extern void module_memset(void *dst, int value, uint64_t size);
+            module_memset((void *)data_phys, 0, total_data_size);
+        }
+        
+        /* 跟踪当前段的加载位置 */
+        uint64_t code_offset = 0;
+        uint64_t data_offset = 0;
+        
+        /* 加载 ELF 各段 */
         const elf64_phdr_t *phdrs = (const elf64_phdr_t *)
             ((const uint8_t *)ehdr + ehdr->e_phoff);
         
         for (int i = 0; i < ehdr->e_phnum; i++) {
             if (phdrs[i].p_type == 1) {  /* PT_LOAD */
-                u64 seg_end = phdrs[i].p_vaddr + phdrs[i].p_memsz;
-                if (seg_end > total_size) {
-                    total_size = seg_end;
-                }
-            }
-        }
-        
-        /* 对齐到页 */
-        total_size = (total_size + PAGE_SIZE - 1) & ~((u64)(PAGE_SIZE - 1));
-        
-        /* 分配内存 */
-        result = module_memory_alloc(new_domain, total_size, &phys_addr);
-        if (result != 0) {
-            log_error("分配模块内存失败");
-            return HIC_OUT_OF_MEMORY;
-        }
-        
-        /* 加载 ELF 各段 */
-        for (int i = 0; i < ehdr->e_phnum; i++) {
-            if (phdrs[i].p_type == 1) {  /* PT_LOAD */
-                uint64_t seg_vaddr = phys_addr + phdrs[i].p_vaddr;
                 const uint8_t *seg_src = (const uint8_t *)ehdr + phdrs[i].p_offset;
+                uint64_t seg_size = phdrs[i].p_memsz;
+                uint64_t file_size = phdrs[i].p_filesz;
+                uint64_t seg_vaddr;
                 
-                extern void module_memcpy(void *dst, const void *src, uint64_t size);
-                module_memcpy((void *)seg_vaddr, seg_src, phdrs[i].p_filesz);
+                /* 根据权限选择目标区域 */
+                if (phdrs[i].p_flags & PF_X) {
+                    /* 可执行段 -> 代码段（只读可执行） */
+                    seg_vaddr = code_phys + code_offset;
+                    module_memcpy((void *)seg_vaddr, seg_src, file_size);
+                    code_offset += seg_size;
+                } else {
+                    /* 非可执行段 -> 数据段（可读写） */
+                    seg_vaddr = data_phys + data_offset;
+                    module_memcpy((void *)seg_vaddr, seg_src, file_size);
+                    data_offset += seg_size;
+                }
                 
-                /* 入口点需要重定位 */
-                if (entry->entry_point >= phdrs[i].p_vaddr &&
-                    entry->entry_point < phdrs[i].p_vaddr + phdrs[i].p_memsz) {
-                    entry->entry_point = phys_addr + entry->entry_point;
+                /* 重定位入口点 */
+                if (elf_entry >= phdrs[i].p_vaddr &&
+                    elf_entry < phdrs[i].p_vaddr + phdrs[i].p_memsz) {
+                    /* 计算入口点在新内存中的位置 */
+                    uint64_t offset_in_seg = elf_entry - phdrs[i].p_vaddr;
+                    if (phdrs[i].p_flags & PF_X) {
+                        /* 入口点在代码段，需要找到对应的代码段位置 */
+                        /* 由于我们按顺序加载，需要重新计算 */
+                        uint64_t accum_code = 0;
+                        for (int j = 0; j < i; j++) {
+                            if (phdrs[j].p_type == 1 && (phdrs[j].p_flags & PF_X)) {
+                                if (elf_entry >= phdrs[j].p_vaddr &&
+                                    elf_entry < phdrs[j].p_vaddr + phdrs[j].p_memsz) {
+                                    entry->entry_point = code_phys + accum_code + 
+                                        (elf_entry - phdrs[j].p_vaddr);
+                                    break;
+                                }
+                                accum_code += phdrs[j].p_memsz;
+                            }
+                        }
+                        if (entry->entry_point == 0) {
+                            entry->entry_point = seg_vaddr + offset_in_seg;
+                        }
+                    } else {
+                        /* 入口点应该在可执行段，这里是个错误 */
+                        log_error("入口点在非可执行段内");
+                    }
                 }
             }
         }
         
-        entry->code_base = phys_addr;
-        entry->code_size = total_size;
+        /* 如果入口点仍未设置，使用代码段起始 */
+        if (entry->entry_point == 0 && code_phys != 0) {
+            entry->entry_point = code_phys;
+        }
+        
+        entry->code_base = code_phys;
+        entry->code_size = total_code_size;
+        entry->data_base = data_phys;
+        entry->data_size = total_data_size;
+        
+        log_info("ELF 模块加载完成：代码段 0x");
+        /* 简单输出代码段地址 */
+        if (code_phys != 0) {
+            char buf[20];
+            uint64_t addr = code_phys;
+            for (int i = 0; i < 16; i++) {
+                int digit = (addr >> (60 - i * 4)) & 0xf;
+                buf[i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+            }
+            buf[16] = '\0';
+            log_info(buf);
+        }
+        log_info(", 数据段 0x");
+        if (data_phys != 0) {
+            char buf[20];
+            uint64_t addr = data_phys;
+            for (int i = 0; i < 16; i++) {
+                int digit = (addr >> (60 - i * 4)) & 0xf;
+                buf[i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+            }
+            buf[16] = '\0';
+            log_info(buf);
+        }
     }
     
     log_info("模块沙箱创建成功");
@@ -907,14 +1117,41 @@ static bool is_module_loaded(const char *name)
 
 /**
  * 检查模块的所有依赖是否已满足
- * @return 已满足的依赖数量
+ * @return 已满足的依赖数量，-1 表示有依赖加载失败
  */
 static int check_dependencies_satisfied(dynamic_module_entry_t *entry)
 {
     int satisfied = 0;
     for (int i = 0; i < entry->dep_count; i++) {
-        if (is_module_loaded(entry->dependencies[i])) {
-            satisfied++;
+        const char *dep_name = entry->dependencies[i];
+        bool found = false;
+        
+        for (u32 j = 0; j < g_load_ctx.entry_count; j++) {
+            if (str_cmp(g_load_ctx.entries[j].name, dep_name) == 0) {
+                found = true;
+                if (g_load_ctx.entries[j].state == DLOAD_RUNNING) {
+                    satisfied++;
+                } else if (g_load_ctx.entries[j].state == DLOAD_FAILED) {
+                    /* 依赖加载失败，返回错误 */
+                    log_error("依赖加载失败: ");
+                    log_error(dep_name);
+                    return -1;  /* 特殊值表示依赖失败 */
+                }
+                break;
+            }
+        }
+        
+        /* 如果依赖不在列表中，检查是否是外部已加载模块 */
+        if (!found) {
+            /* 检查服务注册表，看依赖是否已作为静态模块加载 */
+            service_endpoint_t *ep = service_find_by_name(dep_name);
+            if (ep != NULL) {
+                satisfied++;  /* 外部依赖已满足 */
+            } else {
+                log_error("依赖不存在: ");
+                log_error(dep_name);
+                return -1;  /* 依赖不存在 */
+            }
         }
     }
     return satisfied;
@@ -937,10 +1174,16 @@ static dynamic_module_entry_t* find_entry(const char *name)
  * 拓扑排序 - Kahn 算法
  * 
  * 返回排序后的索引数组（存储在静态缓冲区）
- * 同时检测循环依赖
+ * 同时检测循环依赖和缺失依赖
+ * 
+ * @return true 成功，false 存在循环依赖或缺失依赖
  */
 static u32 g_load_order[MAX_MODULES_LIST_ENTRIES];
 static u32 g_load_order_count = 0;
+
+/* 跟踪缺失的依赖 */
+static char g_missing_deps[MAX_MODULES_LIST_ENTRIES][MAX_MODULE_DEPENDENCIES][64];
+static int g_missing_dep_counts[MAX_MODULES_LIST_ENTRIES];
 
 static bool topological_sort(void)
 {
@@ -950,25 +1193,65 @@ static bool topological_sort(void)
     
     g_load_order_count = 0;
     
+    /* 清空缺失依赖记录 */
+    for (u32 i = 0; i < MAX_MODULES_LIST_ENTRIES; i++) {
+        g_missing_dep_counts[i] = 0;
+    }
+    
     /* 计算每个模块的入度（依赖中在列表内的数量） */
+    /* 同时记录缺失的依赖 */
     for (u32 i = 0; i < g_load_ctx.entry_count; i++) {
         in_degree[i] = 0;
         dynamic_module_entry_t *entry = &g_load_ctx.entries[i];
         
         for (int j = 0; j < entry->dep_count; j++) {
+            bool found = false;
+            
             /* 检查依赖是否在待加载列表中 */
             for (u32 k = 0; k < g_load_ctx.entry_count; k++) {
                 if (str_cmp(entry->dependencies[j], g_load_ctx.entries[k].name) == 0) {
                     in_degree[i]++;
+                    found = true;
                     break;
                 }
+            }
+            
+            /* 如果依赖不在列表中，记录为缺失（但检查是否已作为静态模块存在） */
+            if (!found) {
+                service_endpoint_t *ep = service_find_by_name(entry->dependencies[j]);
+                if (ep == NULL) {
+                    /* 依赖确实缺失 */
+                    int idx = g_missing_dep_counts[i];
+                    if (idx < MAX_MODULE_DEPENDENCIES) {
+                        int k;
+                        for (k = 0; entry->dependencies[j][k] && k < 63; k++) {
+                            g_missing_deps[i][idx][k] = entry->dependencies[j][k];
+                        }
+                        g_missing_deps[i][idx][k] = '\0';
+                        g_missing_dep_counts[i]++;
+                    }
+                }
+                /* 否则依赖已作为静态模块存在，不需要计入入度 */
+            }
+        }
+    }
+    
+    /* 报告缺失的依赖 */
+    for (u32 i = 0; i < g_load_ctx.entry_count; i++) {
+        if (g_missing_dep_counts[i] > 0) {
+            log_error("模块 ");
+            log_error(g_load_ctx.entries[i].name);
+            log_error(" 缺少依赖:");
+            for (int j = 0; j < g_missing_dep_counts[i]; j++) {
+                log_error("  - ");
+                log_error(g_missing_deps[i][j]);
             }
         }
     }
     
     /* 将入度为 0 的模块加入队列 */
     for (u32 i = 0; i < g_load_ctx.entry_count; i++) {
-        if (in_degree[i] == 0) {
+        if (in_degree[i] == 0 && g_missing_dep_counts[i] == 0) {
             queue[queue_tail++] = i;
         }
     }
@@ -985,7 +1268,7 @@ static bool topological_sort(void)
             for (int j = 0; j < entry->dep_count; j++) {
                 if (str_cmp(entry->dependencies[j], loaded->name) == 0) {
                     in_degree[i]--;
-                    if (in_degree[i] == 0) {
+                    if (in_degree[i] == 0 && g_missing_dep_counts[i] == 0) {
                         queue[queue_tail++] = i;
                     }
                 }
@@ -993,9 +1276,61 @@ static bool topological_sort(void)
         }
     }
     
-    /* 检测循环依赖 */
+    /* 分析未处理的模块 */
     if (g_load_order_count < g_load_ctx.entry_count) {
-        log_error("检测到循环依赖！");
+        /* 统计原因 */
+        int circular_count = 0;
+        int missing_dep_count = 0;
+        
+        for (u32 i = 0; i < g_load_ctx.entry_count; i++) {
+            /* 检查是否已被排序 */
+            bool sorted = false;
+            for (u32 j = 0; j < g_load_order_count; j++) {
+                if (g_load_order[j] == i) {
+                    sorted = true;
+                    break;
+                }
+            }
+            
+            if (!sorted) {
+                if (g_missing_dep_counts[i] > 0) {
+                    /* 依赖缺失 */
+                    missing_dep_count++;
+                } else {
+                    /* 可能是循环依赖 */
+                    circular_count++;
+                }
+            }
+        }
+        
+        /* 根据原因报告错误 */
+        if (missing_dep_count > 0) {
+            log_error("存在缺失依赖的模块数量: ");
+            char buf[16];
+            buf[0] = '0' + (missing_dep_count / 10);
+            buf[1] = '0' + (missing_dep_count % 10);
+            buf[2] = '\0';
+            log_error(buf);
+        }
+        
+        if (circular_count > 0) {
+            log_error("检测到循环依赖！");
+            /* 输出循环依赖的模块 */
+            for (u32 i = 0; i < g_load_ctx.entry_count; i++) {
+                bool sorted = false;
+                for (u32 j = 0; j < g_load_order_count; j++) {
+                    if (g_load_order[j] == i) {
+                        sorted = true;
+                        break;
+                    }
+                }
+                if (!sorted && g_missing_dep_counts[i] == 0) {
+                    log_error("  循环依赖涉及: ");
+                    log_error(g_load_ctx.entries[i].name);
+                }
+            }
+        }
+        
         return false;
     }
     

@@ -57,6 +57,10 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size);
 hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count, 
                                page_frame_type_t type, phys_addr_t *out);
 
+/* 分配分散页帧（非连续物理内存） */
+hic_status_t pmm_alloc_scattered(domain_id_t owner, u32 count,
+                                  page_frame_type_t type, phys_addr_t *pages);
+
 /* 释放页帧 */
 hic_status_t pmm_free_frames(phys_addr_t addr, u32 count);
 

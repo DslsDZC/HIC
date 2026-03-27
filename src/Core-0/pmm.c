@@ -17,9 +17,10 @@
 
 /* 动态页帧位图 */
 static u8 *frame_bitmap = NULL;
-static u64 max_frames = 0;      /* 动态计算的最大帧数 */
-static u64 total_frames = 0;
-static u64 free_frames = 0;
+static u64 max_frames = 0;          /* 位图可管理的最大帧数 */
+static u64 usable_max_frame = 0;    /* 实际可用物理内存的最高帧索引 */
+static u64 total_frames = 0;        /* 累计添加的可用帧数 */
+static u64 free_frames = 0;         /* 当前空闲帧数 */
 
 /* 内存区域链表 */
 static mem_region_t *mem_regions = NULL;
@@ -57,22 +58,36 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
 {
     console_puts("[PMM] Initializing Physical Memory Manager...\n");
     
-    /* 限制最大物理地址为 4GB（实际物理内存不超过此值） */
-    /* 这避免了 MMIO 区域导致位图过大的问题 */
-    const phys_addr_t MAX_PHYS_ADDR_LIMIT = 0x100000000ULL;  /* 4GB */
-    if (max_phys_addr > MAX_PHYS_ADDR_LIMIT) {
-        console_puts("[PMM] Limiting max physical address from 0x");
-        console_puthex64(max_phys_addr);
-        console_puts(" to 0x");
-        console_puthex64(MAX_PHYS_ADDR_LIMIT);
-        console_puts(" (4GB limit)\n");
-        max_phys_addr = MAX_PHYS_ADDR_LIMIT;
+    /* 静态位图缓冲区大小 */
+    static u8 static_bitmap[1024 * 1024];  /* 1MB静态缓冲区 */
+    const u64 max_supported_frames = sizeof(static_bitmap) * 8;  /* 最大支持帧数 = 8M */
+    const phys_addr_t max_supported_phys = max_supported_frames * PAGE_SIZE;  /* = 32GB */
+    
+    /* 首先检查位图缓冲区是否足够 */
+    u64 requested_frames = (max_phys_addr + PAGE_SIZE - 1) / PAGE_SIZE;
+    
+    if (requested_frames > max_supported_frames) {
+        console_puts("[PMM] WARNING: Physical memory exceeds bitmap capacity!\n");
+        console_puts("[PMM]   Requested: ");
+        console_putu64(max_phys_addr / (1024 * 1024));
+        console_puts(" MB (");
+        console_putu64(requested_frames);
+        console_puts(" frames)\n");
+        console_puts("[PMM]   Supported: ");
+        console_putu64(max_supported_phys / (1024 * 1024));
+        console_puts(" MB (");
+        console_putu64(max_supported_frames);
+        console_puts(" frames)\n");
+        console_puts("[PMM]   Memory above ");
+        console_putu64(max_supported_phys / (1024 * 1024));
+        console_puts(" MB will be UNUSABLE!\n");
+        
+        /* 截断到最大支持范围 */
+        max_phys_addr = max_supported_phys;
     }
     
-    /* 计算最大帧数 */
+    /* 计算实际使用的帧数和位图大小 */
     max_frames = (max_phys_addr + PAGE_SIZE - 1) / PAGE_SIZE;
-    
-    /* 计算位图大小（字节） */
     u64 bitmap_size = (max_frames + 7) / 8;
     
     console_puts("[PMM] Max physical address: 0x");
@@ -86,21 +101,11 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
     console_puts(" bytes (");
     console_putu64(bitmap_size / 1024);
     console_puts(" KB)\n");
-    
-    /* 分配位图（从第一个可用内存区域） */
-    /* 注意：这是在PMM完全初始化之前，所以使用临时分配 */
-    /* 实际应用中，位图应该从bootloader预留的特定内存区域分配 */
-    /* 这里我们使用静态分配，但大小动态计算 */
-    static u8 static_bitmap[1024 * 1024];  /* 1MB静态缓冲区（足够用于4GB内存） */
-    
-    if (bitmap_size > sizeof(static_bitmap)) {
-        console_puts("[PMM] ERROR: Bitmap too large for static buffer!\n");
-        console_puts("[PMM] Max supported memory: ");
-        console_putu64(sizeof(static_bitmap) * 8 * PAGE_SIZE / (1024 * 1024));
-        console_puts(" MB\n");
-        max_frames = sizeof(static_bitmap) * 8;
-        bitmap_size = (max_frames + 7) / 8;
-    }
+    console_puts("[PMM] Bitmap buffer: ");
+    console_putu64(sizeof(static_bitmap));
+    console_puts(" bytes (");
+    console_putu64(sizeof(static_bitmap) / 1024);
+    console_puts(" KB)\n");
     
     frame_bitmap = static_bitmap;
     
@@ -109,10 +114,17 @@ void pmm_init_with_range(phys_addr_t max_phys_addr)
     for (u64 i = 0; i < bitmap_size; i++) {
         frame_bitmap[i] = 0xFF;  /* 所有位设置为 1（已使用） */
     }
-    total_frames = max_frames;
+    /* 清零位图剩余部分（如果有） */
+    for (u64 i = bitmap_size; i < sizeof(static_bitmap); i++) {
+        frame_bitmap[i] = 0x00;
+    }
+    
+    /* total_frames 应为 0，每次 pmm_add_region 时累加实际可用帧数 */
+    total_frames = 0;
     free_frames = 0;
     g_total_memory = 0;
     g_used_memory = 0;
+    usable_max_frame = 0;  /* 初始化为0，在 pmm_add_region 中更新 */
     mem_regions = NULL;
     
     console_puts("[PMM] Frame bitmap allocated and cleared\n");
@@ -138,33 +150,30 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     u64 num_frames = aligned_size / PAGE_SIZE;
     u64 start_frame = aligned_base / PAGE_SIZE;
     
-    console_puts("[PMM] Processing memory region at 0x");
+    console_puts("[PMM] Processing region: base=0x");
     console_puthex64(aligned_base);
-    console_puts(" (");
+    console_puts(", pages=");
     console_putu64(num_frames);
-    console_puts(" pages)\n");
-    console_puts("[PMM] aligned_base=");
-    console_putu64(aligned_base);
-    console_puts(", start_frame=");
-    console_putu64(start_frame);
-    console_puts(", max_frames=");
-    console_putu64(max_frames);
-    console_puts(", check=");
-    console_putu64(start_frame >= max_frames);
     console_puts("\n");
-    console_puts("[PMM] *** DEBUG: before comparison ***\n");
     
     if (start_frame >= max_frames) {
-        console_puts("[PMM] WARNING: Region starts beyond max_frames, skipping\n");
+        console_puts("[PMM] WARNING: Region beyond manageable range, skipping\n");
+        console_puts("[PMM]   start_frame=");
+        console_putu64(start_frame);
+        console_puts(", max_frames=");
+        console_putu64(max_frames);
+        console_puts("\n");
         return HIC_ERROR_INVALID_PARAM;
     }
     
     if (start_frame + num_frames > max_frames) {
-        console_puts("[PMM] WARNING: Region too large, truncating\n");
+        u64 original_frames = num_frames;
         num_frames = max_frames - start_frame;
-        console_puts("[PMM] Truncated to ");
+        console_puts("[PMM] WARNING: Region truncated to ");
         console_putu64(num_frames);
-        console_puts(" pages\n");
+        console_puts(" pages (from ");
+        console_putu64(original_frames);
+        console_puts(")\n");
     }
     
     /* 添加到区域链表 */
@@ -174,6 +183,11 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     
     /* 跳过区域描述符，实际可用地址需要偏移 */
     size_t region_offset = sizeof(mem_region_t);
+    u64 descriptor_pages = (region_offset + PAGE_SIZE - 1) / PAGE_SIZE;  /* 描述符占用的页面数 */
+    
+    /* 注意：初始化后位图 = all_ones，描述符帧已是已使用状态，无需操作 */
+    /* 只需处理剩余帧，将其标记为空闲 */
+    
     aligned_base += region_offset;
     aligned_size -= region_offset;
     
@@ -185,14 +199,32 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
     /* 初始化区域描述符 */
     region->base = aligned_base;
     region->size = aligned_size;
+    region->next = NULL;
     
-    /* 标记页为可用 */
+    /* 将新区域链接到全局链表 */
+    if (mem_regions == NULL) {
+        mem_regions = region;
+    } else {
+        /* 找到链表末尾并添加 */
+        mem_region_t *curr = mem_regions;
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+        curr->next = region;
+    }
+    
+    /* 标记剩余页面为可用（跳过描述符占用的页面） */
+    u64 available_start_frame = start_frame + descriptor_pages;
+    u64 available_frames = num_frames - descriptor_pages;
+    
     console_puts("[PMM] Marking ");
-    console_putu64(num_frames);
-    console_puts(" pages as free...\n");
+    console_putu64(available_frames);
+    console_puts(" pages as free (descriptor uses ");
+    console_putu64(descriptor_pages);
+    console_puts(" pages)...\n");
     
-    for (u64 i = 0; i < num_frames; i++) {
-        clear_bit(frame_bitmap, start_frame + i);
+    for (u64 i = 0; i < available_frames; i++) {
+        clear_bit(frame_bitmap, available_start_frame + i);
         free_frames++;
         
         /* 每处理 10000 页输出一次进度 */
@@ -200,13 +232,19 @@ hic_status_t pmm_add_region(phys_addr_t base, size_t size)
             console_puts("[PMM] Progress: ");
             console_putu64(i + 1);
             console_puts("/");
-            console_putu64(num_frames);
+            console_putu64(available_frames);
             console_puts(" pages processed\n");
         }
     }
     
-    total_frames += num_frames;
+    total_frames += available_frames;
     g_total_memory += aligned_size;
+    
+    /* 更新实际可用物理内存的最高帧索引 */
+    u64 region_end_frame = available_start_frame + available_frames;
+    if (region_end_frame > usable_max_frame) {
+        usable_max_frame = region_end_frame;
+    }
     
     console_puts("[PMM] Region added successfully: ");
     console_putu64(num_frames);
@@ -230,17 +268,17 @@ hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     
     console_puts("[PMM] Allocating ");
     console_putu64(count);
-    console_puts(" frames, max_frames=");
-    console_putu64(max_frames);
+    console_puts(" frames, usable_max_frame=");
+    console_putu64(usable_max_frame);
     console_puts(", free_frames=");
     console_putu64(free_frames);
     console_puts("\n");
     
-    /* 查找连续的空闲页帧 - 使用 max_frames 作为搜索范围 */
+    /* 首先尝试连续分配 - 使用 usable_max_frame 作为扫描范围 */
     u64 consecutive = 0;
     u64 start = 0;
     
-    for (u64 i = 0; i < max_frames && consecutive < count; i++) {
+    for (u64 i = 0; i < usable_max_frame && consecutive < count; i++) {
         if (!test_bit(frame_bitmap, i)) {
             if (consecutive == 0) {
                 start = i;
@@ -288,12 +326,65 @@ hic_status_t pmm_alloc_frames(domain_id_t owner, u32 count,
     return HIC_SUCCESS;
 }
 
+/* 分配分散页帧（用于大块内存分配，避免碎片问题）
+ * 返回第一个页面的物理地址，其他页面通过链表连接
+ */
+hic_status_t pmm_alloc_scattered(domain_id_t owner, u32 count,
+                                  page_frame_type_t type, phys_addr_t *pages)
+{
+    (void)owner;
+    (void)type;
+    
+    if (count == 0 || pages == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    console_puts("[PMM] Allocating ");
+    console_putu64(count);
+    console_puts(" scattered frames\n");
+    
+    /* 检查是否有足够的空闲页 */
+    if (free_frames < count) {
+        console_puts("[PMM] Not enough free frames\n");
+        return HIC_ERROR_NO_MEMORY;
+    }
+    
+    /* 分配分散的页面 - 使用 usable_max_frame 作为扫描范围 */
+    u32 allocated = 0;
+    for (u64 i = 0; i < usable_max_frame && allocated < count; i++) {
+        if (!test_bit(frame_bitmap, i)) {
+            set_bit(frame_bitmap, i);
+            pages[allocated] = i * PAGE_SIZE;
+            allocated++;
+        }
+    }
+    
+    if (allocated < count) {
+        /* 回滚 */
+        for (u32 j = 0; j < allocated; j++) {
+            clear_bit(frame_bitmap, pages[j] / PAGE_SIZE);
+        }
+        console_puts("[PMM] Failed to allocate enough scattered frames\n");
+        return HIC_ERROR_NO_MEMORY;
+    }
+    
+    free_frames -= count;
+    g_used_memory += count * PAGE_SIZE;
+    
+    console_puts("[PMM] Allocated ");
+    console_putu64(count);
+    console_puts(" scattered frames\n");
+    
+    return HIC_SUCCESS;
+}
+
 /* 释放页帧 */
 hic_status_t pmm_free_frames(phys_addr_t addr, u32 count)
 {
     u64 start_frame = addr / PAGE_SIZE;
     
-    if (start_frame >= total_frames || count == 0) {
+    /* 使用 max_frames 进行边界检查（可寻址范围），而非 total_frames（可用帧数） */
+    if (start_frame >= max_frames || count == 0) {
         return HIC_ERROR_INVALID_PARAM;
     }
     
@@ -321,30 +412,42 @@ hic_status_t pmm_free_frames(phys_addr_t addr, u32 count)
     return HIC_SUCCESS;
 }
 
-/* 查询页帧信息 */
+/**
+ * 查询页帧信息
+ * 
+ * 注意：当前实现使用位图跟踪页面状态，ref_count 只能是 0 或 1。
+ * 对于共享内存场景，真正的引用计数应由能力系统 (capability.c) 管理。
+ * 此函数返回的 ref_count 仅表示页面是否被分配，不反映实际共享数。
+ */
 hic_status_t pmm_get_frame_info(phys_addr_t addr, page_frame_t *info)
 {
     u64 frame = addr / PAGE_SIZE;
     
-    if (frame >= total_frames || info == NULL) {
+    /* 使用 max_frames 进行边界检查（可寻址范围），而非 total_frames（可用帧数） */
+    if (frame >= max_frames || info == NULL) {
         return HIC_ERROR_INVALID_PARAM;
     }
     
-/* 完整实现：根据帧索引获取帧信息 */
-    if (frame < total_frames) {
-        /* 计算帧信息 */
+    /* 根据帧索引获取帧信息 */
+    if (frame < usable_max_frame) {
         info->base_addr = frame * PAGE_SIZE;
-        info->ref_count = test_bit(frame_bitmap, frame) ? 1 : 0;
+        
+        /* 注意：位图只能表示 0/1，真正的引用计数需通过能力系统查询 */
+        bool is_allocated = test_bit(frame_bitmap, frame);
+        info->ref_count = is_allocated ? 1 : 0;
 
-        /* 完整实现：确定帧类型和所有者 */
-        if (info->ref_count > 0) {
-            info->type = PAGE_FRAME_CORE;
+        /* 确定帧类型和所有者 */
+        if (is_allocated) {
+            /* 已分配页面：默认标记为核心域所有
+             * 实际所有者信息应在更高层（域系统或能力系统）维护 */
+            info->type = PAGE_FRAME_PRIVILEGED;
             info->owner = HIC_DOMAIN_CORE;
         } else {
             info->type = PAGE_FRAME_FREE;
             info->owner = 0;
         }
     } else {
+        /* 超出实际可用内存范围 */
         memzero(info, sizeof(*info));
         return HIC_ERROR_INVALID_PARAM;
     }
@@ -381,7 +484,8 @@ void pmm_mark_used(phys_addr_t base, size_t size)
     for (phys_addr_t addr = start; addr < end; addr += PAGE_SIZE) {
         u64 frame_index = addr / PAGE_SIZE;
         
-        if (frame_index < total_frames) {
+        /* 使用 max_frames 进行边界检查（可寻址范围） */
+        if (frame_index < max_frames) {
             if (!test_bit(frame_bitmap, frame_index)) {
                 set_bit(frame_bitmap, frame_index);
                 free_frames--;
@@ -391,10 +495,12 @@ void pmm_mark_used(phys_addr_t base, size_t size)
     }
     
     console_puts("[PMM] Marked used: ");
-    console_putu64(base);
+    console_puthex64(base);
     console_puts(" - ");
-    console_putu64(base + size);
-    console_puts("\n");
+    console_puthex64(base + size);
+    console_puts(" (");
+    console_putu64((size + PAGE_SIZE - 1) / PAGE_SIZE);
+    console_puts(" pages)\n");
 }
 
 /* 内存碎片整理（完整实现） */

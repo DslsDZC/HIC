@@ -188,6 +188,8 @@ extern physical_core_id_t g_logical_to_physical_map[MAX_LOGICAL_CORES];
 extern logical_core_id_t g_physical_to_logical_map[MAX_PHYSICAL_CORES][16];
 extern u32 g_physical_core_load[MAX_PHYSICAL_CORES];
 extern logical_core_t *g_free_logical_cores;
+extern u64 g_free_lcore_bitmap[16];
+extern u32 g_free_lcore_count;
 
 /* ==================== 机制层接口 ==================== */
 

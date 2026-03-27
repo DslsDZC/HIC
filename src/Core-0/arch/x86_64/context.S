@@ -144,9 +144,9 @@ x86_64_restore_context:
 context_switch:
     /* 检查 prev 是否为 NULL */
     testq %rdi, %rdi
-    jz .L_switch_to_new
+    jz .L_first_switch
 
-    /* 保存当前线程上下文到 prev */
+    /* ===== 保存当前线程上下文到 prev ===== */
 
     /* 保存调用者保存的寄存器 */
     pushq %rbx
@@ -158,9 +158,26 @@ context_switch:
 
     /* 保存栈指针到 prev->stack_ptr (偏移 40) */
     movq %rsp, 40(%rdi)
+    
+    jmp .L_switch_to_new
+
+.L_first_switch:
+    /* 首次调度：prev 为 NULL，不需要保存上下文
+     * 但仍需保存返回地址，以便新线程完成后能返回到 schedule() 的调用者
+     * 注意：此时 RSP 指向调用 context_switch 的返回地址
+     */
+    
+    /* 保存 6 个 callee-saved 寄存器槽位（保持栈平衡）
+     * 这些值在恢复时会被丢弃，但需要保持栈布局一致
+     */
+    subq $48, %rsp    /* 6 * 8 = 48 字节，为 callee-saved 寄存器预留空间 */
 
 .L_switch_to_new:
-    /* ===== CR3 切换逻辑（跨域线程切换修复）===== */
+    /* ===== CR3 切换逻辑（跨域线程切换）=====
+     * 关键：在保存完当前线程上下文后、恢复新线程上下文前切换页表
+     * 这样调度器 C 代码始终运行在 Core-0 页表下
+     * 只有新线程开始执行时才运行在其私有页表中
+     */
     
     /* 保存 next 线程指针 */
     pushq %rsi
@@ -182,13 +199,9 @@ context_switch:
     jz .L_skip_cr3_switch        /* NULL 页表，跳过切换（Core-0 域） */
     
     /* 获取页表物理地址（返回的是 page_table_t*，即物理地址） */
-    /* 页表地址已经是物理地址（恒等映射） */
     movq %rax, %rbx
     
-    /* 获取当前 CR3 并清除低位标志进行比较
-     * CR3 低 12 位包含 PCID、PWT、PCD 等标志，页表地址需 4KB 对齐
-     * 注意：andq 不支持64位立即数，需使用寄存器间接操作
-     */
+    /* 获取当前 CR3 并清除低位标志进行比较 */
     movq %cr3, %rax
     movq $0xFFFFFFFFF000, %rcx   /* 页表地址掩码（高52位） */
     andq %rcx, %rax              /* 清除低位标志位 */
@@ -198,13 +211,7 @@ context_switch:
     cmpq %rax, %rbx
     je .L_skip_cr3_switch        /* 相同页表，无需切换 */
     
-    /* 切换 CR3
-     * 
-     * 注意：写入 CR3 时 CPU 会自动刷新 TLB（除非使用 PCID）
-     * 无需手动 TLB 刷新。
-     * 
-     * 若将来启用 PCID 优化，需使用 invpcid 指令选择性刷新
-     */
+    /* 切换 CR3 - 新线程将运行在其私有页表中 */
     movq %rbx, %cr3
     
 .L_skip_cr3_switch:

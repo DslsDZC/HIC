@@ -174,12 +174,133 @@ def parse_arch_spec(arch_spec):
         return HICMOD_ARCH_X86_64, arch_spec
 
 
+def find_elf_entry_offset(obj_data):
+    """
+    从 ELF 目标文件中查找入口函数偏移
+    
+    查找顺序: _start, service_start, module_start, init, main
+    返回: 入口点偏移，未找到返回 0
+    """
+    # ELF 常量
+    ELF_MAGIC = b'\x7fELF'
+    ET_REL = 1  # 可重定位目标文件
+    SHT_SYMTAB = 2
+    SHT_STRTAB = 3
+    STT_FUNC = 2
+    
+    # 入口函数名优先级
+    ENTRY_NAMES = ['_start', 'service_start', 'module_start', 'init', 'main']
+    
+    # 验证 ELF 魔数
+    if obj_data[:4] != ELF_MAGIC:
+        return 0
+    
+    # 解析 ELF64 头
+    # e_type (16), e_machine (18), e_version (20), e_entry (24), e_phoff (32)
+    # e_shoff (40), e_flags (48), e_ehsize (52), e_phentsize (54)
+    # e_phnum (56), e_shentsize (58), e_shnum (60), e_shstrndx (62)
+    
+    import struct
+    
+    # 检查是否是 64 位 ELF
+    ei_class = obj_data[4]
+    if ei_class != 2:  # ELFCLASS64
+        return 0
+    
+    # 获取节头表偏移和数量
+    e_shoff = struct.unpack_from('<Q', obj_data, 40)[0]
+    e_shentsize = struct.unpack_from('<H', obj_data, 58)[0]
+    e_shnum = struct.unpack_from('<H', obj_data, 60)[0]
+    e_shstrndx = struct.unpack_from('<H', obj_data, 62)[0]
+    
+    if e_shoff == 0 or e_shnum == 0:
+        return 0
+    
+    # 读取节头表
+    sections = []
+    for i in range(e_shnum):
+        sh_offset = e_shoff + i * e_shentsize
+        sh_name = struct.unpack_from('<I', obj_data, sh_offset)[0]
+        sh_type = struct.unpack_from('<I', obj_data, sh_offset + 4)[0]
+        sh_flags = struct.unpack_from('<Q', obj_data, sh_offset + 8)[0]
+        sh_addr = struct.unpack_from('<Q', obj_data, sh_offset + 16)[0]
+        sh_file_offset = struct.unpack_from('<Q', obj_data, sh_offset + 24)[0]
+        sh_size = struct.unpack_from('<Q', obj_data, sh_offset + 32)[0]
+        sh_link = struct.unpack_from('<I', obj_data, sh_offset + 40)[0]
+        
+        sections.append({
+            'name_offset': sh_name,
+            'type': sh_type,
+            'flags': sh_flags,
+            'addr': sh_addr,
+            'offset': sh_file_offset,
+            'size': sh_size,
+            'link': sh_link
+        })
+    
+    # 获取节名称字符串表
+    shstrtab_offset = sections[e_shstrndx]['offset'] if e_shstrndx < len(sections) else 0
+    
+    # 查找符号表和字符串表
+    symtab = None
+    strtab = None
+    
+    for sec in sections:
+        if sec['type'] == SHT_SYMTAB:
+            symtab = sec
+            # 符号表的 link 字段指向字符串表
+            if sec['link'] < len(sections):
+                strtab = sections[sec['link']]
+            break
+    
+    if not symtab or not strtab:
+        return 0
+    
+    # 解析符号表
+    # ELF64 符号表项: st_name(4), st_info(1), st_other(1), st_shndx(2), st_value(8), st_size(8)
+    SYM_SIZE = 24
+    
+    num_syms = symtab['size'] // SYM_SIZE
+    sym_data = obj_data[symtab['offset']:symtab['offset'] + symtab['size']]
+    str_data = obj_data[strtab['offset']:strtab['offset'] + strtab['size']]
+    
+    # 查找入口函数
+    for name in ENTRY_NAMES:
+        for i in range(num_syms):
+            sym_offset = i * SYM_SIZE
+            st_name = struct.unpack_from('<I', sym_data, sym_offset)[0]
+            st_info = sym_data[sym_offset + 4]
+            st_value = struct.unpack_from('<Q', sym_data, sym_offset + 8)[0]
+            
+            # 检查是否是函数
+            st_type = st_info & 0xf
+            if st_type != STT_FUNC:
+                continue
+            
+            if st_value == 0:
+                continue
+            
+            # 获取符号名
+            name_end = str_data.find(b'\x00', st_name)
+            if name_end == -1:
+                continue
+            sym_name = str_data[st_name:name_end].decode('utf-8', errors='ignore')
+            
+            if sym_name == name or sym_name.endswith('_' + name):
+                return st_value
+    
+    return 0
+
+
 def build_arch_section(arch_id, obj_data, offset_base):
     """
     构建架构段数据
     
     返回: (arch_section_bytes, total_size)
     """
+    # 从 ELF 中提取入口点偏移
+    entry_offset = find_elf_entry_offset(obj_data)
+    
     # 架构段头
     section = bytearray(HICMOD_ARCH_SECTION_SIZE)
     
@@ -192,7 +313,7 @@ def build_arch_section(arch_id, obj_data, offset_base):
     struct.pack_into('<I', section, 24, 0)                 # bss_size
     struct.pack_into('<I', section, 28, 0)                 # rodata_offset
     struct.pack_into('<I', section, 32, 0)                 # rodata_size
-    struct.pack_into('<I', section, 36, 0)                 # entry_offset
+    struct.pack_into('<I', section, 36, entry_offset)      # entry_offset
     struct.pack_into('<I', section, 40, 0)                 # reloc_offset
     struct.pack_into('<I', section, 44, 0)                 # reloc_count
     
@@ -283,6 +404,9 @@ def create_hicmod_multiarch(arch_specs, txt_path, output_path,
     legacy_data_size = 0
     
     for i, (arch_id, obj_data, obj_path) in enumerate(arch_data_list):
+        # 从 ELF 中提取入口点偏移
+        entry_offset = find_elf_entry_offset(obj_data)
+        
         # 构建架构段头
         section = bytearray(HICMOD_ARCH_SECTION_SIZE)
         struct.pack_into('<I', section, 0, arch_id)           # arch_id
@@ -294,7 +418,7 @@ def create_hicmod_multiarch(arch_specs, txt_path, output_path,
         struct.pack_into('<I', section, 24, 0)                 # bss_size
         struct.pack_into('<I', section, 28, 0)                 # rodata_offset
         struct.pack_into('<I', section, 32, 0)                 # rodata_size
-        struct.pack_into('<I', section, 36, 0)                 # entry_offset
+        struct.pack_into('<I', section, 36, entry_offset)      # entry_offset
         struct.pack_into('<I', section, 40, 0)                 # reloc_offset
         struct.pack_into('<I', section, 44, 0)                 # reloc_count
         

@@ -42,6 +42,10 @@ u32 g_physical_core_load[MAX_PHYSICAL_CORES];
 /* 空闲逻辑核心列表 */
 logical_core_t *g_free_logical_cores = NULL;
 
+/* 空闲逻辑核心位图和计数 */
+u64 g_free_lcore_bitmap[16] = {0};  /* 16*64 = 1024 个核心 */
+u32 g_free_lcore_count = 0;
+
 /* 逻辑核心ID分配器 */
 static u32 g_next_logical_core_id = 0;
 
@@ -101,6 +105,12 @@ static void logical_core_init_block(logical_core_t *core, logical_core_id_t id) 
         g_free_logical_cores->prev = core;
     }
     g_free_logical_cores = core;
+    
+    /* 更新空闲位图索引（O(1)查找） */
+    u64 bitmap_idx = id / 64;
+    u64 bitmap_bit = 1ULL << (id % 64);
+    g_free_lcore_bitmap[bitmap_idx] |= bitmap_bit;
+    g_free_lcore_count++;
 }
 
 /**

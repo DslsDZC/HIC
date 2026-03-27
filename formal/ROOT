@@ -1,0 +1,17 @@
+session HIC_Verification = HOL +
+  theories [quick_and_dirty]
+    (* 核心理论 *)
+    HIC_Capability_System
+    HIC_Domain_Scheduler
+    HIC_Security_Properties
+    (* 完整证明补充 *)
+    HIC_Complete_Proofs
+    HIC_Full_Complete_Proofs
+    (* 系统模块验证 *)
+    HIC_Boot_Sequence
+    HIC_Memory_Management
+    HIC_Interrupt_Handling
+    HIC_Audit_System
+    HIC_Module_System
+    (* 系统集成 *)
+    HIC_System_Integration

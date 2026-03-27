@@ -58,6 +58,8 @@ typedef struct {
     u64 entry_point;            /* 入口点地址 (ELF 解析获得) */
     u64 code_base;              /* 代码段基址 */
     u64 code_size;              /* 代码段大小 */
+    u64 data_base;              /* 数据段基址（W^X 保护） */
+    u64 data_size;              /* 数据段大小 */
     hic_status_t last_error;    /* 最后错误 */
 } dynamic_module_entry_t;
 

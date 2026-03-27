@@ -17,6 +17,7 @@
 
 #include "service.h"
 #include <string.h>
+#include <module_format.h>
 
 /* ==================== 服务入口点（必须在代码段最前面） ==================== */
 
@@ -89,25 +90,7 @@ static struct {
     uint64_t module_manager_domain;
 } g_launcher_ctx;
 
-/* 模块魔数 */
-#define HICMOD_MAGIC     0x48494B4D  /* "HICM" */
-#define HICMOD_TYPE_SVC  0x53525643  /* "SRVC" */
-
-/* 模块头结构 - 必须与 create_hicmod.py 匹配 */
-typedef struct {
-    uint32_t magic;           /* 0: HICMOD_MAGIC */
-    uint32_t version;         /* 4: 模块格式版本 */
-    uint8_t  uuid[16];        /* 8: 模块UUID */
-    uint32_t semantic_version;/* 24: 语义版本 */
-    uint32_t api_offset;      /* 28: API描述符偏移 */
-    uint32_t code_size;       /* 32: 代码段大小 */
-    uint32_t data_size;       /* 36: 数据段大小 */
-    uint32_t sig_offset;      /* 40: 签名偏移 */
-    uint32_t header_size;     /* 44: 头部大小 */
-    uint8_t  checksum[16];    /* 48: 校验和 */
-    uint32_t sig_size;        /* 64: 签名大小 */
-    uint32_t flags;           /* 68: 标志位 */
-} hicmod_header_t;
+/* 使用 module_format.h 中的 HICMOD_MAGIC 和 hicmod_header_t */
 
 /* 临时缓冲区（用于加载模块） */
 #define MAX_MODULE_SIZE (2 * 1024 * 1024)  /* 2MB */
@@ -345,7 +328,7 @@ int init_launcher_start(void) {
     launcher_log("Module hash computed");
     
     /* 开发阶段：跳过签名验证 */
-    if (header->flags & 0x01) {
+    if (header->signature_size > 0) {
         launcher_log("Module is signed (verification skipped in dev mode)");
     } else {
         launcher_log("Module is unsigned (development build)");
@@ -380,9 +363,15 @@ int init_launcher_start(void) {
     /* 步骤7: 分配内存并加载模块 */
     launcher_log("Step 7: Loading module code...");
     
-    /* 计算需要的内存大小 */
-    uint32_t code_size = header->code_size;
-    uint32_t data_size = header->data_size;
+    /* 从架构表中读取代码大小和入口偏移 */
+    /* 架构表紧随头部之后 */
+    hicmod_arch_section_t *arch_section = (hicmod_arch_section_t *)
+        (g_module_buffer + header->arch_table_offset);
+    
+    uint32_t code_offset = arch_section->code_offset;
+    uint32_t code_size = arch_section->code_size;
+    uint32_t entry_offset = arch_section->entry_offset;
+    uint32_t data_size = arch_section->data_size;
     uint32_t total_size = code_size + data_size;
     
     launcher_log("Module sizes:");
@@ -406,43 +395,18 @@ int init_launcher_start(void) {
     launcher_log("Memory allocated at physical address");
     launcher_log_hex("phys: ", phys_addr);
     
-    /* 复制代码段 - 直接写入物理地址 */
-    /* 注意：ELF数据在HICMOD头部之后，需要找到ELF魔数位置 */
-    const uint8_t *elf_data = g_module_buffer + sizeof(hicmod_header_t);
-    
-    /* ELF魔数可能在头部后有填充，需要查找 */
-    int elf_offset = 0;
-    for (int i = sizeof(hicmod_header_t); i < bytes_read - 4; i++) {
-        if (g_module_buffer[i] == 0x7f && g_module_buffer[i+1] == 'E' &&
-            g_module_buffer[i+2] == 'L' && g_module_buffer[i+3] == 'F') {
-            elf_data = g_module_buffer + i;
-            elf_offset = i - sizeof(hicmod_header_t);
-            break;
-        }
-    }
-    
-    launcher_log("ELF found in module");
-    
-    /* 查找入口函数 */
-    uint64_t entry_offset = find_elf_entry(elf_data, code_size - elf_offset);
-    if (entry_offset == 0) {
-        launcher_log("WARNING: Entry function not found, using default");
-        entry_offset = 0;
-    } else {
-        launcher_log_hex("Entry offset: ", entry_offset);
-    }
-    
-    /* 复制整个代码段到物理地址 */
-    module_memcpy((void *)phys_addr, g_module_buffer + sizeof(hicmod_header_t), code_size);
+    /* 复制代码段 - 使用 arch_section 中的偏移 */
+    module_memcpy((void *)phys_addr, g_module_buffer + code_offset, code_size);
     
     launcher_log("Code loaded to physical memory");
     
     /* 步骤8: 启动模块管理器 */
     launcher_log("Step 8: Starting module_manager...");
     
-    /* 入口点 = 物理地址 + 入口函数偏移（直接物理地址映射） */
+    /* 入口点 = 物理地址 + 入口函数偏移 */
     uint64_t entry_point = phys_addr + entry_offset;
     launcher_log_hex("Entry point (phys): ", entry_point);
+    launcher_log_hex("Entry offset: ", entry_offset);
     
     status = module_domain_start(new_domain, entry_point);
     

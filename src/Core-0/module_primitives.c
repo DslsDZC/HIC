@@ -185,6 +185,15 @@ hic_status_t module_memory_alloc(domain_id_t domain_id,
 {
     u32 page_type;
     
+    /* 调试：确认函数被调用 */
+    console_puts("[PRIMITIVES] module_memory_alloc called: domain=");
+    console_putu32(domain_id);
+    console_puts(", size=");
+    console_putu64(size);
+    console_puts(", type=");
+    console_putu32(type);
+    console_puts("\n");
+    
     if (!phys_addr || size == 0) {
         return HIC_ERROR_INVALID_PARAM;
     }
@@ -221,7 +230,76 @@ hic_status_t module_memory_alloc(domain_id_t domain_id,
     /* 对齐大小到页边界 */
     u32 page_count = (u32)((size + PAGE_SIZE - 1) / PAGE_SIZE);
     
-    return pmm_alloc_frames(domain_id, page_count, page_type, phys_addr);
+    /* 首先尝试连续分配 */
+    status = pmm_alloc_frames(domain_id, page_count, page_type, phys_addr);
+    
+    if (status == HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Consecutive allocation succeeded\n");
+    } else {
+        /* 连续分配失败，尝试分散分配 */
+        console_puts("[PRIMITIVES] Consecutive allocation failed, trying scattered allocation\n");
+        
+        phys_addr_t *pages = (phys_addr_t *)0x20000000;  /* 临时缓冲区 */
+        status = pmm_alloc_scattered(domain_id, page_count, page_type, pages);
+        
+        if (status == HIC_SUCCESS) {
+            *phys_addr = pages[0];  /* 返回第一页地址 */
+            console_puts("[PRIMITIVES] Scattered allocation succeeded, first page at 0x");
+            console_puthex64(*phys_addr);
+            console_puts("\n");
+        } else {
+            console_puts("[PRIMITIVES] Both allocation strategies failed\n");
+            return status;
+        }
+    }
+    
+    /* 将分配的内存映射到域的页表中 */
+    page_table_t* domain_pagetable = domain_switch_get_pagetable(domain_id);
+    if (domain_pagetable == NULL) {
+        /* 域没有页表，这可能是一个错误或域 0 */
+        console_puts("[PRIMITIVES] No page table for domain ");
+        console_putu32(domain_id);
+        console_puts("\n");
+        return HIC_SUCCESS;  /* 内存已分配，但无法映射 */
+    }
+    
+    /* 确定映射权限 */
+    page_perm_t perm;
+    if (type == MODULE_PAGE_CODE) {
+        perm = PERM_RWX;  /* 代码段：可读写执行 */
+    } else if (type == MODULE_PAGE_STACK) {
+        perm = PERM_RW;   /* 栈：可读写 */
+    } else {
+        perm = PERM_RW;   /* 数据/其他：可读写 */
+    }
+    
+    /* 使用恒等映射（虚拟地址 = 物理地址） */
+    size_t map_size = (size_t)(page_count * PAGE_SIZE);
+    status = pagetable_map(domain_pagetable,
+                           (virt_addr_t)*phys_addr,  /* 虚拟地址 */
+                           *phys_addr,                /* 物理地址 */
+                           map_size,
+                           perm,
+                           MAP_TYPE_USER);
+    
+    if (status != HIC_SUCCESS) {
+        console_puts("[PRIMITIVES] Failed to map memory for domain ");
+        console_putu32(domain_id);
+        console_puts(", status=");
+        console_putu32(status);
+        console_puts("\n");
+        /* 映射失败，但物理内存已分配，返回成功让调用者处理 */
+    } else {
+        console_puts("[PRIMITIVES] Mapped ");
+        console_putu64(map_size);
+        console_puts(" bytes at 0x");
+        console_puthex64(*phys_addr);
+        console_puts(" for domain ");
+        console_putu32(domain_id);
+        console_puts("\n");
+    }
+    
+    return HIC_SUCCESS;
 }
 
 hic_status_t module_memory_free(domain_id_t domain_id,
@@ -649,10 +727,10 @@ hic_status_t module_audit_log(u32 event_type,
 uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain)
 {
     domain_quota_t quota = {
-        .max_memory = 2 * 1024 * 1024,  /* 2MB - 足够加载模块 */
-        .max_threads = 4,
-        .max_caps = 32,
-        .cpu_quota_percent = 10
+        .max_memory = 16 * 1024 * 1024,  /* 16MB - 足够加载大型模块 */
+        .max_threads = 8,
+        .max_caps = 64,
+        .cpu_quota_percent = 20
     };
     
     domain_id_t domain_id;

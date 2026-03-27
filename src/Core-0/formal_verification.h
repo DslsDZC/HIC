@@ -34,6 +34,7 @@
 typedef struct mem_region {
     u64 base;
     u64 size;
+    struct mem_region *next;  /* 链表指针 */
 } mem_region_t;
 
 /* 能力类型 */

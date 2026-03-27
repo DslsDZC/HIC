@@ -187,13 +187,21 @@ __attribute__((unused)) void domain_switch_set_current(domain_id_t domain)
 }
 
 /* 设置域页表 */
-__attribute__((unused)) hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
+hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
 {
     if (domain >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
     }
     
     g_domain_pagetables[domain] = pagetable;
+    
+    /* 使用内核控制台接口输出调试信息 */
+    console_puts("[DOMAIN_SWITCH] Set pagetable for domain ");
+    console_putu32(domain);
+    console_puts(" = 0x");
+    console_puthex64((u64)pagetable);
+    console_puts("\n");
+    
     return HIC_SUCCESS;
 }
 

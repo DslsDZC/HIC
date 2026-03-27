@@ -245,6 +245,22 @@ void boot_info_init_memory(hic_boot_info_t* boot_info) {
     console_puts(" usable regions, ");
     console_putu64(kernel_regions);
     console_puts(" kernel regions\n");
+    
+    /* 显式保护内核内存区域（防止 bootloader 未正确标记） */
+    extern u8 _text_start[];
+    extern u8 _kernel_end[];
+    extern u8 _static_modules_region_end[];
+    
+    phys_addr_t kernel_start = (phys_addr_t)_text_start;
+    phys_addr_t kernel_end = (phys_addr_t)_static_modules_region_end;
+    
+    console_puts("[BOOT] Protecting kernel memory: 0x");
+    console_puthex64(kernel_start);
+    console_puts(" - 0x");
+    console_puthex64(kernel_end);
+    console_puts("\n");
+    
+    pmm_mark_used(kernel_start, kernel_end - kernel_start);
 }
 
 /* ==================== ACPI 接口 ==================== */

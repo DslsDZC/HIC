@@ -16,6 +16,8 @@
 #include "atomic.h"
 #include "logical_core.h"
 #include "console.h"
+#include "domain_switch.h"
+#include "pagetable.h"
 
 /* 全局线程表 */
 thread_t g_threads[MAX_THREADS];
@@ -417,6 +419,25 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
     if (status != HIC_SUCCESS) {
         atomic_exit_critical(irq);
         return HIC_ERROR_NO_RESOURCE;
+    }
+    
+    /* 将栈映射到域的页表中 */
+    page_table_t* domain_pagetable = domain_switch_get_pagetable(domain_id);
+    if (domain_pagetable != NULL) {
+        hic_status_t map_status = pagetable_map(domain_pagetable,
+                      (virt_addr_t)stack_phys,  /* 虚拟地址 = 物理地址（恒等映射）*/
+                      stack_phys,                /* 物理地址 */
+                      2 * PAGE_SIZE,             /* 大小 */
+                      PERM_RW,                   /* 读写权限 */
+                      MAP_TYPE_USER);            /* 用户映射 */
+        /* 调试：显示栈映射 */
+        console_puts("[THREAD] Mapped stack 0x");
+        console_puthex64(stack_phys);
+        console_puts(" for domain ");
+        console_putu32(domain_id);
+        console_puts(", status=");
+        console_putu32(map_status);
+        console_puts("\n");
     }
     
     /* 初始化线程结构 */
