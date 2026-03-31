@@ -252,21 +252,31 @@ static hic_status_t dynamic_module_load_internal(dynamic_module_entry_t *entry);
 
 /* ========== 日志输出 ========== */
 
+/* 串口输出函数 - 直接操作串口端口 COM1 (0x3F8) */
+static void serial_putchar_local(char c) {
+    uint16_t port = 0x3F8;
+    __asm__ volatile("outb %0, %w1" : : "a"(c), "Nd"(port));
+}
+
+static void serial_puts_local(const char *str) {
+    while (*str) {
+        serial_putchar_local(*str++);
+    }
+}
+
 static void log_info(const char *msg)
 {
-    /* 通过 VGA 服务输出日志 */
-    extern void vga_service_puts(const char *str);
-    vga_service_puts("[DLOAD] ");
-    vga_service_puts(msg);
-    vga_service_puts("\n");
+    /* 通过串口输出日志 - 动态模块不能调用静态服务函数 */
+    serial_puts_local("[DLOAD] ");
+    serial_puts_local(msg);
+    serial_puts_local("\n");
 }
 
 static void log_error(const char *msg)
 {
-    extern void vga_service_puts(const char *str);
-    vga_service_puts("[DLOAD ERROR] ");
-    vga_service_puts(msg);
-    vga_service_puts("\n");
+    serial_puts_local("[DLOAD ERROR] ");
+    serial_puts_local(msg);
+    serial_puts_local("\n");
 }
 
 /* ========== 字符串解析辅助函数 ========== */

@@ -12,6 +12,7 @@
 #include "boot_info.h"
 #include "types.h"
 #include "hal.h"
+#include "hardware_probe.h"
 
 /* 声明 kernel_main 函数（在 main.c 中定义） */
 extern void kernel_main(void *boot_info);
@@ -34,6 +35,10 @@ void kernel_start(hic_boot_info_t* boot_info) {
     /* ==================== 第一步：初始化 HAL ==================== */
     /* HAL 初始化会设置架构相关的底层功能 */
     hal_init();
+    
+    /* ==================== 第一步：初始化硬件探测机制层 ==================== */
+    /* 检测 FSGSBASE 支持等 CPU 特性，供 syscall 快速路径使用 */
+    hardware_probe_mechanism_init();
     
     /* ==================== 第二步：转发到 kernel_main ==================== */
     /* 所有启动流程代码都在 kernel_main 中 */

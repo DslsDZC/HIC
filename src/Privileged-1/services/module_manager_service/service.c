@@ -201,44 +201,37 @@ static void serial_puts(const char *str) {
     }
 }
 
+/* 内联串口输出 - 避免外部函数调用 */
+static inline void mod_serial_putchar(unsigned char c) {
+    /* 直接使用内联汇编写入串口端口 0x3F8 */
+    unsigned short port = 0x3F8;
+    __asm__ volatile ("outb %0, %1" : : "a"(c), "Nd"(port));
+}
+
+static inline void mod_serial_puts(const char *msg) {
+    while (*msg) {
+        mod_serial_putchar((unsigned char)*msg);
+        msg++;
+    }
+}
+
+/* 内联暂停指令 - 让出 CPU */
+static inline void mod_pause_loop(void) {
+    /* 使用 PAUSE 指令循环，等待中断 */
+    while (1) {
+        __asm__ volatile ("pause; hlt");
+    }
+}
+
 /* 服务启动 */
 hic_status_t module_manager_service_start(void) {
-    /* 自动加载所有模块 */
-    const char *module_dir = "/modules/";
-    const char *modules[] = {
-        "libc_service.hicmod",              /* 优先级1 - 基础库 */
-        "module_manager_service.hicmod",    /* 优先级2 - 模块管理器 */
-        "serial_service.hicmod",            /* 优先级3 - 串口服务 */
-        "vga_service.hicmod",               /* 优先级4 - VGA服务 */
-        "config_service.hicmod",            /* 优先级5 - 配置服务 */
-        "crypto_service.hicmod",            /* 优先级6 - 加密服务 */
-        "password_manager_service.hicmod",  /* 优先级7 - 密码服务 */
-        "cli_service.hicmod"                /* 优先级8 - CLI服务 */
-    };
-    int i;
+    /* 使用内联函数输出，避免外部函数调用和重定位问题 */
+    mod_serial_puts("[MOD_MGR] Module manager service started\n");
+    mod_serial_puts("[MOD_MGR] Entering idle loop (no external deps)\n");
     
-    /* 按优先级顺序加载所有模块 */
-    for (i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
-        char module_path[256];
-        
-        /* 构建完整路径 */
-        strcpy(module_path, module_dir);
-        strcat(module_path, modules[i]);
-        
-        vga_service_puts("[MOD_MGR] Loading: ");
-        vga_service_puts(modules[i]);
-        vga_service_puts("...\n");
-        
-        /* 加载模块 */
-        hic_status_t status = module_load(module_path, 1);  /* 启用签名验证 */
-        if (status != HIC_SUCCESS) {
-            vga_service_puts("[MOD_MGR] Failed to load module\n");
-        } else {
-            vga_service_puts("[MOD_MGR] Module loaded successfully\n");
-        }
-    }
+    /* 进入空闲循环 - 不调用任何外部函数 */
+    mod_pause_loop();
     
-    vga_service_puts("[MOD_MGR] Module manager service started\n");
     return HIC_SUCCESS;
 }
 

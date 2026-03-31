@@ -12,6 +12,8 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
+#include "hal.h"
 
 /* ==================== 上下文保存和恢复 ==================== */
 
@@ -134,4 +136,74 @@ uint32_t riscv64_get_privilege_level(void)
 void riscv64_breakpoint(void)
 {
     __asm__ volatile("ebreak");
+}
+
+/* ==================== 系统调用接口 ==================== */
+
+/**
+ * 执行系统调用 (RISC-V: 使用 ECALL 指令)
+ */
+void arch_syscall_invoke(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
+{
+    /* 参数传递：a7=系统调用号, a0=arg1, a1=arg2, a2=arg3, a3=arg4 */
+    __asm__ volatile(
+        "mv a7, %0\n"
+        "mv a0, %1\n"
+        "mv a1, %2\n"
+        "mv a2, %3\n"
+        "mv a3, %4\n"
+        "ecall\n"
+        :
+        : "r"(syscall_num), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4)
+        : "a0", "a1", "a2", "a3", "a7", "memory"
+    );
+}
+
+/**
+ * 系统调用返回 (RISC-V: 使用 SRET 指令)
+ */
+void arch_syscall_return(u64 ret_val)
+{
+    __asm__ volatile(
+        "mv a0, %0\n"
+        "sret\n"
+        :
+        : "r"(ret_val)
+        : "a0", "memory"
+    );
+}
+
+/* ==================== 异常处理接口 ==================== */
+
+/**
+ * 触发异常 (RISC-V: 使用 EBREAK 指令)
+ */
+void arch_trigger_exception(u32 exc_num)
+{
+    /* RISC-V: EBREAK 触发断点，异常号需要通过其他方式传递 */
+    (void)exc_num;
+    __asm__ volatile("ebreak");
+}
+
+/* ==================== 多核支持接口 ==================== */
+
+/**
+ * 获取当前 CPU ID (RISC-V: 通过 mhartid CSR 获取)
+ */
+cpu_id_t arch_get_cpu_id(void)
+{
+    u64 hartid;
+    __asm__ volatile("csrr %0, mhartid" : "=r"(hartid));
+    return (cpu_id_t)hartid;
+}
+
+/* ==================== 上下文初始化 ==================== */
+
+/**
+ * 获取架构特定的初始标志值
+ * RISC-V: mstatus 默认值
+ */
+u64 arch_context_init_flags(void)
+{
+    return 0x0;
 }

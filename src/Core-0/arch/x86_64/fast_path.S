@@ -5,9 +5,23 @@
  */
 
 /**
- * HIC性能优化的中断处理（优化版）
+ * HIC性能优化的中断处理（x86_64 专用）
  * 目标延迟：0.5-1微秒
+ * 
+ * FSGSBASE 优化：
+ * - 如果 CPU 支持 FSGSBASE，使用 rdfsbase/wrfsbase 指令
+ * - 否则回退到 MSR 访问（rdmsr/wrmsr）
+ * - FSGSBASE: ~10 周期 vs MSR: ~100-200 周期
+ * 
+ * 注意：此文件是 x86_64 专用
+ * - ARM64: 见 arch/arm64/ 目录
+ * - RISC-V: 见 arch/riscv/ 目录
  */
+
+/* FSGSBASE 全局标志（在 hardware_probe_arch.c 中定义） */
+.global g_use_fsgsbase
+
+.section .text
 
 /* ==================== IRQ 入口存根宏 ==================== */
 /**
@@ -134,12 +148,30 @@ syscall_fast_entry:
     /* 分配栈空间：FS基址(8) + RCX(8) + R11(8) + callee-saved(48) = 72字节 */
     subq $72, %rsp
     
-    /* 保存FS基址（用户态TLS） */
+    /* 保存FS基址（用户态TLS）- FSGSBASE 优化路径
+     * 注意：使用 R8 作为临时寄存器，避免覆盖 RAX（系统调用号）
+     */
+    movq g_use_fsgsbase(%rip), %r8
+    testq %r8, %r8
+    jz .fs_save_msr
+    
+    /* FSGSBASE 路径：~10 周期 */
+    rdfsbase %r8
+    movq %r8, 0(%rsp)
+    jmp .fs_save_done
+    
+.fs_save_msr:
+    /* MSR 路径：~100-200 周期（兼容旧 CPU）
+     * 注意：rdmsr 使用 EDX:EAX，需要先保存 RAX（系统调用号）
+     */
+    movq %rax, 72(%rsp)         /* 临时保存系统调用号到栈顶之上 */
     movl $0xC0000100, %ecx      /* IA32_FS_BASE MSR */
     rdmsr                       /* EDX:EAX = FS base */
     movl %eax, 0(%rsp)          /* 保存低32位 */
     movl %edx, 4(%rsp)          /* 保存高32位 */
+    movq 72(%rsp), %rax         /* 恢复系统调用号 */
     
+.fs_save_done:
     /* 保存用户态返回地址和RFLAGS */
     movq %rcx, 8(%rsp)          /* 用户空间返回地址 */
     movq %r11, 16(%rsp)         /* 用户空间RFLAGS */
@@ -189,12 +221,28 @@ syscall_fast_entry:
     movq 8(%rsp), %rcx          /* 用户空间返回地址 */
     movq 16(%rsp), %r11         /* 用户空间RFLAGS */
     
-    /* 恢复FS基址（用户态TLS） */
-    movl 0(%rsp), %eax          /* 低32位 */
+    /* 恢复FS基址（用户态TLS）- FSGSBASE 优化路径 */
+    movq g_use_fsgsbase(%rip), %r8
+    testq %r8, %r8
+    jz .fs_restore_msr
+    
+    /* FSGSBASE 路径：~10 周期 */
+    movq 0(%rsp), %r8
+    wrfsbase %r8
+    jmp .fs_restore_done
+    
+.fs_restore_msr:
+    /* MSR 路径：~100-200 周期（兼容旧 CPU）
+     * 注意：wrmsr 使用 EDX:EAX，但此时 RAX 已经是返回值，需要保存
+     */
+    pushq %rax                  /* 保存返回值 */
+    movl 0(%rsp), %eax          /* 低32位（偏移已调整） */
     movl 4(%rsp), %edx          /* 高32位 */
     movl $0xC0000100, %ecx      /* IA32_FS_BASE MSR */
     wrmsr
+    popq %rax                   /* 恢复返回值 */
     
+.fs_restore_done:
     /* 释放栈空间 */
     addq $72, %rsp
     

@@ -53,7 +53,18 @@ typedef struct cpu_info {
     u64 clock_frequency;       /* 时钟频率(Hz) */
     char brand_string[49];     /* 品牌字符串 */
     u32 arch_type;             /* 架构类型 */
+    bool has_fsgsbase;         /* 支持 FSGSBASE 指令 */
 } cpu_info_t;
+
+/**
+ * 检测 CPU 是否支持 FSGSBASE 指令
+ * 
+ * FSGSBASE 允许用户态直接读写 FS/GS 基址，
+ * 避免 MSR 访问的 ~100-200 周期开销。
+ * 
+ * @return true 如果支持 FSGSBASE
+ */
+bool cpu_has_fsgsbase(void);
 
 /**
  * 探测内存拓扑（机制层）
@@ -208,7 +219,20 @@ const memory_topology_t* hardware_probe_get_memory(void);
  */
 cpu_info_t* hardware_probe_get_cpu_info(void);
 
-/* 全局硬件信息变量 */
+/* ==================== 全局硬件信息变量 ==================== */
+
+/* 全局CPU信息变量 */
 extern cpu_info_t g_cpu_info;
+
+/* ==================== FSGSBASE 全局变量（供汇编使用） ==================== */
+
+/**
+ * FSGSBASE 支持标志
+ * 
+ * 在启动时检测并设置。如果 CPU 支持 FSGSBASE 指令，
+ * syscall 快速路径将使用 rdfsbase/wrfsbase 而不是 rdmsr/wrmsr，
+ * 性能提升约 10 倍（~10 周期 vs ~100-200 周期）。
+ */
+extern bool g_use_fsgsbase;
 
 #endif /* HIC_HARDWARE_PROBE_H */

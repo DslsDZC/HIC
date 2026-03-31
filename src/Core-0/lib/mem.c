@@ -111,3 +111,12 @@ uintptr_t align_down(uintptr_t value, uintptr_t alignment)
 {
     return value & ~(alignment - 1);
 }
+
+/* 栈保护检查失败处理 */
+void __stack_chk_fail(void)
+{
+    /* 简单的死循环 - 实际实现应该记录日志并终止进程 */
+    while (1) {
+        __asm__ volatile ("hlt");
+    }
+}

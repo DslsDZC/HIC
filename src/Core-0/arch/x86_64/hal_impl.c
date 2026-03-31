@@ -12,6 +12,8 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include "hal.h"
 
 /* ==================== 上下文保存和恢复 ==================== */
@@ -382,4 +384,173 @@ bool arch_uart_tx_ready(phys_addr_t base)
 phys_addr_t arch_uart_get_default_base(void)
 {
     return x86_64_uart_get_default_base();
+}
+
+/* ==================== 系统调用接口 ==================== */
+
+/**
+ * 执行系统调用 (x86_64: 使用 SYSCALL 指令)
+ */
+void arch_syscall_invoke(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
+{
+    __asm__ volatile(
+        "mov %0, %%rax\n"
+        "mov %1, %%rdi\n"
+        "mov %2, %%rsi\n"
+        "mov %3, %%rdx\n"
+        "mov %4, %%rcx\n"
+        "syscall\n"
+        :
+        : "r"(syscall_num), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4)
+        : "rax", "rdi", "rsi", "rdx", "rcx", "r11", "memory"
+    );
+}
+
+/**
+ * 系统调用返回 (x86_64: 使用 SYSRETQ 指令)
+ */
+void arch_syscall_return(u64 ret_val)
+{
+    __asm__ volatile(
+        "mov %0, %%rax\n"
+        "sysretq\n"
+        :
+        : "r"(ret_val)
+        : "rax", "rcx", "r11", "memory"
+    );
+}
+
+/* ==================== 异常处理接口 ==================== */
+
+/**
+ * 触发异常 (x86_64: 使用 UD2 指令)
+ */
+void arch_trigger_exception(u32 exc_num)
+{
+    /* x86_64: INT指令需要立即数，使用UD2触发未定义指令异常 */
+    /* 对于特定的异常号，需要使用IDT门或中断控制器 */
+    (void)exc_num;
+    __asm__ volatile("ud2");
+}
+
+/* ==================== 调试接口 ==================== */
+
+/**
+ * 栈回溯 (x86_64: 通过 RBP 寄存器遍历栈帧)
+ */
+void arch_stack_trace(void (*print_func)(const char*, ...))
+{
+    u64 *rbp;
+    u64 *ret_addr;
+
+    /* 获取当前 RBP */
+    __asm__ volatile("mov %%rbp, %0" : "=r"(rbp));
+
+    /* 遍历栈帧 */
+    for (int i = 0; i < 16 && rbp != NULL; i++) {
+        /* 获取返回地址 */
+        ret_addr = (u64*)(rbp + 1);
+
+        /* 打印返回地址 */
+        print_func("  [0x%016lX]\n", (u64)*ret_addr);
+
+        /* 移动到下一个栈帧 */
+        rbp = (u64*)*rbp;
+
+        /* 检查栈帧是否有效 */
+        if ((u64)rbp < 0x1000 || (u64)rbp > 0xFFFFFFFFFFFF) {
+            break;
+        }
+    }
+}
+
+/* ==================== 上下文初始化 ==================== */
+
+/**
+ * 获取架构特定的初始标志值
+ * x86_64: RFLAGS with IF=1 (bit 9)
+ */
+u64 arch_context_init_flags(void)
+{
+    return 0x202;  /* IF = 1 (启用中断) */
+}
+
+/* ==================== 多核支持接口 ==================== */
+
+/**
+ * 获取当前 CPU ID (x86_64: 通过 CPUID 获取 APIC ID)
+ * 注意：此函数已在上方实现为 x86_64_get_cpu_id
+ * 这里提供别名以保持一致性
+ */
+cpu_id_t arch_get_cpu_id(void)
+{
+    return x86_64_get_cpu_id();
+}
+
+/* ==================== HAL 操作表注册 ==================== */
+
+/* 前向声明 */
+extern void x86_64_context_switch(void *prev, void *next);
+extern void x86_64_context_init(void *ctx, void *entry, void *stack);
+
+/* x86_64 HAL 操作表 */
+static const hal_arch_ops_t x86_64_hal_ops = {
+    .arch_name = "x86_64",
+    
+    /* 内存屏障 */
+    .memory_barrier = x86_64_memory_barrier,
+    .read_barrier = x86_64_read_barrier,
+    .write_barrier = x86_64_write_barrier,
+    
+    /* 中断控制 */
+    .disable_interrupts = x86_64_disable_interrupts,
+    .enable_interrupts = x86_64_enable_interrupts,
+    .restore_interrupts = x86_64_restore_interrupts,
+    
+    /* 时间 */
+    .get_timestamp = x86_64_get_timestamp,
+    .udelay = NULL,  /* TODO: 实现 */
+    
+    /* 特权级 */
+    .get_privilege_level = x86_64_get_privilege_level,
+    
+    /* 上下文 */
+    .save_context = x86_64_save_context,
+    .restore_context = x86_64_restore_context,
+    .context_switch = x86_64_context_switch,
+    .context_init = x86_64_context_init,
+    .context_init_flags = arch_context_init_flags,
+    
+    /* 系统调用 */
+    .syscall_invoke = arch_syscall_invoke,
+    .syscall_return = arch_syscall_return,
+    
+    /* 异常 */
+    .trigger_exception = arch_trigger_exception,
+    .halt = x86_64_halt,
+    .idle = x86_64_idle,
+    .breakpoint = x86_64_breakpoint,
+    .stack_trace = NULL,  /* TODO: 实现 */
+    
+    /* IO 端口 */
+    .inb = x86_64_inb,
+    .inw = x86_64_inw,
+    .inl = x86_64_inl,
+    .outb = x86_64_outb,
+    .outw = x86_64_outw,
+    .outl = x86_64_outl,
+    
+    /* CPU */
+    .get_cpu_id = x86_64_get_cpu_id,
+    
+    /* 特性 */
+    .supports_io_ports = true,
+};
+
+/**
+ * 初始化 x86_64 HAL 并注册操作表
+ */
+void x86_64_hal_init(void)
+{
+    hal_register_arch_ops(&x86_64_hal_ops);
 }

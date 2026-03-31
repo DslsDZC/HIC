@@ -769,30 +769,16 @@ void pmu_print_stats(void)
 
 /* ========== 事件映射 ========== */
 
+/* 架构特定函数声明 */
+extern u64 arch_pmu_event_to_config(pmu_event_type_t event);
+extern pmu_event_type_t arch_pmu_config_to_event(u64 arch_config);
+
 /**
  * 标准事件到架构配置映射
  */
 u64 pmu_event_to_arch_config(pmu_event_type_t event)
 {
-    /* x86-64 事件映射 */
-    #if defined(__x86_64__)
-    switch (event) {
-        case PMU_EVENT_CPU_CYCLES:        return 0x003C;
-        case PMU_EVENT_INSTRUCTIONS:      return 0x00C0;
-        case PMU_EVENT_BRANCHES:          return 0x00C4;
-        case PMU_EVENT_BRANCH_MISSES:     return 0x00C5;
-        case PMU_EVENT_CACHE_REFERENCES:  return 0x004F;
-        case PMU_EVENT_CACHE_MISSES:      return 0x004E;
-        case PMU_EVENT_CACHE_L1D_MISS:    return 0x0051;
-        case PMU_EVENT_CACHE_L1I_MISS:    return 0x0080;
-        case PMU_EVENT_TLB_DTLB_MISS:     return 0x0049;
-        case PMU_EVENT_TLB_ITLB_MISS:     return 0x0085;
-        default:                          return event;
-    }
-    #else
-    /* ARM64/RISC-V: 使用原始值 */
-    return event;
-    #endif
+    return arch_pmu_event_to_config(event);
 }
 
 /**
@@ -800,17 +786,5 @@ u64 pmu_event_to_arch_config(pmu_event_type_t event)
  */
 pmu_event_type_t pmu_arch_config_to_event(u64 arch_config)
 {
-    #if defined(__x86_64__)
-    switch (arch_config) {
-        case 0x003C: return PMU_EVENT_CPU_CYCLES;
-        case 0x00C0: return PMU_EVENT_INSTRUCTIONS;
-        case 0x00C4: return PMU_EVENT_BRANCHES;
-        case 0x00C5: return PMU_EVENT_BRANCH_MISSES;
-        case 0x004F: return PMU_EVENT_CACHE_REFERENCES;
-        case 0x004E: return PMU_EVENT_CACHE_MISSES;
-        default:     return PMU_EVENT_RAW_START;
-    }
-    #else
-    return (pmu_event_type_t)arch_config;
-    #endif
+    return arch_pmu_config_to_event(arch_config);
 }

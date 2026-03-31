@@ -34,4 +34,7 @@ uint64_t swap64(uint64_t value);
 uintptr_t align_up(uintptr_t value, uintptr_t alignment);
 uintptr_t align_down(uintptr_t value, uintptr_t alignment);
 
+/* 栈保护 */
+void __stack_chk_fail(void);
+
 #endif /* HIC_LIB_MEM_H */

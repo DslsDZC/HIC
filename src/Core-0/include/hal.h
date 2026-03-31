@@ -256,6 +256,71 @@ void hal_breakpoint(void);
  */
 void hal_stack_trace(void);
 
+/* ==================== 架构操作表 ==================== */
+
+/**
+ * HAL 架构操作函数指针表
+ * 每个架构实现自己的操作表，注册时传入
+ */
+typedef struct hal_arch_ops {
+    const char *arch_name;
+    
+    /* 内存屏障 */
+    void (*memory_barrier)(void);
+    void (*read_barrier)(void);
+    void (*write_barrier)(void);
+    
+    /* 中断控制 */
+    bool (*disable_interrupts)(void);
+    void (*enable_interrupts)(void);
+    void (*restore_interrupts)(bool state);
+    
+    /* 时间 */
+    u64 (*get_timestamp)(void);
+    void (*udelay)(u32 us);
+    
+    /* 特权级 */
+    u32 (*get_privilege_level)(void);
+    
+    /* 上下文 */
+    void (*save_context)(void *ctx);
+    void (*restore_context)(void *ctx);
+    void (*context_switch)(void *prev, void *next);
+    void (*context_init)(void *ctx, void *entry, void *stack);
+    u64 (*context_init_flags)(void);
+    
+    /* 系统调用 */
+    void (*syscall_invoke)(u64 num, u64 a1, u64 a2, u64 a3, u64 a4);
+    void (*syscall_return)(u64 ret);
+    
+    /* 异常 */
+    void (*trigger_exception)(u32 num);
+    void (*halt)(void);
+    void (*idle)(void);
+    void (*breakpoint)(void);
+    void (*stack_trace)(void);
+    
+    /* IO 端口（可选，ARM64/RISC-V 可为 NULL） */
+    u8 (*inb)(u16 port);
+    u16 (*inw)(u16 port);
+    u32 (*inl)(u16 port);
+    void (*outb)(u16 port, u8 val);
+    void (*outw)(u16 port, u16 val);
+    void (*outl)(u16 port, u32 val);
+    
+    /* CPU */
+    cpu_id_t (*get_cpu_id)(void);
+    
+    /* 特性 */
+    bool supports_io_ports;
+} hal_arch_ops_t;
+
+/**
+ * 注册架构操作表
+ * 由架构特定代码在初始化时调用
+ */
+void hal_register_arch_ops(const hal_arch_ops_t *ops);
+
 /* ==================== 架构检测和初始化 ==================== */
 
 /**

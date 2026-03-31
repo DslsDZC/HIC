@@ -25,6 +25,9 @@
 /* 全局硬件信息变量 */
 cpu_info_t g_cpu_info;
 
+/* FSGSBASE 支持标志（用于 syscall 快速路径） */
+bool g_use_fsgsbase = false;
+
 /* 全局内存拓扑缓存 */
 static memory_topology_t g_memory_topology;
 static bool g_memory_topology_valid = false;
@@ -229,7 +232,27 @@ void detect_cpu_info_minimal(cpu_info_t* cpu) {
     console_puts(" logical, ");
     console_putu32(cpu->physical_cores);
     console_puts(" physical)\n");
+    
+    /* 检测 FSGSBASE 支持 (CPUID Leaf 7, EBX bit 0) */
+    cpu->has_fsgsbase = cpu_has_fsgsbase();
+    if (cpu->has_fsgsbase) {
+        console_puts("[HW_PROBE] FSGSBASE: supported (fast FS/GS base access)\n");
+    } else {
+        console_puts("[HW_PROBE] FSGSBASE: not supported (using MSR)\n");
+    }
 }
+
+/**
+ * 检测 CPU 是否支持 FSGSBASE 指令
+ * 
+ * 架构特定实现：
+ * - x86_64: CPUID Leaf 7, EBX bit 0
+ * - ARM64: 不适用，返回 false
+ * - RISC-V: 不适用，返回 false
+ * 
+ * 注意：架构特定实现在 arch/<arch>/hardware_probe_arch.c 中
+ */
+bool cpu_has_fsgsbase(void);
 
 /* ==================== 机制层：初始化 ==================== */
 
@@ -243,6 +266,9 @@ void hardware_probe_mechanism_init(void) {
     /* 执行最小探测：仅内存拓扑 */
     detect_memory_topology(&g_memory_topology);
     g_memory_topology_valid = true;
+    
+    /* 检测 FSGSBASE 支持并设置全局标志 */
+    g_use_fsgsbase = cpu_has_fsgsbase();
     
     console_puts("[HW_PROBE] Mechanism layer initialized\n");
 }

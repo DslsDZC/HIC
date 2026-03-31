@@ -93,7 +93,7 @@ static struct {
 /* 使用 module_format.h 中的 HICMOD_MAGIC 和 hicmod_header_t */
 
 /* 临时缓冲区（用于加载模块） */
-#define MAX_MODULE_SIZE (2 * 1024 * 1024)  /* 2MB */
+#define MAX_MODULE_SIZE (8 * 1024 * 1024)  /* 8MB - 需要足够大以容纳 module_manager */
 static uint8_t g_module_buffer[MAX_MODULE_SIZE] __attribute__((aligned(4096)));
 
 /* ========== 辅助函数 ========== */
@@ -168,16 +168,41 @@ typedef struct {
 
 /**
  * 查找ELF中的入口函数
+ * 明确查找 <module_name>_service_start 或 service_start 函数
+ * 
+ * 参数:
+ *   elf_data: ELF 数据指针
+ *   elf_size: ELF 数据大小
+ *   out_offset: 输出参数，返回找到的入口偏移
+ * 
+ * 返回: 1 表示找到，0 表示未找到
  */
-static uint64_t find_elf_entry(const uint8_t *elf_data, size_t elf_size)
+static int find_elf_entry_ex(const uint8_t *elf_data, size_t elf_size, uint64_t *out_offset)
 {
     const elf64_ehdr_t *ehdr = (const elf64_ehdr_t *)elf_data;
     
     /* 验证ELF魔数 */
     if (ehdr->e_ident[0] != 0x7f || ehdr->e_ident[1] != 'E' ||
         ehdr->e_ident[2] != 'L' || ehdr->e_ident[3] != 'F') {
+        serial_print("[FIND_ELF] Not an ELF file\n");
         return 0;
     }
+    
+    serial_print("[FIND_ELF] ELF magic OK\n");
+    
+    /* 输出 ELF 头关键信息 */
+    launcher_log_hex("e_shoff: ", ehdr->e_shoff);
+    launcher_log_hex("e_shnum: ", ehdr->e_shnum);
+    launcher_log_hex("e_shentsize: ", ehdr->e_shentsize);
+    launcher_log_hex("elf_size: ", elf_size);
+    
+    /* 检查节头表偏移是否有效 */
+    if (ehdr->e_shoff == 0 || ehdr->e_shoff >= elf_size) {
+        serial_print("[FIND_ELF] Invalid section header offset\n");
+        return 0;
+    }
+    
+    serial_print("[FIND_ELF] Section header offset OK\n");
     
     /* 获取节头表 */
     const elf64_shdr_t *shdrs = (const elf64_shdr_t *)(elf_data + ehdr->e_shoff);
@@ -185,45 +210,448 @@ static uint64_t find_elf_entry(const uint8_t *elf_data, size_t elf_size)
     /* 查找符号表和字符串表 */
     const elf64_shdr_t *symtab = NULL;
     const elf64_shdr_t *strtab = NULL;
+    uint32_t symtab_link = 0;
+    
+    /* 直接读取第一个节头的 sh_type 来验证结构体对齐 */
+    uint32_t first_sh_type;
+    module_memcpy(&first_sh_type, &shdrs[0].sh_type, sizeof(uint32_t));
+    launcher_log_hex("First section type: ", first_sh_type);
+    
+    serial_print("[FIND_ELF] Scanning sections...\n");
     
     for (int i = 0; i < ehdr->e_shnum; i++) {
-        if (shdrs[i].sh_type == SHT_SYMTAB) {
+        /* 直接从内存读取 sh_type 以避免对齐问题 */
+        uint32_t sh_type;
+        module_memcpy(&sh_type, &shdrs[i].sh_type, sizeof(uint32_t));
+        
+        if (sh_type == SHT_SYMTAB) {
+            serial_print("[FIND_ELF] Found SYMTAB at index\n");
             symtab = &shdrs[i];
-            /* 符号表的链接是字符串表索引 */
-            if (shdrs[i].sh_link < ehdr->e_shnum) {
-                strtab = &shdrs[shdrs[i].sh_link];
+            module_memcpy(&symtab_link, &shdrs[i].sh_link, sizeof(uint32_t));
+        }
+        if (sh_type == SHT_STRTAB) {
+            /* 记录所有 STRTAB，稍后根据 symtab_link 选择 */
+            if (symtab_link == (uint32_t)i) {
+                serial_print("[FIND_ELF] Found STRTAB linked to SYMTAB!\n");
+                strtab = &shdrs[i];
             }
-            break;
         }
     }
     
+    /* 如果找到了 SYMTAB 但还没找到对应的 STRTAB，重新查找 */
+    if (symtab && !strtab && symtab_link < (uint32_t)ehdr->e_shnum) {
+        strtab = &shdrs[symtab_link];
+        serial_print("[FIND_ELF] Found STRTAB by link index!\n");
+    }
+    
     if (!symtab || !strtab) {
+        serial_print("[FIND_ELF] No symtab or strtab found\n");
         return 0;
     }
+    
+    serial_print("[FIND_ELF] Found symtab and strtab\n");
     
     /* 遍历符号表查找入口函数 */
     const elf64_sym_t *syms = (const elf64_sym_t *)(elf_data + symtab->sh_offset);
     int num_syms = symtab->sh_size / sizeof(elf64_sym_t);
     const char *strings = (const char *)(elf_data + strtab->sh_offset);
     
+    /* 首先查找精确匹配的 service_start 函数 */
+    /* 注意：在 relocatable object 中，st_value 可以是 0（表示符号在节的开始位置） */
+    /* 所以我们不能检查 st_value != 0，而是检查 st_shndx 是否指向有效的节 */
+    uint64_t fallback_entry = 0;
+    const char *fallback_name = NULL;
+    
     for (int i = 0; i < num_syms; i++) {
-        if ((syms[i].st_info & 0xf) == STT_FUNC && syms[i].st_value != 0) {
+        /* 检查是否是函数类型，并且 st_shndx 不是未定义 (SHN_UNDEF = 0) */
+        if ((syms[i].st_info & 0xf) == STT_FUNC && syms[i].st_shndx != 0) {
             const char *name = strings + syms[i].st_name;
-            /* 查找 service_start 函数 */
+            size_t name_len = 0;
             const char *p = name;
-            while (*p) {
-                if (*p == '_' && *(p+1) == 's' && *(p+2) == 't' && 
-                    *(p+3) == 'a' && *(p+4) == 'r' && *(p+5) == 't') {
-                    launcher_log("Found entry function:");
+            while (*p++) name_len++;
+            
+            /* 检查是否以 "service_start" 结尾 */
+            if (name_len >= 13) {
+                const char *suffix = name + name_len - 13;
+                if (suffix[0] == 's' && suffix[1] == 'e' && suffix[2] == 'r' &&
+                    suffix[3] == 'v' && suffix[4] == 'i' && suffix[5] == 'c' &&
+                    suffix[6] == 'e' && suffix[7] == '_' && suffix[8] == 's' &&
+                    suffix[9] == 't' && suffix[10] == 'a' && suffix[11] == 'r' &&
+                    suffix[12] == 't') {
+                    launcher_log("Found service_start entry:");
                     launcher_log(name);
-                    return syms[i].st_value;
+                    launcher_log_hex("Entry offset: ", syms[i].st_value);
+                    *out_offset = syms[i].st_value;
+                    return 1;  /* 找到了 */
                 }
-                p++;
+            }
+            
+            /* 记录第一个 _start 函数作为备选 */
+            if (fallback_entry == 0 && fallback_name == NULL) {
+                p = name;
+                while (*p) {
+                    if (*p == '_' && *(p+1) == 's' && *(p+2) == 't' && 
+                        *(p+3) == 'a' && *(p+4) == 'r' && *(p+5) == 't') {
+                        fallback_entry = syms[i].st_value;
+                        fallback_name = name;
+                        launcher_log("Fallback entry:");
+                        launcher_log(name);
+                        launcher_log_hex("Fallback offset: ", fallback_entry);
+                        break;
+                    }
+                    p++;
+                }
             }
         }
     }
     
+    if (fallback_entry != 0 || fallback_name != NULL) {
+        launcher_log("Using fallback entry point");
+        *out_offset = fallback_entry;
+        return 1;  /* 找到了备选 */
+    }
+    
     return 0;
+}
+
+/* ========== ELF 重定位处理 ========== */
+
+#define SHT_RELA    4
+#define SHT_SYMTAB  2
+#define SHT_STRTAB  3
+
+/* x86_64 重定位类型 */
+#define R_X86_64_NONE           0
+#define R_X86_64_64             1
+#define R_X86_64_PC32           2
+#define R_X86_64_GOT32          3
+#define R_X86_64_PLT32          4
+#define R_X86_64_COPY           5
+#define R_X86_64_GLOB_DAT       6
+#define R_X86_64_JUMP_SLOT      7
+#define R_X86_64_RELATIVE       8
+#define R_X86_64_GOTPCREL       9
+#define R_X86_64_32             10
+#define R_X86_64_32S            11
+#define R_X86_64_16             12
+#define R_X86_64_PC16           13
+#define R_X86_64_8              14
+#define R_X86_64_PC8            15
+#define R_X86_64_GOTPCRELX      41
+#define R_X86_64_REX_GOTPCRELX  42
+
+/* ELF64 重定位条目 */
+typedef struct {
+    uint64_t r_offset;
+    uint64_t r_info;
+    int64_t  r_addend;
+} elf64_rela_t;
+
+#define ELF64_R_SYM(i)  ((i) >> 32)
+#define ELF64_R_TYPE(i) ((i) & 0xffffffff)
+
+/* 外部符号查找表 - 内核提供的函数 */
+typedef struct {
+    const char *name;
+    uint64_t addr;
+} external_symbol_t;
+
+/* 内核导出的函数地址（需要在链接时提供） */
+extern void *memset(void *, int, size_t);
+extern void *memcpy(void *, const void *, size_t);
+extern char *strcpy(char *, const char *);
+extern int strcmp(const char *, const char *);
+extern char *strrchr(const char *, int);
+extern size_t strlen(const char *);
+extern int memcmp(const void *, const void *, size_t);
+extern char *strncpy(char *, const char *, size_t);
+extern void __stack_chk_fail(void);
+extern uint64_t service_register(const char *, uint32_t, uint32_t);
+extern uint64_t domain_destroy(uint32_t);
+extern int fat32_read_file(const char *, void *, uint32_t, uint32_t *);
+
+/* module_primitives 提供的函数 */
+extern uint64_t module_cap_create_domain(uint32_t, uint32_t *);
+extern uint64_t module_cap_create_endpoint(uint32_t, uint32_t *);
+extern uint64_t module_domain_start(uint32_t, uint64_t);
+extern void *module_memcpy(void *, const void *, size_t);
+extern void *module_memset(void *, int, size_t);
+extern uint64_t module_memory_alloc(uint32_t, uint64_t, uint32_t, uint64_t *);
+
+/* 未实现的符号 - 提供占位符 */
+static void __stub_domain_parallel_create(void) { }
+static void __stub_cap_migration_channel_create(void) { }
+static void __stub_domain_atomic_switch(void) { }
+static void __stub_domain_graceful_shutdown(void) { }
+static void __stub_sha384_hash(void) { }
+
+static uint64_t find_external_symbol(const char *name) {
+    /* 内核符号查找表 */
+    static const external_symbol_t kernel_syms[] = {
+        {"memset",  (uint64_t)memset},
+        {"memcpy",  (uint64_t)memcpy},
+        {"strcpy",  (uint64_t)strcpy},
+        {"strcmp",  (uint64_t)strcmp},
+        {"strrchr", (uint64_t)strrchr},
+        {"strlen",  (uint64_t)strlen},
+        {"memcmp",  (uint64_t)memcmp},
+        {"strncpy", (uint64_t)strncpy},
+        {"__stack_chk_fail", (uint64_t)__stack_chk_fail},
+        {"service_register", (uint64_t)service_register},
+        {"domain_destroy", (uint64_t)domain_destroy},
+        {"fat32_read_file", (uint64_t)fat32_read_file},
+        /* module_primitives */
+        {"module_cap_create_domain", (uint64_t)module_cap_create_domain},
+        {"module_cap_create_endpoint", (uint64_t)module_cap_create_endpoint},
+        {"module_domain_start", (uint64_t)module_domain_start},
+        {"module_memcpy", (uint64_t)module_memcpy},
+        {"module_memset", (uint64_t)module_memset},
+        {"module_memory_alloc", (uint64_t)module_memory_alloc},
+        /* 占位符 - 未完全实现的功能 */
+        {"domain_parallel_create", (uint64_t)__stub_domain_parallel_create},
+        {"cap_migration_channel_create", (uint64_t)__stub_cap_migration_channel_create},
+        {"domain_atomic_switch", (uint64_t)__stub_domain_atomic_switch},
+        {"domain_graceful_shutdown", (uint64_t)__stub_domain_graceful_shutdown},
+        {"sha384_hash", (uint64_t)__stub_sha384_hash},
+        {NULL, 0}
+    };
+    
+    for (int i = 0; kernel_syms[i].name != NULL; i++) {
+        const char *s1 = kernel_syms[i].name;
+        const char *s2 = name;
+        while (*s1 && *s2 && *s1 == *s2) {
+            s1++;
+            s2++;
+        }
+        if (*s1 == '\0' && *s2 == '\0') {
+            return kernel_syms[i].addr;
+        }
+    }
+    return 0;
+}
+
+/**
+ * 应用 ELF 重定位
+ * 
+ * 参数:
+ *   elf_base: ELF 加载基址
+ *   elf_size: ELF 数据大小
+ * 
+ * 返回: 0 成功，非零失败
+ */
+static int apply_elf_relocations(uint8_t *elf_base, size_t elf_size) {
+    const elf64_ehdr_t *ehdr = (const elf64_ehdr_t *)elf_base;
+    
+    if (ehdr->e_shoff == 0 || ehdr->e_shoff >= elf_size) {
+        launcher_log("No section headers for relocation");
+        return 0;  /* 没有节头表，可能不需要重定位 */
+    }
+    
+    const elf64_shdr_t *shdrs = (const elf64_shdr_t *)(elf_base + ehdr->e_shoff);
+    
+    /* 查找符号表、字符串表和重定位节 */
+    const elf64_shdr_t *symtab = NULL;
+    const elf64_shdr_t *strtab = NULL;
+    const elf64_shdr_t *shstrtab = NULL;
+    uint32_t symtab_link = 0;
+    
+    /* 首先获取节名字符串表 */
+    if (ehdr->e_shstrndx < ehdr->e_shnum) {
+        shstrtab = &shdrs[ehdr->e_shstrndx];
+    }
+    
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        uint32_t sh_type;
+        module_memcpy(&sh_type, &shdrs[i].sh_type, sizeof(uint32_t));
+        
+        if (sh_type == SHT_SYMTAB) {
+            symtab = &shdrs[i];
+            module_memcpy(&symtab_link, &shdrs[i].sh_link, sizeof(uint32_t));
+        }
+    }
+    
+    if (!symtab) {
+        launcher_log("No symbol table found");
+        return 0;  /* 没有符号表 */
+    }
+    
+    /* 获取关联的字符串表 */
+    if (symtab_link < (uint32_t)ehdr->e_shnum) {
+        strtab = &shdrs[symtab_link];
+    }
+    
+    if (!strtab) {
+        launcher_log("No string table found");
+        return -1;
+    }
+    
+    const elf64_sym_t *syms = (const elf64_sym_t *)(elf_base + symtab->sh_offset);
+    int num_syms = symtab->sh_size / sizeof(elf64_sym_t);
+    const char *strtab_data = (const char *)(elf_base + strtab->sh_offset);
+    const char *shstrtab_data = shstrtab ? (const char *)(elf_base + shstrtab->sh_offset) : NULL;
+    
+    int reloc_count = 0;
+    int ext_reloc_count = 0;
+    int error_count = 0;
+    
+    /* 遍历所有节，查找 RELA 节 */
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        uint32_t sh_type;
+        module_memcpy(&sh_type, &shdrs[i].sh_type, sizeof(uint32_t));
+        
+        if (sh_type != SHT_RELA) continue;
+        
+        uint32_t sh_info;
+        module_memcpy(&sh_info, &shdrs[i].sh_info, sizeof(uint32_t));
+        
+        /* 检查目标节是否有效 */
+        if (sh_info >= (uint32_t)ehdr->e_shnum) continue;
+        
+        /* 获取目标节的信息 */
+        uint64_t target_offset, target_size;
+        module_memcpy(&target_offset, &shdrs[sh_info].sh_offset, sizeof(uint64_t));
+        module_memcpy(&target_size, &shdrs[sh_info].sh_size, sizeof(uint64_t));
+        
+        /* 跳过 .eh_frame 的重定位 */
+        if (shstrtab_data) {
+            uint32_t sh_name;
+            module_memcpy(&sh_name, &shdrs[sh_info].sh_name, sizeof(uint32_t));
+            const char *sec_name = shstrtab_data + sh_name;
+            /* 简单检查是否是 .eh_frame */
+            if (sec_name[0] == '.' && sec_name[1] == 'e' && sec_name[2] == 'h') {
+                continue;
+            }
+        }
+        
+        const elf64_rela_t *relas = (const elf64_rela_t *)(elf_base + shdrs[i].sh_offset);
+        int num_relas = shdrs[i].sh_size / sizeof(elf64_rela_t);
+        
+        launcher_log("Processing .rela section...");
+        
+        for (int j = 0; j < num_relas; j++) {
+            uint64_t r_offset = relas[j].r_offset;
+            uint64_t r_info = relas[j].r_info;
+            int64_t r_addend = relas[j].r_addend;
+            
+            uint32_t sym_idx = ELF64_R_SYM(r_info);
+            uint32_t type = ELF64_R_TYPE(r_info);
+            
+            if (sym_idx >= (uint32_t)num_syms) {
+                launcher_log("Invalid symbol index in relocation");
+                error_count++;
+                continue;
+            }
+            
+            /* 获取符号信息 */
+            uint64_t sym_value;
+            uint16_t sym_shndx;
+            module_memcpy(&sym_value, &syms[sym_idx].st_value, sizeof(uint64_t));
+            module_memcpy(&sym_shndx, &syms[sym_idx].st_shndx, sizeof(uint16_t));
+            
+            const char *sym_name = strtab_data + syms[sym_idx].st_name;
+            
+            /* 计算符号地址 S */
+            uint64_t S;
+            if (sym_shndx == 0) {
+                /* 外部符号 - 需要从内核查找 */
+                S = find_external_symbol(sym_name);
+                if (S == 0) {
+                    launcher_log("External symbol not found:");
+                    launcher_log(sym_name);
+                    error_count++;
+                    continue;
+                }
+                ext_reloc_count++;
+            } else {
+                /* 内部符号 - 需要找到符号所在节的文件偏移 */
+                /* sym_value 是节内偏移，需要加上节的文件偏移 */
+                if (sym_shndx < (uint16_t)ehdr->e_shnum) {
+                    uint64_t sec_offset;
+                    module_memcpy(&sec_offset, &shdrs[sym_shndx].sh_offset, sizeof(uint64_t));
+                    S = (uint64_t)elf_base + sec_offset + sym_value;
+                } else {
+                    launcher_log("Invalid section index for symbol");
+                    error_count++;
+                    continue;
+                }
+            }
+            
+            /* 目标地址 P */
+            uint64_t P = (uint64_t)elf_base + target_offset + r_offset;
+            
+            /* 应用重定位 */
+            int64_t result;
+            uint32_t *target32;
+            uint64_t *target64;
+            
+            switch (type) {
+                case R_X86_64_NONE:
+                    break;
+                    
+                case R_X86_64_64:
+                    /* S + A */
+                    target64 = (uint64_t *)P;
+                    *target64 = S + r_addend;
+                    reloc_count++;
+                    break;
+                    
+                case R_X86_64_PC32:
+                    /* S + A - P */
+                    result = (int64_t)S + r_addend - (int64_t)P;
+                    target32 = (uint32_t *)P;
+                    *target32 = (uint32_t)(result & 0xFFFFFFFF);
+                    reloc_count++;
+                    break;
+                    
+                case R_X86_64_PLT32:
+                    /* PLT 重定位 - 对于我们的情况，转换为直接调用 */
+                    /* L + A - P，其中 L = S（我们没有 PLT） */
+                    result = (int64_t)S + r_addend - (int64_t)P;
+                    target32 = (uint32_t *)P;
+                    *target32 = (uint32_t)(result & 0xFFFFFFFF);
+                    reloc_count++;
+                    break;
+                    
+                case R_X86_64_32:
+                case R_X86_64_32S:
+                    /* S + A (32-bit) */
+                    result = (int64_t)S + r_addend;
+                    target32 = (uint32_t *)P;
+                    *target32 = (uint32_t)(result & 0xFFFFFFFF);
+                    reloc_count++;
+                    break;
+                    
+                case R_X86_64_RELATIVE:
+                    /* B + A (基址重定位) */
+                    target64 = (uint64_t *)P;
+                    *target64 = (uint64_t)elf_base + r_addend;
+                    reloc_count++;
+                    break;
+                    
+                case R_X86_64_GOTPCRELX:
+                case R_X86_64_REX_GOTPCRELX:
+                    /* GOTPCRELX 重定位 - 将 GOT 间接访问转换为直接访问 */
+                    /* G + GOT + A - P，其中 G = S - GOT */
+                    /* 由于我们没有 GOT，直接使用 S + A - P */
+                    result = (int64_t)S + r_addend - (int64_t)P;
+                    target32 = (uint32_t *)P;
+                    *target32 = (uint32_t)(result & 0xFFFFFFFF);
+                    reloc_count++;
+                    break;
+                    
+                default:
+                    launcher_log_hex("Unsupported relocation type: ", type);
+                    error_count++;
+                    break;
+            }
+        }
+    }
+    
+    launcher_log_hex("Relocations applied: ", reloc_count);
+    launcher_log_hex("External relocations: ", ext_reloc_count);
+    launcher_log_hex("Relocation errors: ", error_count);
+    
+    return error_count;
 }
 
 /* ========== 核心实现 ========== */
@@ -374,10 +802,20 @@ int init_launcher_start(void) {
     uint32_t data_size = arch_section->data_size;
     uint32_t total_size = code_size + data_size;
     
+    /* 如果使用 legacy 字段，优先使用它们 */
+    if (header->legacy_code_size > 0) {
+        code_offset = header->legacy_code_offset;
+        code_size = header->legacy_code_size;
+        data_size = header->legacy_data_size;
+        total_size = code_size + data_size;
+        launcher_log("Using legacy code fields from header");
+    }
+    
     launcher_log("Module sizes:");
     launcher_log_hex(" code=", code_size);
     launcher_log_hex(", data=", data_size);
     launcher_log_hex(", total=", total_size);
+    launcher_log_hex(" code_offset=", code_offset);
     launcher_log("\n");
     
     /* 对齐到页 */
@@ -400,13 +838,40 @@ int init_launcher_start(void) {
     
     launcher_log("Code loaded to physical memory");
     
+    /* 步骤7.5: 应用 ELF 重定位 */
+    launcher_log("Step 7.5: Applying ELF relocations...");
+    
+    int reloc_result = apply_elf_relocations((uint8_t *)phys_addr, code_size);
+    if (reloc_result != 0) {
+        launcher_log_hex("WARNING: Relocation had errors: ", reloc_result);
+        /* 继续执行，某些重定位错误可能是可以忽略的 */
+    } else {
+        launcher_log("Relocations applied successfully");
+    }
+    
     /* 步骤8: 启动模块管理器 */
     launcher_log("Step 8: Starting module_manager...");
     
-    /* 入口点 = 物理地址 + 入口函数偏移 */
-    uint64_t entry_point = phys_addr + entry_offset;
+    /* 从 ELF 符号表查找真正的入口函数 */
+    uint64_t elf_entry_offset = 0;
+    int found_entry = find_elf_entry_ex((const uint8_t *)phys_addr, code_size, &elf_entry_offset);
+    
+    uint64_t entry_point;
+    uint64_t final_entry_offset;
+    if (found_entry) {
+        /* 使用 ELF 符号表中找到的入口点（即使偏移是 0 也是有效的） */
+        entry_point = phys_addr + elf_entry_offset;
+        final_entry_offset = elf_entry_offset;
+        launcher_log("Found ELF entry point from symbol table");
+    } else {
+        /* 回退到 arch_section 中的 entry_offset */
+        entry_point = phys_addr + entry_offset;
+        final_entry_offset = entry_offset;
+        launcher_log("Using arch_section entry_offset (fallback)");
+    }
+    
     launcher_log_hex("Entry point (phys): ", entry_point);
-    launcher_log_hex("Entry offset: ", entry_offset);
+    launcher_log_hex("Entry offset: ", final_entry_offset);
     
     status = module_domain_start(new_domain, entry_point);
     
@@ -422,14 +887,24 @@ int init_launcher_start(void) {
     g_launcher_ctx.module_manager_loaded = 1;
     g_launcher_ctx.module_manager_domain = new_domain;
     
-    /* 主服务循环 - 等待请求 */
+    /* 等待 module_manager 初始化 */
+    for (int i = 0; i < 1000; i++) {
+        thread_yield();
+    }
+    
+    launcher_log("Init launcher entering idle mode");
+    launcher_log("System services are running");
+    
+    /* 主服务循环 - 提供简单的命令行交互 */
     int count = 0;
     while (1) {
         thread_yield();
         count++;
         
-        if (count > 1000000) {
+        /* 每 10000000 次循环打印一次心跳 */
+        if (count > 10000000) {
             count = 0;
+            launcher_log("[INIT] Heartbeat - system running");
         }
     }
     

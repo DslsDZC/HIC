@@ -13,6 +13,12 @@
  * 3. 减少不必要的函数调用
  * 
  * 目标：系统调用延迟 20-30ns
+ * 
+ * 兼容层系统调用：
+ * - CHAL (0x1000+): 核心硬件抽象层
+ * - AAL  (0x1100+): 架构适配层
+ * - IMAL (0x1200+): 隔离机制抽象层
+ * - PFL  (0x1300+): 平台特性层
  */
 
 #include "syscall.h"
@@ -25,6 +31,8 @@
 #include "monitor.h"
 #include "include/service_registry.h"
 #include "lib/console.h"
+#include "include/hal.h"
+#include "hardware_probe.h"
 
 /* 审计控制：热路径禁用同步审计 */
 #define SYSCALL_AUDIT_ENABLED  0
