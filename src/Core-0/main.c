@@ -296,22 +296,30 @@ void kernel_main(void *info)
     /* ==================== 第八阶段：主循环 ==================== */
     
     console_puts("[BOOT] Starting main loop, calling schedule()...\n");
-    
+
     while (1) {
         /* 中断直接送达服务，无需主循环轮询（精简设计） */
-        
+
         /* 调度器：执行上下文切换到下一个线程 */
-        schedule();
-        
+        thread_t *next = schedule();
+
+        /* 检查是否有可用线程 */
+        if (next == NULL) {
+            /* 无可用线程，进入空闲状态 */
+            console_puts("[BOOT] No threads ready, entering idle state\n");
+            for (volatile int i = 0; i < 1000000; i++) { /* 空闲循环 */ }
+            continue;
+        }
+
         /* 处理定时器 */
         timer_update();
-        
+
         /* 执行内核维护任务 */
         kernel_maintenance_tasks();
-        
+
         /* 短暂延迟后继续调度（避免忙等待） */
         /* 注意：在生产环境中应使用定时器中断唤醒 */
-        for (volatile int i = 0; i < 1000; i++) { /* 简单延迟 */ }
+        for (volatile int i = 0; i < 100; i++) { /* 简单延迟（优化：从1000降到100） */ }
     }
     
 panic:

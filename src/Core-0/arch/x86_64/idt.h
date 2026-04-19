@@ -82,4 +82,19 @@ extern void irq_common_stub(void);
 extern void isr_fast_stub(void);
 extern void isr_128(void);
 
+/* ==================== SYSCALL MSR 初始化 ==================== */
+
+/**
+ * @brief 初始化 SYSCALL/SYSRETQ 指令支持
+ * 
+ * 设置以下 MSR：
+ * - IA32_STAR (0xC0000081): 段选择子 [63:48]=用户CS, [47:32]=内核CS
+ * - IA32_LSTAR (0xC0000082): syscall 入口点地址
+ * - IA32_SFMASK (0xC0000084): RFLAGS 清除掩码
+ * - IA32_EFER.SCE (0xC0000080): 启用 SYSCALL 指令
+ * 
+ * 必须在 GDT 初始化后调用
+ */
+void syscall_init(void);
+
 #endif /* HIC_ARCH_X86_64_IDT_H */

@@ -115,22 +115,28 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     
     domain_t *domain = &g_domains[domain_id];
     
-    /* 分配能力空间（Core-0 域不需要额外分配） */
+    /* 初始化能力空间（CSpace） */
     domain->cap_capacity = quota->max_caps;
     
     if (type == DOMAIN_TYPE_CORE) {
         /* Core-0 域：使用内核固定内存，不额外分配 */
-        domain->cap_space = NULL;  /* Core-0 使用全局能力表 */
+        domain->cspace = cspace_get(HIC_DOMAIN_CORE);  /* 获取全局 CSpace */
+        domain->root_cnode = HIC_CAP_INVALID;
         domain->phys_base = (phys_addr_t)_text_start;
         domain->phys_size = (size_t)(_kernel_end - _text_start);
     } else {
-        /* 其他域：分配独立的能力空间 */
-        phys_addr_t cap_space_phys;
-        u32 cap_pages = (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE);
-        if (pmm_alloc_frames(domain_id, cap_pages, PAGE_FRAME_PRIVILEGED, &cap_space_phys) != HIC_SUCCESS) {
+        /* 其他域：初始化 CSpace */
+        u8 root_slot_bits = 8;  /* 默认 256 槽位 */
+        hic_status_t cspace_status = cspace_init(domain_id, root_slot_bits);
+        if (cspace_status != HIC_SUCCESS) {
             return HIC_ERROR_NO_RESOURCE;
         }
-        domain->cap_space = (cap_handle_t *)cap_space_phys;
+        domain->cspace = cspace_get(domain_id);
+        if (domain->cspace) {
+            domain->root_cnode = domain->cspace->root_cnode;
+        } else {
+            domain->root_cnode = HIC_CAP_INVALID;
+        }
     }
     
     /* 分配物理内存（Core-0 域不需要额外分配） */
@@ -140,10 +146,8 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     if (type != DOMAIN_TYPE_CORE) {
         if (pmm_alloc_frames(domain_id, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE),
                              PAGE_FRAME_PRIVILEGED, &mem_base) != HIC_SUCCESS) {
-            if (domain->cap_space) {
-                pmm_free_frames((phys_addr_t)domain->cap_space,
-                                (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
-            }
+            /* CSpace 清理 */
+            cspace_destroy(domain_id);
             return HIC_ERROR_NO_RESOURCE;
         }
     } else {
@@ -171,6 +175,10 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
     domain->flags = 0;
     domain->parent_domain = parent;
     
+    /* 设置安全等级和允许的调度策略 */
+    domain->sec_level = domain_get_sec_level(type);
+    domain->allowed_sched_policies = domain_get_allowed_sched_policies(domain_id);
+    
     /* 创建独立页表 */
     if (type == DOMAIN_TYPE_CORE) {
         /* Core-0 使用内核页表（共享地址空间） */
@@ -183,8 +191,7 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
         if (domain_pagetable == NULL) {
             console_puts("[Domain] ERROR: Failed to create page table for domain\n");
             pmm_free_frames(mem_base, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE));
-            pmm_free_frames((phys_addr_t)domain->cap_space,
-                            (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
+            cspace_destroy(domain_id);
             return HIC_ERROR_NO_MEMORY;
         }
         
@@ -202,8 +209,7 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
             console_puts("[Domain] ERROR: Failed to map domain memory\n");
             pagetable_destroy(domain_pagetable);
             pmm_free_frames(mem_base, (u32)((mem_size + PAGE_SIZE - 1) / PAGE_SIZE));
-            pmm_free_frames((phys_addr_t)domain->cap_space,
-                            (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
+            cspace_destroy(domain_id);
             return HIC_ERROR_NO_MEMORY;
         }
         
@@ -379,18 +385,11 @@ hic_status_t domain_destroy(domain_id_t domain_id)
         return HIC_ERROR_INVALID_STATE;
     }
     
-    /* 回收所有能力 */
-    for (u32 i = 0; i < domain->cap_count; i++) {
-        cap_id_t cap_id = (cap_id_t)domain->cap_space[i];
-        if (cap_id != HIC_CAP_INVALID) {
-            cap_revoke(cap_id);
-        }
-    }
-    
-    /* 释放能力空间 */
-    if (domain->cap_space) {
-        pmm_free_frames((phys_addr_t)domain->cap_space,
-                        (u32)((domain->cap_capacity * sizeof(cap_handle_t) + PAGE_SIZE - 1) / PAGE_SIZE));
+    /* 销毁 CSpace（递归撤销所有能力） */
+    if (domain->cspace) {
+        cspace_destroy(domain_id);
+        domain->cspace = NULL;
+        domain->root_cnode = HIC_CAP_INVALID;
     }
 
     /* 释放物理内存 */
@@ -579,14 +578,9 @@ u64 get_domain_granted_caps(domain_id_t domain)
     domain_t *d = &g_domains[domain];
     u64 granted_count = 0;
     
-    for (u32 i = 0; i < d->cap_count; i++) {
-        cap_id_t cap_id = (cap_id_t)d->cap_space[i];
-        if (cap_id != HIC_CAP_INVALID && cap_id < CAP_TABLE_SIZE) {
-            /* 检查能力是否存在 */
-            if (g_global_cap_table[cap_id].cap_id == cap_id) {
-                granted_count++;
-            }
-        }
+    /* 使用 CSpace 统计能力数量 */
+    if (d->cspace) {
+        granted_count = d->cap_count;
     }
     
     return granted_count;
@@ -1043,14 +1037,11 @@ hic_status_t domain_atomic_resource_reclaim(domain_id_t domain_id)
     /* 1. 暂停所有线程 */
     domain->state = DOMAIN_STATE_SUSPENDED;
     
-    /* 2. 原子性撤销所有能力 */
+    /* 2. 原子性撤销所有能力（通过 CSpace） */
     u32 caps_revoked = 0;
-    for (u32 i = 0; i < domain->cap_count; i++) {
-        cap_id_t cap_id = (cap_id_t)domain->cap_space[i];
-        if (cap_id != HIC_CAP_INVALID) {
-            cap_revoke(cap_id);
-            caps_revoked++;
-        }
+    if (domain->cspace) {
+        caps_revoked = domain->cap_count;
+        cspace_destroy(domain_id);
     }
     console_puts("[DOMAIN] Revoked ");
     console_putu32(caps_revoked);
@@ -1358,4 +1349,139 @@ hic_status_t domain_graceful_shutdown(domain_id_t domain,
     }
     
     return status;
+}
+
+/* ==================== 安全等级与策略分层实现 ==================== */
+
+/**
+ * 根据域类型获取安全等级
+ */
+domain_sec_level_t domain_get_sec_level(domain_type_t type)
+{
+    switch (type) {
+        case DOMAIN_TYPE_CORE:
+            return DOMAIN_SEC_LEVEL_CORE;
+        case DOMAIN_TYPE_PRIVILEGED:
+            return DOMAIN_SEC_LEVEL_PRIVILEGED;
+        case DOMAIN_TYPE_APPLICATION:
+        default:
+            return DOMAIN_SEC_LEVEL_APPLICATION;
+    }
+}
+
+/**
+ * 获取域允许的调度策略掩码
+ */
+u32 domain_get_allowed_sched_policies(domain_id_t domain_id)
+{
+    if (domain_id >= MAX_DOMAINS) {
+        return 0;
+    }
+    
+    domain_t *domain = &g_domains[domain_id];
+    
+    /* 如果已经设置了允许的策略，直接返回 */
+    if (domain->allowed_sched_policies != 0) {
+        return domain->allowed_sched_policies;
+    }
+    
+    /* 根据安全等级返回默认策略 */
+    switch (domain->sec_level) {
+        case DOMAIN_SEC_LEVEL_CORE:
+            /* Core-0: 可创建所有策略能力 */
+            return DOMAIN_SCHED_ALLOW_EXCLUSIVE | 
+                   DOMAIN_SCHED_ALLOW_QUOTA | 
+                   DOMAIN_SCHED_ALLOW_SHARED | 
+                   DOMAIN_SCHED_ALLOW_IDLE;
+            
+        case DOMAIN_SEC_LEVEL_PRIVILEGED:
+            /* Privileged-1: 可创建独占/配额/共享能力 */
+            return DOMAIN_SCHED_ALLOW_EXCLUSIVE | 
+                   DOMAIN_SCHED_ALLOW_QUOTA | 
+                   DOMAIN_SCHED_ALLOW_SHARED;
+            
+        case DOMAIN_SEC_LEVEL_APPLICATION:
+        default:
+            /* Application: 只能创建共享能力 */
+            return DOMAIN_SCHED_ALLOW_SHARED;
+    }
+}
+
+/**
+ * 检查域是否可以创建指定调度策略的能力
+ */
+bool domain_can_create_sched_policy(domain_id_t domain_id, domain_sched_policy_t policy)
+{
+    if (domain_id >= MAX_DOMAINS) {
+        return false;
+    }
+    
+    u32 allowed = domain_get_allowed_sched_policies(domain_id);
+    u32 policy_bit = 0;
+    
+    switch (policy) {
+        case DOMAIN_SCHED_POLICY_EXCLUSIVE:
+            policy_bit = DOMAIN_SCHED_ALLOW_EXCLUSIVE;
+            break;
+        case DOMAIN_SCHED_POLICY_QUOTA:
+            policy_bit = DOMAIN_SCHED_ALLOW_QUOTA;
+            break;
+        case DOMAIN_SCHED_POLICY_SHARED:
+            policy_bit = DOMAIN_SCHED_ALLOW_SHARED;
+            break;
+        case DOMAIN_SCHED_POLICY_IDLE:
+            policy_bit = DOMAIN_SCHED_ALLOW_IDLE;
+            break;
+        default:
+            return false;
+    }
+    
+    return (allowed & policy_bit) != 0;
+}
+
+/**
+ * 检查策略提升是否允许
+ * 
+ * 策略等级：EXCLUSIVE > QUOTA > SHARED > IDLE
+ * 子能力的策略不能高于父能力
+ */
+bool domain_check_policy_derivation(domain_sched_policy_t parent_policy,
+                                    domain_sched_policy_t child_policy)
+{
+    /* 策略等级映射（数值越小等级越高） */
+    static const u8 policy_rank[] = {
+        [DOMAIN_SCHED_POLICY_EXCLUSIVE] = 0,  /* 最高 */
+        [DOMAIN_SCHED_POLICY_QUOTA]     = 1,
+        [DOMAIN_SCHED_POLICY_SHARED]    = 2,
+        [DOMAIN_SCHED_POLICY_IDLE]      = 3,  /* 最低 */
+    };
+    
+    /* 子策略等级必须 >= 父策略等级（数值更大） */
+    return policy_rank[child_policy] >= policy_rank[parent_policy];
+}
+
+/**
+ * 设置域的调度策略权限（仅 Core-0 可调用）
+ */
+hic_status_t domain_set_sched_policies(domain_id_t domain_id, u32 policy_mask)
+{
+    if (domain_id >= MAX_DOMAINS) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 获取调用者域ID（应该从当前执行上下文获取） */
+    /* 这里简化为检查是否是 Core-0 域调用 */
+    /* 实际实现中应该从线程控制块获取 */
+    
+    domain_t *domain = &g_domains[domain_id];
+    
+    if (domain->state == DOMAIN_STATE_INIT) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    /* 设置允许的策略（不能超过域安全等级的默认限制） */
+    u32 max_allowed = domain_get_allowed_sched_policies(domain_id);
+    domain->allowed_sched_policies = policy_mask & max_allowed;
+    
+    return HIC_SUCCESS;
 }

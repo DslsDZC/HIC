@@ -74,15 +74,18 @@ static void thread_exit_handler(void)
     extern void serial_print(const char*);
     extern thread_t idle_thread;
     serial_print("[THREAD_EXIT] Thread completed, calling schedule()\n");
-    
+
+    /* 保存g_current_thread指针，因为schedule()会修改它 */
+    thread_t *exiting_thread = g_current_thread;
+
     /* 线程完成，标记为终止状态 */
-    if (g_current_thread != NULL && g_current_thread != &idle_thread) {
-        g_current_thread->state = THREAD_STATE_TERMINATED;
+    if (exiting_thread != NULL && exiting_thread != &idle_thread) {
+        exiting_thread->state = THREAD_STATE_TERMINATED;
     }
-    
+
     /* 让出CPU，调度下一个线程 */
     schedule();
-    
+
     /* 不应该到达这里 */
     serial_print("[THREAD_EXIT] ERROR: Returned from schedule()!\n");
     while (1) {
@@ -509,6 +512,76 @@ hic_status_t thread_bind_to_core(thread_id_t thread_id, u32 logical_core_id)
     thread->flags |= THREAD_FLAG_BOUND;
     
     atomic_exit_critical(irq);
+    
+    return HIC_SUCCESS;
+}
+
+/* 迁移线程到另一个逻辑核心（显式迁移，AMP 机制） */
+hic_status_t thread_migrate(thread_id_t thread_id, u32 target_logical_core_id)
+{
+    if (thread_id >= MAX_THREADS) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    extern logical_core_t g_logical_cores[];
+    if (target_logical_core_id >= MAX_LOGICAL_CORES) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+    
+    thread_t *thread = &g_threads[thread_id];
+    logical_core_t *target_core = &g_logical_cores[target_logical_core_id];
+    
+    /* 验证目标核心所有权（必须属于同一线程的域） */
+    if (target_core->owner_domain != thread->domain_id) {
+        return HIC_ERROR_PERMISSION_DENIED;
+    }
+    
+    /* 验证目标核心状态 */
+    if (target_core->state != LOGICAL_CORE_STATE_ALLOCATED &&
+        target_core->state != LOGICAL_CORE_STATE_ACTIVE) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    bool irq = atomic_enter_critical();
+    
+    u32 old_core_id = thread->logical_core_id;
+    
+    /* 如果线程正在运行，不能迁移 */
+    if (thread->state == THREAD_STATE_RUNNING) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_INVALID_STATE;
+    }
+    
+    /* 从旧核心队列移除（如果在队列中） */
+    if (old_core_id < MAX_LOGICAL_CORES && thread->state == THREAD_STATE_READY) {
+        /* 注意：简化实现，实际应该从调度器队列中移除 */
+        /* 这里只是标记状态，调度器会在下次调度时处理 */
+    }
+    
+    /* 更新绑定 */
+    thread->logical_core_id = target_logical_core_id;
+    thread->flags |= THREAD_FLAG_BOUND;
+    
+    /* 更新目标核心状态 */
+    if (target_core->state == LOGICAL_CORE_STATE_ALLOCATED) {
+        target_core->state = LOGICAL_CORE_STATE_ACTIVE;
+    }
+    
+    /* 如果线程是 READY 状态，需要重新入队到新核心 */
+    if (thread->state == THREAD_STATE_READY) {
+        /* 通知调度器重新入队 */
+        thread_ready(thread_id);
+    }
+    
+    atomic_exit_critical(irq);
+    
+    console_puts("[THREAD] Migrated thread ");
+    console_putu32(thread_id);
+    console_puts(" from core ");
+    console_putu32(old_core_id);
+    console_puts(" to core ");
+    console_putu32(target_logical_core_id);
+    console_puts("\n");
     
     return HIC_SUCCESS;
 }

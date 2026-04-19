@@ -45,6 +45,14 @@ typedef enum {
     LOGICAL_CORE_STATE_SUSPENDED,
 } logical_core_state_t;
 
+/* 调度策略（能力驱动） */
+typedef enum {
+    SCHED_POLICY_EXCLUSIVE,   /* 独占模式：无抢占，严格实时 */
+    SCHED_POLICY_QUOTA,       /* 配额模式：CBS 带宽服务器 */
+    SCHED_POLICY_SHARED,      /* 共享模式：优先级 + 时间片 */
+    SCHED_POLICY_IDLE,        /* 空闲模式：最低优先级 */
+} sched_policy_t;
+
 /* 借用状态 */
 typedef enum {
     BORROW_STATE_NONE,
@@ -89,6 +97,12 @@ typedef struct logical_core {
     logical_core_id_t logical_core_id;
     logical_core_state_t state;
     logical_core_flags_t flags;
+    
+    /* 调度策略（能力驱动） */
+    sched_policy_t sched_policy;      /* 调度策略：EXCLUSIVE/QUOTA/SHARED/IDLE */
+    u64 sched_period;                 /* 配额周期（纳秒），仅 QUOTA 模式 */
+    u64 sched_deadline;               /* 当前周期截止时间 */
+    u64 sched_runtime;                /* 当前周期已运行时间 */
     
     domain_id_t owner_domain;
     cap_handle_t capability_handle;

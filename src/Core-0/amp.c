@@ -65,7 +65,19 @@ static void send_ipi(u32 apic_id, u32 vector)
 {
     u32 icr = vector | (apic_id << 24) | (1 << 14);
     lapic_write(LAPIC_ICR, icr);
+
+    /* 添加超时机制，防止硬件故障时永久等待 */
+    u32 timeout = 10000;  /* 10ms超时 */
     while (lapic_read(LAPIC_ICR) & (1 << 12)) {
+        if (--timeout == 0) {
+            console_puts("[AMP] ERROR: LAPIC ICR timeout, APIC ID: ");
+            console_putu32(apic_id);
+            console_puts(", Vector: ");
+            console_putu32(vector);
+            console_puts("\n");
+            kernel_panic("LAPIC ICR timeout - APIC may be in invalid state");
+            break;
+        }
         hal_idle();
     }
 }

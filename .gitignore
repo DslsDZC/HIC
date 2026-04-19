@@ -7,7 +7,7 @@ build/
 output/
 iso_output/
 safec/
-
+*.md
 .toolchains
 
 # Python

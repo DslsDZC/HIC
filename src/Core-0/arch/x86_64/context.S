@@ -234,3 +234,43 @@ context_switch:
     ret
 
 .size context_switch, .-context_switch
+
+/* x86_64_context_switch 别名 */
+.global x86_64_context_switch
+.set x86_64_context_switch, context_switch
+
+/* ==================== 上下文初始化 ==================== */
+
+/**
+ * 初始化新线程上下文
+ * 参数: rdi = ctx (上下文结构指针)
+ *       rsi = entry (线程入口函数)
+ *       rdx = stack (栈顶指针)
+ */
+.global x86_64_context_init
+.type x86_64_context_init, @function
+x86_64_context_init:
+    /* 清零上下文结构 */
+    pushq %rdi
+    movq %rdi, %rcx
+    movq $136 / 8, %r8         /* 上下文大小 / 8 */
+    xorq %rax, %rax
+1:
+    movq %rax, (%rcx)
+    addq $8, %rcx
+    decq %r8
+    jnz 1b
+    popq %rdi
+
+    /* 设置栈指针 (offset 48) */
+    movq %rdx, 48(%rdi)        /* ctx->sp = stack */
+
+    /* 设置指令指针 (offset 120) */
+    movq %rsi, 120(%rdi)       /* ctx->pc = entry */
+
+    /* 设置默认 RFLAGS (offset 128) - 启用中断 */
+    movq $0x202, 128(%rdi)     /* IF=1, 保留位=1 */
+
+    ret
+
+.size x86_64_context_init, .-x86_64_context_init

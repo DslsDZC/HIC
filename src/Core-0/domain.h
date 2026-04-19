@@ -22,6 +22,21 @@ typedef enum {
     DOMAIN_TYPE_APPLICATION,   /* Application-3应用 */
 } domain_type_t;
 
+/* 域安全等级（用于能力策略分层） */
+typedef enum {
+    DOMAIN_SEC_LEVEL_CORE,       /* Core-0: 最高权限，可创建任意策略能力 */
+    DOMAIN_SEC_LEVEL_PRIVILEGED, /* Privileged-1: 可创建独占/配额/共享能力 */
+    DOMAIN_SEC_LEVEL_APPLICATION,/* Application: 只能创建/派生共享能力 */
+} domain_sec_level_t;
+
+/* 调度策略（与 logical_core.h 中定义一致） */
+typedef enum {
+    DOMAIN_SCHED_POLICY_EXCLUSIVE,  /* 独占模式：无抢占，严格实时 */
+    DOMAIN_SCHED_POLICY_QUOTA,      /* 配额模式：CBS 带宽服务器 */
+    DOMAIN_SCHED_POLICY_SHARED,     /* 共享模式：优先级 + 时间片 */
+    DOMAIN_SCHED_POLICY_IDLE,       /* 空闲模式：最低优先级 */
+} domain_sched_policy_t;
+
 /* 域状态 */
 typedef enum {
     DOMAIN_STATE_INIT,         /* 初始化中 */
@@ -83,8 +98,9 @@ typedef struct domain {
     /* 页表 */
     virt_addr_t    page_table;    /* 页表基址 */
     
-    /* 能力空间 */
-    cap_handle_t  *cap_space;     /* 能力句柄数组 */
+    /* 能力空间（树状 CSpace） */
+    struct cspace *cspace;        /* CSpace 指针（根 CNode） */
+    cap_id_t       root_cnode;    /* 根 CNode 能力ID（快速访问） */
     u32            cap_count;     /* 当前能力数 */
     u32            cap_capacity;  /* 能力容量 */
     
@@ -131,6 +147,16 @@ typedef struct domain {
     
     /* 父域（用于资源继承） */
     domain_id_t parent_domain;
+    
+    /* 安全等级（用于能力策略分层） */
+    domain_sec_level_t sec_level;
+    
+    /* 允许创建的调度策略掩码 */
+    u32    allowed_sched_policies;
+#define DOMAIN_SCHED_ALLOW_EXCLUSIVE  (1U << 0)  /* 允许创建独占策略能力 */
+#define DOMAIN_SCHED_ALLOW_QUOTA      (1U << 1)  /* 允许创建配额策略能力 */
+#define DOMAIN_SCHED_ALLOW_SHARED     (1U << 2)  /* 允许创建共享策略能力 */
+#define DOMAIN_SCHED_ALLOW_IDLE       (1U << 3)  /* 允许创建空闲策略能力 */
 } domain_t;
 
 /* 全局域数组（供其他模块访问域私有数据） */
@@ -347,5 +373,61 @@ hic_status_t domain_graceful_shutdown(domain_id_t domain,
 #define DOMAIN_FLAG_NEW_INSTANCE  (1U << 9)  /* 新实例（更新目标） */
 #define DOMAIN_FLAG_OLD_INSTANCE  (1U << 10) /* 旧实例（待清理） */
 #define DOMAIN_FLAG_DRAINING      (1U << 11) /* 正在排空连接 */
+
+/* ==================== 安全等级与策略分层 ==================== */
+
+/**
+ * @brief 根据域类型获取安全等级
+ * 
+ * @param type 域类型
+ * @return 安全等级
+ */
+domain_sec_level_t domain_get_sec_level(domain_type_t type);
+
+/**
+ * @brief 检查域是否可以创建指定调度策略的能力
+ * 
+ * 策略分层规则：
+ * - Core-0: 可创建所有策略能力
+ * - Privileged-1: 可创建独占/配额/共享能力
+ * - Application: 只能创建/派生共享能力
+ * 
+ * @param domain_id 域ID
+ * @param policy 调度策略
+ * @return true 允许，false 禁止
+ */
+bool domain_can_create_sched_policy(domain_id_t domain_id, domain_sched_policy_t policy);
+
+/**
+ * @brief 检查策略提升是否允许
+ * 
+ * 派生能力时，子能力的策略不能高于父能力。
+ * 策略等级：EXCLUSIVE > QUOTA > SHARED > IDLE
+ * 
+ * @param parent_policy 父能力策略
+ * @param child_policy 子能力策略
+ * @return true 允许（子策略 <= 父策略），false 禁止
+ */
+bool domain_check_policy_derivation(domain_sched_policy_t parent_policy,
+                                    domain_sched_policy_t child_policy);
+
+/**
+ * @brief 获取域允许的调度策略掩码
+ * 
+ * @param domain_id 域ID
+ * @return 策略掩码
+ */
+u32 domain_get_allowed_sched_policies(domain_id_t domain_id);
+
+/**
+ * @brief 设置域的调度策略权限
+ * 
+ * 仅 Core-0 可调用，用于委托策略权限给子域。
+ * 
+ * @param domain_id 目标域ID
+ * @param policy_mask 策略掩码
+ * @return 状态码
+ */
+hic_status_t domain_set_sched_policies(domain_id_t domain_id, u32 policy_mask);
 
 #endif /* HIC_KERNEL_DOMAIN_H */

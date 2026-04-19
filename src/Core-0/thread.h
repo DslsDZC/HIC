@@ -90,6 +90,9 @@ hic_status_t thread_create(domain_id_t domain_id, virt_addr_t entry_point,
 /* 绑定线程到逻辑核心 */
 hic_status_t thread_bind_to_core(thread_id_t thread_id, u32 logical_core_id);
 
+/* 迁移线程到另一个逻辑核心（显式迁移） */
+hic_status_t thread_migrate(thread_id_t thread_id, u32 target_logical_core_id);
+
 /* 获取线程绑定的逻辑核心 */
 u32 thread_get_bound_core(thread_id_t thread_id);
 

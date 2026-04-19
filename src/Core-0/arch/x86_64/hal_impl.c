@@ -549,8 +549,24 @@ static const hal_arch_ops_t x86_64_hal_ops = {
 
 /**
  * 初始化 x86_64 HAL 并注册操作表
+ * 
+ * 此函数由 hal_init() 通过弱符号机制调用
+ * 
+ * 初始化顺序：
+ * 1. 注册 HAL 操作表
+ * 2. 初始化 GDT（全局描述符表）
+ * 3. 初始化 IDT（中断描述符表，包含 SYSCALL MSR 初始化）
  */
-void x86_64_hal_init(void)
+void arch_hal_init(void)
 {
+    /* 注册架构操作表 */
     hal_register_arch_ops(&x86_64_hal_ops);
+    
+    /* 初始化 GDT（必须在 IDT 之前） */
+    extern void gdt_init(void);
+    gdt_init();
+    
+    /* 初始化 IDT（包含 SYSCALL MSR 初始化） */
+    extern void idt_init(void);
+    idt_init();
 }

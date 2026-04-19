@@ -36,8 +36,8 @@ static struct {
 } g_call_stack[16];
 static u32 g_call_stack_depth = 0;
 
-/* 域上下文保存 */
-static hal_context_t g_domain_contexts[HIC_DOMAIN_MAX];
+/* 域上下文保存（移到数据段，避免栈溢出） */
+static hal_context_t g_domain_contexts[HIC_DOMAIN_MAX] __attribute__((section(".data")));
 
 /* 域页表 */
 static page_table_t* g_domain_pagetables[HIC_DOMAIN_MAX];
@@ -62,65 +62,93 @@ void domain_switch_init(void)
 }
 
 /* 执行域切换（用于能力调用） */
-hic_status_t domain_switch(domain_id_t from, domain_id_t to, 
+hic_status_t domain_switch(domain_id_t from, domain_id_t to,
                            cap_id_t endpoint_cap, u64 syscall_num,
                            u64* args, u32 arg_count)
 {
     (void)arg_count;  /* 避免未使用参数警告 */
     (void)args;       /* 避免未使用参数警告 */
     (void)syscall_num;
-    
+
     /* 验证参数 */
     if (from >= HIC_DOMAIN_MAX || to >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
     /* 验证端点能力 */
     hic_status_t status = cap_check_access(from, endpoint_cap, 0);
     if (status != HIC_SUCCESS) {
         return HIC_ERROR_PERMISSION;
     }
-    
+
     /* 获取端点信息 */
     if (endpoint_cap >= CAP_TABLE_SIZE) {
         return HIC_ERROR_CAP_INVALID;
     }
-    
+
     cap_entry_t *endpoint = &g_global_cap_table[endpoint_cap];
     if (endpoint->cap_id != endpoint_cap) {
         return HIC_ERROR_CAP_INVALID;
     }
-    
-    /* 验证目标域 */
+
+    /* 1. 验证目标域是否存在且已初始化 */
+    if (to >= MAX_DOMAINS) {
+        return HIC_ERROR_INVALID_DOMAIN;
+    }
+    domain_t *target_domain = &g_domains[to];
+    if (target_domain->state != DOMAIN_STATE_READY &&
+        target_domain->state != DOMAIN_STATE_RUNNING) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+    if (target_domain->state == DOMAIN_STATE_TERMINATED) {
+        return HIC_ERROR_INVALID_STATE;
+    }
+
+    /* 验证端点能力的目标域匹配 */
     if (endpoint->endpoint.target != to) {
         return HIC_ERROR_PERMISSION;
     }
-    
+
+    /* 2. 验证域上下文已初始化（避免空指针解引用） */
+    if (g_domain_contexts[to].rsp == 0) {
+        console_puts("[DOMAIN] ERROR: Target domain context not initialized\n");
+        return HIC_ERROR_NO_RESOURCE;
+    }
+
+    /* 3. 验证调用者上下文有效 */
+    if (g_domain_contexts[from].rsp == 0) {
+        console_puts("[DOMAIN] ERROR: Caller domain context not initialized\n");
+        return HIC_ERROR_NO_RESOURCE;
+    }
+
     /* 保存调用者上下文到调用栈 */
     if (g_call_stack_depth < 16) {
         g_call_stack[g_call_stack_depth].domain = from;
         g_call_stack[g_call_stack_depth].return_address = syscall_num;
         hal_save_context(&g_call_stack[g_call_stack_depth].context);
         g_call_stack_depth++;
+    } else {
+        console_puts("[DOMAIN] ERROR: Call stack overflow\n");
+        return HIC_ERROR_NO_RESOURCE;
     }
-    
+
     /* 保存当前域上下文 */
     hal_save_context(&g_domain_contexts[from]);
-    
+
     /* 切换到目标域 */
     g_current_domain = to;
-    
+
     /* 切换页表 */
     if (g_domain_pagetables[to]) {
         pagetable_switch(g_domain_pagetables[to]);
     }
-    
+
     /* 恢复目标域上下文 */
     hal_restore_context(&g_domain_contexts[to]);
-    
+
     /* 记录域切换审计日志 */
     AUDIT_LOG_DOMAIN_SWITCH(from, to, endpoint_cap);
-    
+
     return HIC_SUCCESS;
 }
 
@@ -192,16 +220,22 @@ hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* paget
     if (domain >= HIC_DOMAIN_MAX) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
+    /* 检查指针是否有效 */
+    if (pagetable == NULL) {
+        console_puts("[DOMAIN_SWITCH] ERROR: Invalid pagetable pointer (NULL)\n");
+        return HIC_ERROR_INVALID_PARAM;
+    }
+
     g_domain_pagetables[domain] = pagetable;
-    
+
     /* 使用内核控制台接口输出调试信息 */
     console_puts("[DOMAIN_SWITCH] Set pagetable for domain ");
     console_putu32(domain);
     console_puts(" = 0x");
     console_puthex64((u64)pagetable);
     console_puts("\n");
-    
+
     return HIC_SUCCESS;
 }
 

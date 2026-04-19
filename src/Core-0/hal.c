@@ -385,13 +385,23 @@ bool hal_uart_tx_ready(void)
     return arch_uart_tx_ready(g_uart_config.base_addr);
 }
 
+/* ==================== 架构特定初始化 ==================== */
+
+/* 架构特定初始化函数（弱符号，由 arch/<arch>/hal_impl.c 提供） */
+extern void arch_hal_init(void) __attribute__((weak));
+
 /* ==================== 初始化 ==================== */
 
 void hal_init(void)
 {
     console_puts("[HAL] Initializing...\n");
     
-    /* 架构特定初始化由 arch/<arch>/hal_impl.c 调用 hal_register_arch_ops */
+    /* 调用架构特定初始化（如果存在） */
+    if (arch_hal_init) {
+        arch_hal_init();
+    }
+    
+    /* 检查架构操作表是否已注册 */
     if (g_arch_ops == NULL) {
         console_puts("[HAL] Warning: No architecture operations registered!\n");
     }

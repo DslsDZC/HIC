@@ -110,8 +110,16 @@ void kernel_panic(const char* message, ...)
     
     /* 停止系统 */
     console_puts("[PANIC] System halted\n");
-    
+
+    /* 添加调试输出，帮助定位崩溃原因 */
+    if (message) {
+        console_puts("[PANIC] Panic reason: ");
+        console_puts(message);
+        console_puts("\n");
+    }
+
+    /* 死循环，系统已无法继续运行 */
     while (1) {
-        hal_halt();
+        __asm__ volatile("hlt");
     }
 }

@@ -184,4 +184,101 @@ void idt_init(void)
      * 3. 系统调用：此IDT支持 int 0x80（兼容模式），同时支持 syscall 指令
      *   （通过 syscall_fast_entry）。推荐使用 syscall 指令以获得更好性能。
      */
+    
+    /* 初始化 SYSCALL MSR（必须在 GDT 初始化后） */
+    syscall_init();
+}
+
+/* ==================== MSR 辅助函数 ==================== */
+
+/**
+ * @brief 读取 MSR
+ * @param msr MSR 地址
+ * @return MSR 值
+ */
+static inline uint64_t rdmsr(uint32_t msr)
+{
+    uint32_t low, high;
+    __asm__ volatile (
+        "rdmsr"
+        : "=a"(low), "=d"(high)
+        : "c"(msr)
+    );
+    return ((uint64_t)high << 32) | low;
+}
+
+/**
+ * @brief 写入 MSR
+ * @param msr MSR 地址
+ * @param value MSR 值
+ */
+static inline void wrmsr(uint32_t msr, uint64_t value)
+{
+    uint32_t low = (uint32_t)(value & 0xFFFFFFFFULL);
+    uint32_t high = (uint32_t)(value >> 32);
+    __asm__ volatile (
+        "wrmsr"
+        :
+        : "a"(low), "d"(high), "c"(msr)
+    );
+}
+
+/* ==================== SYSCALL MSR 定义 ==================== */
+
+#define MSR_IA32_EFER      0xC0000080  /* 扩展特性启用寄存器 */
+#define MSR_IA32_STAR      0xC0000081  /* 段选择子 */
+#define MSR_IA32_LSTAR     0xC0000082  /* SYSCALL 入口点 */
+#define MSR_IA32_SFMASK    0xC0000084  /* RFLAGS 掩码 */
+
+#define EFER_SCE           (1ULL << 0) /* SYSCALL/SYSRET 启用 */
+
+/* 外部：syscall 快速入口点（在 fast_path.S 中定义） */
+extern void syscall_fast_entry(void);
+
+/* ==================== SYSCALL MSR 初始化 ==================== */
+
+void syscall_init(void)
+{
+    console_puts("[SYSCALL] Initializing SYSCALL MSR...\n");
+    
+    /* 1. 设置 IA32_STAR: 段选择子
+     * [63:48] = 用户态 CS (SYSRETQ 使用，需 +16 跳过空描述符)
+     * [47:32] = 内核态 CS (SYSCALL 使用)
+     * 
+     * 内核 CS = GDT_KERNEL_CS << 3 = 0x08
+     * 用户 CS = GDT_USER_CS << 3 = 0x18，但 SYSRETQ 使用 0x18+16 = 0x1B
+     */
+    uint64_t star = ((uint64_t)(GDT_USER_CS << 3 | 3) << 48) |  /* 用户态 CS (RPL=3) */
+                    ((uint64_t)(GDT_KERNEL_CS << 3) << 32);      /* 内核态 CS */
+    wrmsr(MSR_IA32_STAR, star);
+    console_puts("[SYSCALL]   STAR=0x");
+    console_puthex64(star);
+    console_puts(" (UserCS=0x1B, KernCS=0x08)\n");
+    
+    /* 2. 设置 IA32_LSTAR: SYSCALL 入口点 */
+    wrmsr(MSR_IA32_LSTAR, (uint64_t)syscall_fast_entry);
+    console_puts("[SYSCALL]   LSTAR=0x");
+    console_puthex64((uint64_t)syscall_fast_entry);
+    console_puts(" (syscall_fast_entry)\n");
+    
+    /* 3. 设置 IA32_SFMASK: RFLAGS 清除掩码
+     * 清除 IF (中断标志) 以在 syscall 入口禁用中断
+     * 清除 TF (陷阱标志) 以禁用单步调试
+     */
+    uint64_t sfmask = (1ULL << 9) |   /* IF - 中断标志 */
+                      (1ULL << 8);    /* TF - 陷阱标志 */
+    wrmsr(MSR_IA32_SFMASK, sfmask);
+    console_puts("[SYSCALL]   SFMASK=0x");
+    console_puthex64(sfmask);
+    console_puts(" (clear IF,TF)\n");
+    
+    /* 4. 启用 SYSCALL 指令 (EFER.SCE) */
+    uint64_t efer = rdmsr(MSR_IA32_EFER);
+    efer |= EFER_SCE;
+    wrmsr(MSR_IA32_EFER, efer);
+    console_puts("[SYSCALL]   EFER=0x");
+    console_puthex64(efer);
+    console_puts(" (SCE enabled)\n");
+    
+    console_puts("[SYSCALL] SYSCALL/SYSRETQ initialized successfully\n");
 }
