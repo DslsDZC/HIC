@@ -966,11 +966,10 @@ hic_status_t update_strategy_blue_green(const char *name,
     ctx->phase_start_time = get_timestamp_ms();
     
     /*
-     * 机制调用：domain_atomic_switch
-     * 策略决策：切换所有服务端点
+     * 机制调用：domain_atomic_switch (IPC 3.0)
+     * 入口页直接路由，无需端点重定向
      */
-    cap_id_t endpoints[1] = { ctx->service_cap };  /* 简化：假设只有一个服务端点 */
-    status = domain_atomic_switch(old_domain, new_domain, endpoints, 1);
+    status = domain_atomic_switch(old_domain, new_domain);
     if (status != HIC_SUCCESS) {
         strcpy(result->error_msg, "Failed to atomic switch");
         goto rollback;
@@ -1070,9 +1069,8 @@ hic_status_t update_strategy_canary(const char *name,
      */
     
     /* 简化实现：直接完成切换 */
-    cap_id_t endpoints[1] = { 0 };
-    status = domain_atomic_switch(old_domain, new_domain, endpoints, 0);
-    
+    status = domain_atomic_switch(old_domain, new_domain);
+
     if (status == HIC_SUCCESS) {
         status = domain_graceful_shutdown(old_domain, 30000, true);
     }
@@ -1139,13 +1137,12 @@ hic_status_t update_strategy_gradual(const char *name,
      * - 验证后再继续
      */
     /* 简化实现：直接切换 */
-    cap_id_t endpoints[1] = { 0 };
-    status = domain_atomic_switch(old_domain, new_domain, endpoints, 0);
-    
+    status = domain_atomic_switch(old_domain, new_domain);
+
     if (status == HIC_SUCCESS) {
         status = domain_graceful_shutdown(old_domain, 30000, true);
     }
-    
+
     result->downtime_ms = 0;
     result->status = status;
     

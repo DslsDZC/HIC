@@ -11,6 +11,7 @@
 
 #include "amp.h"
 #include "hal.h"
+#include "exception.h"
 #include "pmm.h"
 #include "capability.h"
 #include "irq.h"

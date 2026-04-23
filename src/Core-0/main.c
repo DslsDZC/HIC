@@ -284,18 +284,8 @@ void kernel_main(void *info)
     console_puts("[BOOT] Boot state marked as VALID\n");
     
     /* 【最终报告】 */
-    console_puts("\n[BOOT]========================================\n");
-    console_puts("[BOOT] >>> HIC KERNEL BOOT SEQUENCE COMPLETE <<<\n");
-    console_puts("[BOOT]========================================\n");
-    console_puts("[BOOT] All subsystems initialized successfully:\n");
-    console_puts("[BOOT]   - Boot information: VALID\n");
-    console_puts("[BOOT]   - Memory manager: READY\n");
-    console_puts("[BOOT]   - Capability system: READY\n");
-    console_puts("[BOOT]   - Domain system: READY\n");
-    console_puts("[BOOT]   - Scheduler: READY\n");
-    console_puts("[BOOT]========================================\n");
-    console_puts("[BOOT] Entering kernel main loop...\n");
-    console_puts("[BOOT] Privileged-1 services should start via scheduler\n");
+    console_puts("[BOOT] RUN\n");
+
     console_puts("\n");
     
     /* ==================== 第八阶段：主循环 ==================== */

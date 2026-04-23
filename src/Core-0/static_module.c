@@ -402,10 +402,47 @@ int static_module_setup_capabilities(static_module_desc_t *module, u32 runtime_i
     return 0;
 }
 
+/* ==================== 服务入口点查找表 ==================== */
+
+/* 静态服务入口函数（由各服务实现） */
+extern int vga_service_start(void);
+extern int verifier_start(void);
+extern int ide_driver_start(void);
+extern int fat32_service_start(void);
+extern int init_launcher_start(void);
+
+/* 额外服务入口函数 */
+extern int _memory_service_entry(void);
+extern int _device_manager_entry(void);
+extern hic_status_t security_monitor_service_start(void);
+
+/* security_monitor 的包装函数 */
+static int security_monitor_start_wrapper(void) {
+    return (int)security_monitor_service_start();
+}
+
+/* 服务入口点查找表 */
+typedef struct {
+    const char *name;
+    int (*entry_func)(void);
+} service_entry_t;
+
+static const service_entry_t g_service_entries[] = {
+    { "vga_service",     vga_service_start },
+    { "verifier",        verifier_start },
+    { "ide_driver",      ide_driver_start },
+    { "fat32_service",   fat32_service_start },
+    { "memory_service",  _memory_service_entry },
+    { "device_manager",  _device_manager_entry },
+    { "security_monitor", security_monitor_start_wrapper },
+    { "init_launcher",   init_launcher_start },
+    { NULL, NULL }
+};
+
 /* ==================== 服务注册 ==================== */
 
 /**
- * 注册模块的服务端点
+ * 注册模块的服务端点（IPC 3.0）
  */
 int static_module_register_service(static_module_desc_t *module, u32 runtime_idx)
 {
@@ -511,43 +548,6 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
         return -1;
     }
 }
-
-/* ==================== 服务入口点声明 ==================== */
-
-/* 静态服务入口函数（由各服务实现） */
-extern int vga_service_start(void);
-extern int verifier_start(void);
-extern int ide_driver_start(void);
-extern int fat32_service_start(void);
-extern int init_launcher_start(void);
-
-/* 额外服务入口函数 */
-extern int _memory_service_entry(void);
-extern int _device_manager_entry(void);
-extern hic_status_t security_monitor_service_start(void);
-
-/* security_monitor 的包装函数 */
-static int security_monitor_start_wrapper(void) {
-    return (int)security_monitor_service_start();
-}
-
-/* 服务入口点查找表 */
-typedef struct {
-    const char *name;
-    int (*entry_func)(void);  /* 使用正确的函数指针类型 */
-} service_entry_t;
-
-static const service_entry_t g_service_entries[] = {
-    { "vga_service",     vga_service_start },
-    { "verifier",        verifier_start },
-    { "ide_driver",      ide_driver_start },
-    { "fat32_service",   fat32_service_start },
-    { "memory_service",  _memory_service_entry },
-    { "device_manager",  _device_manager_entry },
-    { "security_monitor", security_monitor_start_wrapper },
-    { "init_launcher",   init_launcher_start },
-    { NULL, NULL }  /* 结束标记 */
-};
 
 /* ==================== 模块启动 ==================== */
 

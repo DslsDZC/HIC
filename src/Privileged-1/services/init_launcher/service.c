@@ -49,7 +49,7 @@ extern void *module_memset(void *dst, int c, size_t n);
 
 /* 域操作（由 module_primitives.c 提供） */
 extern uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain);
-extern uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id);
+extern uint64_t module_cap_create_service(uint32_t domain_id, uint32_t *service_id);
 extern uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point);
 extern uint64_t module_memory_alloc(uint32_t domain_id, uint64_t size, uint32_t type, uint64_t *phys_addr);
 
@@ -366,13 +366,13 @@ extern size_t strlen(const char *);
 extern int memcmp(const void *, const void *, size_t);
 extern char *strncpy(char *, const char *, size_t);
 extern void __stack_chk_fail(void);
-extern uint64_t service_register(const char *, uint32_t, uint32_t);
+extern uint64_t module_service_register(const char *, uint32_t, uint32_t);
 extern uint64_t domain_destroy(uint32_t);
 extern int fat32_read_file(const char *, void *, uint32_t, uint32_t *);
 
 /* module_primitives 提供的函数 */
 extern uint64_t module_cap_create_domain(uint32_t, uint32_t *);
-extern uint64_t module_cap_create_endpoint(uint32_t, uint32_t *);
+extern uint64_t module_cap_create_service(uint32_t, uint32_t *);
 extern uint64_t module_domain_start(uint32_t, uint64_t);
 extern void *module_memcpy(void *, const void *, size_t);
 extern void *module_memset(void *, int, size_t);
@@ -397,12 +397,12 @@ static uint64_t find_external_symbol(const char *name) {
         {"memcmp",  (uint64_t)memcmp},
         {"strncpy", (uint64_t)strncpy},
         {"__stack_chk_fail", (uint64_t)__stack_chk_fail},
-        {"service_register", (uint64_t)service_register},
+        {"module_service_register", (uint64_t)module_service_register},
         {"domain_destroy", (uint64_t)domain_destroy},
         {"fat32_read_file", (uint64_t)fat32_read_file},
         /* module_primitives */
         {"module_cap_create_domain", (uint64_t)module_cap_create_domain},
-        {"module_cap_create_endpoint", (uint64_t)module_cap_create_endpoint},
+        {"module_cap_create_service", (uint64_t)module_cap_create_service},
         {"module_domain_start", (uint64_t)module_domain_start},
         {"module_memcpy", (uint64_t)module_memcpy},
         {"module_memset", (uint64_t)module_memset},
@@ -778,15 +778,15 @@ int init_launcher_start(void) {
     /* 步骤6: 创建端点 */
     launcher_log("Step 6: Creating endpoint...");
     
-    uint32_t new_endpoint = 0;
-    status = module_cap_create_endpoint(new_domain, &new_endpoint);
-    
+    uint32_t new_service = 0;
+    status = module_cap_create_service(new_domain, &new_service);
+
     if (status != 0) {
-        launcher_log("ERROR: Failed to create endpoint");
+        launcher_log("ERROR: Failed to create service");
         while (1) { thread_yield(); }
     }
-    
-    launcher_log("Endpoint created");
+
+    launcher_log("Service created");
     
     /* 步骤7: 分配内存并加载模块 */
     launcher_log("Step 7: Loading module code...");

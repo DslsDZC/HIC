@@ -332,9 +332,9 @@ hic_status_t ipc3_deauthorize(ipc3_service_id_t service_id, domain_id_t domain)
     u8 *bitmap = (u8 *)svc->entry_page_virt + ENTRY_BITMAP_OFFSET;
     u32 byte_idx = domain / 8;
     u32 bit_idx  = domain % 8;
-    bitmap[byte_idx] &= ~(1U << bit_idx);
+    bitmap[byte_idx] = (u8)(bitmap[byte_idx] & ~(1U << bit_idx));
 
-    svc->bitmap.bits[byte_idx] &= ~(1U << bit_idx);
+    svc->bitmap.bits[byte_idx] = (u8)(svc->bitmap.bits[byte_idx] & ~(1U << bit_idx));
 
     atomic_exit_critical(irq_state);
 
@@ -381,12 +381,10 @@ bool ipc3_handle_pf(u64 cr2, u64 err_code, u64 *regs)
 
     /* Step 1: find which service's business page was faulted on */
     ipc3_service_t *svc = NULL;
-    ipc3_service_id_t svc_id = IPC3_SERVICE_INVALID;
 
     for (u32 i = 0; i < g_service_count; i++) {
         if (g_services[i].active && g_services[i].business_addr == cr2) {
             svc = &g_services[i];
-            svc_id = (ipc3_service_id_t)i;
             break;
         }
     }
