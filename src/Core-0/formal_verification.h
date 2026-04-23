@@ -41,12 +41,10 @@ typedef struct mem_region {
 typedef enum {
     CAP_MEMORY = 0,
     CAP_DEVICE,
-    CAP_IPC,
     CAP_THREAD,
     CAP_SHARED,
     CAP_CAP_DERIVE,        /* 派生能力 */
     CAP_IRQ,               /* 中断能力 */
-    CAP_ENDPOINT,          /* IPC端点 */
     CAP_SERVICE,           /* 服务能力 */
     CAP_MMIO,              /* MMIO区域能力 */
     CAP_TYPE_COUNT
@@ -56,7 +54,6 @@ typedef enum {
 typedef enum {
     OBJ_MEMORY,
     OBJ_DEVICE,
-    OBJ_IPC,
     OBJ_THREAD,
     OBJ_SHARED,
     OBJ_TYPE_COUNT

@@ -42,7 +42,77 @@ ISR_ERRCODE   10  /* Bad TSS */
 ISR_ERRCODE   11  /* Segment not present */
 ISR_ERRCODE   12  /* Stack fault */
 ISR_ERRCODE   13  /* General protection fault */
-ISR_ERRCODE   14  /* Page fault */
+/* Page fault — custom handler with IPC 3.0 support */
+.global isr_14
+isr_14:
+    push $14        /* 压入中断向量号 */
+    jmp isr_14_handler
+
+isr_14_handler:
+    /* 保存所有通用寄存器（与 isr_common_stub 布局一致） */
+    push %rax
+    push %rbx
+    push %rcx
+    push %rdx
+    push %rsi
+    push %rdi
+    push %rbp
+    push %r8
+    push %r9
+    push %r10
+    push %r11
+    push %r12
+    push %r13
+    push %r14
+    push %r15
+
+    /* 读取 CR2（缺页地址） */
+    mov %cr2, %rax
+
+    /* 调用 ipc3_handle_pf(cr2, err_code, regs_ptr) */
+    mov %rax, %rdi               /* arg1: CR2 */
+    mov 128(%rsp), %rsi          /* arg2: error code (RSP+128) */
+    mov %rsp, %rdx               /* arg3: 指向保存的寄存器数组 */
+    call ipc3_handle_pf
+
+    test %al, %al                /* IPC3 是否处理了此次缺页？ */
+    jnz .ipc3_pf_handled
+
+    /* 非 IPC3 缺页 — 进入正常分发 */
+    mov 120(%rsp), %rdi          /* arg1: 中断向量号 */
+    call irq_dispatch
+    jmp .ipc3_pf_restore
+
+.ipc3_pf_handled:
+    /* IPC3 处理了缺页 — 加载待切换的 CR3 */
+    movq g_ipc3_pending_cr3(%rip), %rax
+    test %rax, %rax
+    jz .ipc3_pf_restore          /* 安全保护 */
+    mov %rax, %cr3               /* 切换到服务域页表 */
+    movq $0, g_ipc3_pending_cr3(%rip)
+
+.ipc3_pf_restore:
+    /* 恢复寄存器（可能已被 ipc3_handle_pf 修改） */
+    pop %r15
+    pop %r14
+    pop %r13
+    pop %r12
+    pop %r11
+    pop %r10
+    pop %r9
+    pop %r8
+    pop %rbp
+    pop %rdi
+    pop %rsi
+    pop %rdx
+    pop %rcx
+    pop %rbx
+    pop %rax
+
+    /* 清除中断向量号和错误码 */
+    add $16, %rsp
+
+    iretq
 ISR_NOERRCODE 15  /* Unknown interrupt */
 ISR_NOERRCODE 16  /* Coprocessor fault */
 ISR_ERRCODE   17  /* Alignment check */
@@ -177,3 +247,69 @@ arch_restore_context:
     movq %rax, %rsp
     movq %rcx, %rdi
     jmp *%rbx
+
+/* ==================== IPC 3.0 Return Trampoline ==================== */
+/*
+ * Called from ipc3_return() after g_ipc3_return_ctx is set.
+ * Restores full caller context from saved context:
+ *   1. Restores callee-saved regs (r15-r8, rbp)
+ *   2. Switches CR3 back to caller's page table
+ *   3. Builds synthetic register frame on caller's stack
+ *   4. Pops all caller registers from synthetic frame
+ *   5. Returns to instruction after original call [entry_page]
+ *
+ * This function never returns — resumes in caller domain.
+ */
+.global ipc3_return_asm
+ipc3_return_asm:
+    cli
+
+    /* Load return context pointer into rbx */
+    movq g_ipc3_return_ctx(%rip), %rbx
+
+    /* Restore r15-r8, rbp */
+    movq 0(%rbx), %r15
+    movq 8(%rbx), %r14
+    movq 16(%rbx), %r13
+    movq 24(%rbx), %r12
+    movq 32(%rbx), %r11
+    movq 40(%rbx), %r10
+    movq 48(%rbx), %r9
+    movq 56(%rbx), %r8
+    movq 64(%rbx), %rbp
+
+    /* Switch CR3 to caller's page table */
+    movq 160(%rbx), %rax
+    movq %rax, %cr3
+
+    /* Get caller's original RSP (return address on top) */
+    movq 144(%rbx), %rax
+
+    /* Point RSP below return address for 6-register synthetic frame */
+    subq $48, %rax
+    movq %rax, %rsp
+
+    /* Write register values to synthetic frame (rdi, rsi, rdx, rcx, rbx, rax) */
+    movq 72(%rbx), %rax
+    movq %rax, 0(%rsp)
+    movq 80(%rbx), %rax
+    movq %rax, 8(%rsp)
+    movq 88(%rbx), %rax
+    movq %rax, 16(%rsp)
+    movq 96(%rbx), %rax
+    movq %rax, 24(%rsp)
+    movq 104(%rbx), %rax
+    movq %rax, 32(%rsp)
+    movq 112(%rbx), %rax
+    movq %rax, 40(%rsp)
+
+    /* Pop all registers from synthetic frame */
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rbx
+    popq %rax
+
+    /* Return to caller (pops return address from original call [entry_page]) */
+    ret

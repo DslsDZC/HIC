@@ -1212,27 +1212,23 @@ static bool is_type_compatible(cap_type_t cap_type, obj_type_t obj_type) {
 
     static const bool compatibility_table[CAP_TYPE_COUNT][OBJ_TYPE_COUNT] = {
 
-        // OBJ_MEMORY, OBJ_DEVICE, OBJ_IPC, OBJ_THREAD, OBJ_SHARED
+        // OBJ_MEMORY, OBJ_DEVICE, OBJ_THREAD, OBJ_SHARED
 
-        [CAP_MEMORY]      = {true,  false, false, false, true },  // 内存能力
+        [CAP_MEMORY]      = {true,  false, false, true },  // 内存能力
 
-        [CAP_DEVICE]      = {false, true,  false, false, false},  // 设备能力
+        [CAP_DEVICE]      = {false, true,  false, false},  // 设备能力
 
-        [CAP_IPC]         = {false, false, true,  false, false},  // IPC能力
+        [CAP_THREAD]      = {false, false, true,  false},  // 线程能力
 
-        [CAP_THREAD]      = {false, false, false, true,  false},  // 线程能力
+        [CAP_SHARED]      = {true,  false, false, true },  // 共享内存能力
 
-        [CAP_SHARED]      = {true,  false, false, false, true },  // 共享内存能力
+        [CAP_CAP_DERIVE]  = {true,  true,  true,  true },  // 派生能力（元能力，可派生任何类型）
 
-        [CAP_CAP_DERIVE]  = {true,  true,  true,  true,  true },  // 派生能力（元能力，可派生任何类型）
+        [CAP_IRQ]         = {false, true,  false, false},  // 中断能力（设备相关）
 
-        [CAP_IRQ]         = {false, true,  false, false, false},  // 中断能力（设备相关）
+        [CAP_SERVICE]     = {false, false, true,  false},  // 服务能力
 
-        [CAP_ENDPOINT]    = {false, false, true,  false, false},  // IPC端点
-
-        [CAP_SERVICE]     = {false, false, true,  true,  false},  // 服务能力（通过IPC通信，需要线程执行）
-
-        [CAP_MMIO]        = {true,  true,  false, false, false},  // MMIO区域（内存/设备）
+        [CAP_MMIO]        = {true,  true,  false, false},  // MMIO区域（内存/设备）
 
     };
 

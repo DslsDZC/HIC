@@ -14,7 +14,7 @@
 #define HIC_CORE0_SERVICE_REGISTRY_H
 
 #include "../types.h"
-#include "../capability.h"
+#include "../ipc3.h"
 
 /* 最大服务数 */
 #define SERVICE_REGISTRY_SIZE 64
@@ -84,13 +84,13 @@ typedef struct service_endpoint {
     char name[64];                /* 服务名称 */
     u8 uuid[16];                  /* 服务 UUID */
     domain_id_t owner;            /* 所属域 */
-    cap_id_t endpoint_cap;        /* 端点能力 ID */
-    cap_handle_t endpoint_handle; /* 端点句柄 */
+    ipc3_service_id_t service_id; /* IPC 3.0 服务ID */
+    virt_addr_t entry_page_va;    /* 入口页虚拟地址 */
     endpoint_type_t type;         /* 端点类型 */
     service_state_t state;        /* 服务状态 */
     u32 version;                  /* API 版本 */
     u32 flags;                    /* 标志 */
-    
+
     /* 流量控制状态 */
     flow_control_state_t flow;    /* 流量控制 */
 } service_endpoint_t;
@@ -104,15 +104,9 @@ void service_registry_init(void);
 hic_status_t service_register_endpoint(const char *name,
                                         const u8 uuid[16],
                                         domain_id_t owner,
-                                        cap_id_t endpoint_cap,
+                                        ipc3_service_id_t service_id,
                                         endpoint_type_t type,
                                         u32 version);
-
-/**
- * @brief 简化版服务注册（兼容接口）
- * 用于动态模块加载器
- */
-hic_status_t service_register(const char *name, domain_id_t owner, cap_id_t endpoint_cap);
 
 hic_status_t service_unregister_endpoint(const char *name);
 
@@ -120,16 +114,11 @@ hic_status_t service_unregister_endpoint(const char *name);
 
 service_endpoint_t* service_find_by_name(const char *name);
 service_endpoint_t* service_find_by_uuid(const u8 uuid[16]);
-service_endpoint_t* service_find_by_cap(cap_id_t cap_id);
 
 /* ==================== 状态管理 ==================== */
 
 hic_status_t service_set_state(const char *name, service_state_t state);
 service_state_t service_get_state(const char *name);
-
-/* ==================== 端点句柄 ==================== */
-
-hic_status_t service_get_endpoint_handle(const char *name, cap_handle_t *handle);
 
 /* ==================== 枚举 ==================== */
 

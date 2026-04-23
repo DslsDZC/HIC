@@ -1166,96 +1166,78 @@ hic_status_t domain_get_parallel_partner(domain_id_t domain, domain_id_t *partne
 }
 
 /**
- * 原子性域切换（机制层）
- * 
+ * 原子性域切换（IPC 3.0）
+ *
  * 安全保证：
  * 1. 旧域线程立即停止调度（设置为 BLOCKED）
  * 2. 新域线程可被调度（设置为 READY）
- * 3. 端点原子重定向
- * 4. 整个过程在临界区保护内
+ * 3. 整个过程在临界区保护内
+ *
+ * 在 IPC 3.0 模型中，跨域调用通过入口页（entry page）直接路由，
+ * 不再需要端点能力重定向。新域通过 re-authorize 机制更新授权。
  */
 hic_status_t domain_atomic_switch(domain_id_t from,
-                                   domain_id_t to,
-                                   cap_id_t *endpoint_caps,
-                                   u32 cap_count) {
+                                   domain_id_t to) {
     if (from >= MAX_DOMAINS || to >= MAX_DOMAINS) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
     domain_t *from_domain = &g_domains[from];
     domain_t *to_domain = &g_domains[to];
-    
-    /* 检查域状态 */
+
     if (from_domain->state != DOMAIN_STATE_RUNNING &&
         from_domain->state != DOMAIN_STATE_READY) {
         return HIC_ERROR_INVALID_STATE;
     }
-    
+
     if (to_domain->state != DOMAIN_STATE_RUNNING &&
         to_domain->state != DOMAIN_STATE_READY) {
         return HIC_ERROR_INVALID_STATE;
     }
-    
+
     bool irq = atomic_enter_critical();
-    
+
     /* 1. 标记旧域为排空状态 */
     from_domain->flags |= DOMAIN_FLAG_DRAINING | DOMAIN_FLAG_OLD_INSTANCE;
     from_domain->state = DOMAIN_STATE_SUSPENDED;
-    
-    /* 2. 阻塞旧域的所有线程（防止继续调度） */
+
+    /* 2. 阻塞旧域的所有线程 */
     extern thread_t g_threads[];
     u32 blocked_count = 0;
     u32 woken_count = 0;
-    
+
     for (u32 i = 0; i < MAX_THREADS; i++) {
         thread_t *t = &g_threads[i];
-        
-        /* 跳过无效线程 */
+
         if (t->thread_id != (thread_id_t)i) {
             continue;
         }
-        
-        /* 处理旧域线程：设置为 BLOCKED */
+
         if (t->domain_id == from) {
             if (t->state == THREAD_STATE_READY || t->state == THREAD_STATE_RUNNING) {
                 t->state = THREAD_STATE_BLOCKED;
                 blocked_count++;
             }
         }
-        
-        /* 处理新域线程：唤醒 */
+
         if (t->domain_id == to) {
             if (t->state == THREAD_STATE_BLOCKED || t->state == THREAD_STATE_WAITING) {
                 t->state = THREAD_STATE_READY;
-                t->time_slice = 100;  /* 重置时间片 */
+                t->time_slice = 100;
                 woken_count++;
             }
         }
     }
-    
-    /* 3. 原子性重定向所有端点 */
-    for (u32 i = 0; i < cap_count && endpoint_caps; i++) {
-        if (endpoint_caps[i] != HIC_CAP_INVALID) {
-            domain_id_t old_target;
-            hic_status_t status = cap_endpoint_redirect(endpoint_caps[i], to, &old_target);
-            if (status != HIC_SUCCESS) {
-                /* 重定向失败，记录但继续 */
-                console_puts("[DOMAIN] Warning: endpoint redirect failed for cap ");
-                console_putu32(endpoint_caps[i]);
-                console_puts("\n");
-            }
-        }
-    }
-    
-    /* 4. 标记新域为主实例 */
+
+    /* 3. 标记新域为主实例 */
     to_domain->flags &= ~DOMAIN_FLAG_NEW_INSTANCE;
     to_domain->flags |= DOMAIN_FLAG_PRIMARY;
-    
-    /* 5. 确保所有写入可见 */
+
+    /* 4. 确保所有写入可见 */
     atomic_release_barrier();
-    
+
     atomic_exit_critical(irq);
-    
+
     console_puts("[DOMAIN] Atomic switch: domain ");
     console_putu32(from);
     console_puts(" -> domain ");
@@ -1264,10 +1246,8 @@ hic_status_t domain_atomic_switch(domain_id_t from,
     console_putu32(blocked_count);
     console_puts(" threads, woken ");
     console_putu32(woken_count);
-    console_puts(", ");
-    console_putu32(cap_count);
-    console_puts(" endpoints)\n");
-    
+    console_puts(")\n");
+
     return HIC_SUCCESS;
 }
 

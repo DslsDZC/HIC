@@ -59,9 +59,6 @@ typedef struct __attribute__((aligned(64))) cap_entry {
             size_t      size;
         } memory;
         struct {
-            domain_id_t  target;
-        } endpoint;
-        struct {
             logical_core_id_t logical_core_id;
             logical_core_flags_t flags;
             logical_core_quota_t quota;
@@ -192,8 +189,6 @@ void cap_init_domain_key(domain_id_t domain);
 /* 创建能力 */
 hic_status_t cap_create_memory(domain_id_t owner, phys_addr_t base, 
                                size_t size, cap_rights_t rights, cap_id_t *out);
-hic_status_t cap_create_endpoint(domain_id_t owner, domain_id_t target, cap_id_t *out);
-
 /* 创建执行流能力（EFC） */
 hic_status_t cap_create_thread(domain_id_t owner, thread_id_t thread_id, cap_id_t *out);
 
@@ -435,26 +430,6 @@ hic_status_t shmem_get_info(cap_id_t cap, shmem_region_t *info);
 
 /* ==================== 零停机更新机制层原语 ==================== */
 
-/**
- * @brief 服务端点原子重定向（机制层）
- * 
- * 原子性地将端点能力重定向到新目标域。
- * 这是零停机更新的核心原语。
- * 
- * 机制保证：
- * 1. 单指令原子操作，无竞争窗口
- * 2. 正在进行的调用继续完成
- * 3. 新调用自动路由到新目标
- * 4. 支持快速回滚
- * 
- * @param endpoint_cap 端点能力ID
- * @param new_target 新目标域ID
- * @param old_target 输出旧目标域ID（用于回滚）
- * @return 状态码
- */
-hic_status_t cap_endpoint_redirect(cap_id_t endpoint_cap,
-                                    domain_id_t new_target,
-                                    domain_id_t *old_target);
 
 /**
  * @brief 创建状态迁移通道（机制层）

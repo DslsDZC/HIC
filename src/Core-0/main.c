@@ -23,6 +23,7 @@
 #include "formal_verification.h"
 #include "amp.h"
 #include "logical_core.h"
+#include "ipc3.h"
 #include "lib/console.h"
 #include "boot_info.h"
 #include "minimal_uart.h"
@@ -157,6 +158,10 @@ void kernel_main(void *info)
     console_puts("\n[BOOT] STEP 3: Initializing Domain System\n");
     domain_system_init();
     console_puts("[BOOT] Domain system initialization completed\n");
+    /* 步骤3.5：IPC 3.0 子系统初始化 */
+    console_puts("\n[BOOT] STEP 3.5: Initializing IPC 3.0 Subsystem\n");
+    ipc3_init();
+    console_puts("[BOOT] IPC 3.0 initialization completed\n");
     
     /* 【步骤4：调度器初始化】 */
     console_puts("\n[BOOT] STEP 4: Initializing Scheduler\n");

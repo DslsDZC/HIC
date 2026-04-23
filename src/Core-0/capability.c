@@ -148,37 +148,6 @@ hic_status_t cap_create_memory(domain_id_t owner, phys_addr_t base,
     return HIC_SUCCESS;
 }
 
-hic_status_t cap_create_endpoint(domain_id_t owner, domain_id_t target, cap_id_t *out) {
-    if (owner >= HIC_DOMAIN_MAX || target >= HIC_DOMAIN_MAX || out == NULL) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-
-    bool irq = atomic_enter_critical();
-
-    cap_id_t cap = HIC_CAP_INVALID;
-    for (u32 i = 0; i < CAP_TABLE_SIZE && cap == HIC_CAP_INVALID; i++) {
-        if (g_global_cap_table[i].cap_id == 0 || g_global_cap_table[i].cap_id == HIC_CAP_INVALID) {
-            cap = i;
-        }
-    }
-
-    if (cap == HIC_CAP_INVALID) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_NO_MEMORY;
-    }
-
-    g_global_cap_table[cap].cap_id = cap;
-    g_global_cap_table[cap].rights = 0x01;  /* CALL permission */
-    g_global_cap_table[cap].owner = owner;
-    g_global_cap_table[cap].flags = 0;
-    g_global_cap_table[cap].endpoint.target = target;
-
-    atomic_exit_critical(irq);
-
-    *out = cap;
-    return HIC_SUCCESS;
-}
-
 /* 创建执行流能力 (EFC: Execution Flow Capability) */
 hic_status_t cap_create_thread(domain_id_t owner, thread_id_t thread_id, cap_id_t *out) {
     if (owner >= HIC_DOMAIN_MAX || out == NULL) {
@@ -472,7 +441,6 @@ hic_status_t cap_transfer_with_attenuation(domain_id_t from, domain_id_t to,
     
     /* 复制数据区域 */
     new_entry->memory = entry->memory;
-    new_entry->endpoint = entry->endpoint;
     new_entry->logical_core = entry->logical_core;
     
     /* 记录派生关系 */
@@ -533,7 +501,6 @@ hic_status_t cap_derive(domain_id_t owner, cap_id_t parent, cap_rights_t sub_rig
     
     /* 复制父能力的完整数据（联合体的所有字段） */
     g_global_cap_table[cap].memory = g_global_cap_table[parent].memory;
-    g_global_cap_table[cap].endpoint = g_global_cap_table[parent].endpoint;
     g_global_cap_table[cap].logical_core = g_global_cap_table[parent].logical_core;
     
     /* 策略单调性：派生能力的最大策略不能超过父能力 */
@@ -750,11 +717,6 @@ obj_type_t get_capability_object_type(cap_id_t cap) {
         return OBJ_DEVICE;  /* 设备 */
     }
 
-    /* 检查是否为IPC端点（大小为0，且target有效） */
-    if (entry->memory.size == 0 && entry->endpoint.target < HIC_DOMAIN_MAX) {
-        return OBJ_IPC;
-    }
-
     /* 检查是否为共享内存 */
     if ((rights & (CAP_MEM_READ | CAP_MEM_WRITE)) == (CAP_MEM_READ | CAP_MEM_WRITE) &&
         entry->memory.size > 0 && !(rights & CAP_MEM_EXEC)) {
@@ -783,11 +745,6 @@ cap_type_t get_capability_type(cap_id_t cap) {
     /* MMIO区域能力 */
     if (rights & CAP_MEM_DEVICE) {
         return CAP_MMIO;
-    }
-    
-    /* IPC端点能力 */
-    if (entry->memory.size == 0 && entry->endpoint.target < HIC_DOMAIN_MAX) {
-        return CAP_ENDPOINT;
     }
     
     /* 中断能力 */
@@ -1219,72 +1176,6 @@ static struct {
     u8 state_data[256];         /* 连接状态数据 */
     size_t state_size;
 } g_connection_trackers[MAX_CONNECTION_TRACKERS];
-
-/**
- * 服务端点原子重定向（机制层）
- * 
- * 安全保证：
- * 1. 验证端点能力有效性
- * 2. 验证目标域存在且活跃
- * 3. 原子性更新目标
- */
-hic_status_t cap_endpoint_redirect(cap_id_t endpoint_cap,
-                                    domain_id_t new_target,
-                                    domain_id_t *old_target) {
-    if (endpoint_cap >= CAP_TABLE_SIZE || new_target >= HIC_DOMAIN_MAX) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    bool irq = atomic_enter_critical();
-    
-    cap_entry_t *entry = &g_global_cap_table[endpoint_cap];
-    
-    /* 检查能力有效性 */
-    if (entry->cap_id != endpoint_cap) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_CAP_INVALID;
-    }
-    
-    /* 检查是否被撤销 */
-    if (entry->flags & CAP_FLAG_REVOKED) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_CAP_REVOKED;
-    }
-    
-    /* 验证目标域存在且活跃 */
-    extern domain_t g_domains[];
-    domain_t *target_domain = &g_domains[new_target];
-    
-    /* 检查域是否存在 */
-    if (target_domain->domain_id != new_target) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_INVALID_DOMAIN;
-    }
-    
-    /* 检查域是否处于活跃状态（READY 或 RUNNING） */
-    if (target_domain->state != DOMAIN_STATE_READY &&
-        target_domain->state != DOMAIN_STATE_RUNNING) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_INVALID_STATE;
-    }
-    
-    /* 记录旧目标（用于回滚） */
-    domain_id_t old = entry->endpoint.target;
-    
-    /* 原子性更新目标（单指令写入） */
-    entry->endpoint.target = new_target;
-    
-    /* 确保写入可见 */
-    atomic_release_barrier();
-    
-    atomic_exit_critical(irq);
-    
-    if (old_target) {
-        *old_target = old;
-    }
-    
-    return HIC_SUCCESS;
-}
 
 /**
  * 创建状态迁移通道（机制层）

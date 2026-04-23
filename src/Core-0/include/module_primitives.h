@@ -15,7 +15,7 @@
 #define HIC_MODULE_PRIMITIVES_H
 
 #include "../types.h"
-#include "../capability.h"
+#include "../ipc3.h"
 #include "../domain.h"
 #include "../audit.h"
 #include "../formal_verification.h"
@@ -156,28 +156,28 @@ hic_status_t module_cap_grant(domain_id_t domain_id,
 hic_status_t module_cap_check(cap_id_t cap_id,
                                cap_rights_t required_rights);
 
-/* ==================== 端点管理原语 ==================== */
+/* ==================== IPC 3.0 服务原语 ==================== */
 
 /**
- * @brief 创建服务端点
+ * @brief 创建 IPC 3.0 服务
  */
-hic_status_t module_endpoint_create(domain_id_t domain_id,
-                                     const char* name,
-                                     cap_id_t* endpoint_cap);
+hic_status_t module_service_create(domain_id_t domain_id,
+                                    virt_addr_t business_entry,
+                                    ipc3_service_id_t* out_id);
 
 /**
- * @brief 注册服务端点
+ * @brief 在服务注册表中注册 IPC 3.0 服务
  */
-hic_status_t module_endpoint_register(domain_id_t domain_id,
-                                       cap_id_t endpoint_cap,
-                                       const char* name);
+hic_status_t module_service_register(domain_id_t domain_id,
+                                      ipc3_service_id_t service_id,
+                                      const char* name);
 
 /**
- * @brief 查找服务端点
+ * @brief 查找服务（通过 IPC 3.0 服务ID）
  */
-hic_status_t module_endpoint_lookup(const char* name,
-                                     cap_id_t* endpoint_cap,
-                                     domain_id_t* owner_domain);
+hic_status_t module_service_lookup(const char* name,
+                                    ipc3_service_id_t* service_id,
+                                    domain_id_t* owner_domain);
 
 /* ==================== 审计原语 ==================== */
 
@@ -204,9 +204,9 @@ void module_primitives_init(void);
 uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain);
 
 /**
- * @brief 创建端点能力（简化版）
+ * @brief 创建 IPC 3.0 服务（简化版）
  */
-uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id);
+uint64_t module_cap_create_service(uint32_t domain_id, uint32_t *service_id);
 
 /**
  * @brief 启动域

@@ -58,16 +58,16 @@ void service_registry_init(void)
 hic_status_t service_register_endpoint(const char *name,
                                         const u8 uuid[16],
                                         domain_id_t owner,
-                                        cap_id_t endpoint_cap,
+                                        ipc3_service_id_t service_id,
                                         endpoint_type_t type,
                                         u32 version)
 {
     if (!name || name[0] == '\0') {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
     bool irq = atomic_enter_critical();
-    
+
     /* 检查是否已存在 */
     if (find_by_name_internal(name)) {
         atomic_exit_critical(irq);
@@ -76,7 +76,7 @@ hic_status_t service_register_endpoint(const char *name,
         console_puts("\n");
         return HIC_ERROR_ALREADY_EXISTS;
     }
-    
+
     /* 查找空闲槽位 */
     service_endpoint_t *slot = NULL;
     for (u32 i = 0; i < SERVICE_REGISTRY_SIZE && !slot; i++) {
@@ -84,37 +84,38 @@ hic_status_t service_register_endpoint(const char *name,
             slot = &g_service_registry[i];
         }
     }
-    
+
     if (!slot) {
         atomic_exit_critical(irq);
         console_puts("[REGISTRY] Registry full\n");
         return HIC_ERROR_NO_RESOURCE;
     }
-    
+
     /* 填充端点信息 */
     strncpy(slot->name, name, sizeof(slot->name) - 1);
     if (uuid) {
         memcpy(slot->uuid, uuid, 16);
     }
     slot->owner = owner;
-    slot->endpoint_cap = endpoint_cap;
+    slot->service_id = service_id;
+    slot->entry_page_va = ipc3_get_entry_va(service_id);
     slot->type = type;
     slot->state = SERVICE_STATE_ACTIVE;
     slot->version = version;
     slot->flags = 0;
-    
+
     g_service_count++;
-    
+
     atomic_exit_critical(irq);
-    
+
     console_puts("[REGISTRY] Registered: ");
     console_puts(name);
     console_puts(" (domain=");
     console_putu64(owner);
-    console_puts(", cap=");
-    console_putu64(endpoint_cap);
+    console_puts(", service_id=");
+    console_putu32(service_id);
     console_puts(")\n");
-    
+
     return HIC_SUCCESS;
 }
 
@@ -144,15 +145,6 @@ hic_status_t service_unregister_endpoint(const char *name)
     return HIC_SUCCESS;
 }
 
-/* 简化版服务注册（兼容接口） */
-hic_status_t service_register(const char *name, domain_id_t owner, cap_id_t endpoint_cap)
-{
-    /* 使用默认 UUID (全零) 和类型 */
-    static const u8 default_uuid[16] = {0};
-    return service_register_endpoint(name, default_uuid, owner, endpoint_cap, 
-                                      ENDPOINT_TYPE_GENERIC, 1);
-}
-
 /* ==================== 查找 ==================== */
 
 service_endpoint_t* service_find_by_name(const char *name)
@@ -179,22 +171,6 @@ service_endpoint_t* service_find_by_uuid(const u8 uuid[16])
     atomic_exit_critical(irq);
     
     return result;
-}
-
-service_endpoint_t* service_find_by_cap(cap_id_t cap_id)
-{
-    bool irq = atomic_enter_critical();
-    
-    for (u32 i = 0; i < SERVICE_REGISTRY_SIZE; i++) {
-        if (g_service_registry[i].name[0] != '\0' &&
-            g_service_registry[i].endpoint_cap == cap_id) {
-            atomic_exit_critical(irq);
-            return &g_service_registry[i];
-        }
-    }
-    
-    atomic_exit_critical(irq);
-    return NULL;
 }
 
 /* ==================== 状态管理 ==================== */
@@ -234,29 +210,6 @@ service_state_t service_get_state(const char *name)
     atomic_exit_critical(irq);
     
     return state;
-}
-
-/* ==================== 端点句柄 ==================== */
-
-hic_status_t service_get_endpoint_handle(const char *name, cap_handle_t *handle)
-{
-    if (!name || !handle) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-    
-    bool irq = atomic_enter_critical();
-    
-    service_endpoint_t *endpoint = find_by_name_internal(name);
-    if (!endpoint) {
-        atomic_exit_critical(irq);
-        return HIC_ERROR_NOT_FOUND;
-    }
-    
-    *handle = endpoint->endpoint_handle;
-    
-    atomic_exit_critical(irq);
-    
-    return HIC_SUCCESS;
 }
 
 /* ==================== 枚举 ==================== */

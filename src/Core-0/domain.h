@@ -129,7 +129,6 @@ typedef struct domain {
     /* 域私有审计计数器（可通过只读能力授予审计服务） */
     struct {
         u64 privileged_mem_access;  /* 特权内存访问次数 */
-        u64 ipc_calls;              /* IPC 调用次数 */
         u64 thread_creates;         /* 线程创建次数 */
         u64 memory_allocs;          /* 内存分配次数 */
         u64 cap_transfers;          /* 能力传递次数 */
@@ -337,21 +336,17 @@ hic_status_t domain_set_parallel_partner(domain_id_t domain_a, domain_id_t domai
 hic_status_t domain_get_parallel_partner(domain_id_t domain, domain_id_t *partner);
 
 /**
- * @brief 原子性域切换（机制层）
- * 
- * 原子性地将执行权从一个域切换到另一个域。
- * 用于零停机更新的最后一步。
- * 
+ * @brief 原子性域切换（IPC 3.0）
+ *
+ * 在 IPC 3.0 模型中，跨域调用通过入口页直接路由，
+ * 不再需要端点能力重定向。
+ *
  * @param from 当前活跃域
  * @param to 目标域
- * @param endpoint_caps 要重定向的端点能力数组
- * @param cap_count 能力数量
  * @return 状态码
  */
 hic_status_t domain_atomic_switch(domain_id_t from,
-                                   domain_id_t to,
-                                   cap_id_t *endpoint_caps,
-                                   u32 cap_count);
+                                   domain_id_t to);
 
 /**
  * @brief 域优雅关闭（机制层）

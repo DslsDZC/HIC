@@ -53,7 +53,7 @@
 
 #include "include/static_module.h"
 #include "include/service_registry.h"
-#include "include/module_primitives.h"
+#include "ipc3.h"
 #include "domain.h"
 #include "capability.h"
 #include "pmm.h"
@@ -72,7 +72,7 @@ extern static_module_desc_t __static_modules_end;
 /* 模块运行时状态 */
 typedef struct static_module_runtime {
     domain_id_t domain_id;              /* 分配的域 ID */
-    cap_id_t endpoint_cap;              /* 服务端点能力 */
+    ipc3_service_id_t service_id;       /* IPC 3.0 服务ID */
     bool running;                       /* 是否正在运行 */
     phys_addr_t code_phys;              /* 代码段加载地址（物理） */
     u32 logical_core_id;                /* 分配的逻辑核心ID */
@@ -379,32 +379,9 @@ int static_module_create_sandbox_ex(static_module_desc_t *module, u32 runtime_id
 int static_module_setup_capabilities(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain = g_module_runtime[runtime_idx].domain_id;
-    cap_id_t endpoint_cap;
-    cap_handle_t endpoint_handle;
     hic_status_t status;
 
-    /* 创建服务端点能力 */
-    status = cap_create_endpoint(domain, domain, &endpoint_cap);
-    if (status != HIC_SUCCESS) {
-        console_puts("[STATIC_MODULE]     ERROR: Failed to create endpoint capability\n");
-        return -1;
-    }
-
-    /* 为模块域生成端点句柄 */
-    status = cap_grant(domain, endpoint_cap, &endpoint_handle);
-    if (status != HIC_SUCCESS) {
-        console_puts("[STATIC_MODULE]     ERROR: Failed to grant endpoint handle\n");
-        return -1;
-    }
-
-    console_puts("[STATIC_MODULE]     Endpoint cap: ");
-    console_putu64(endpoint_cap);
-    console_puts(", handle: 0x");
-    console_puthex64(endpoint_handle);
-    console_puts("\n");
-
-    /* 保存端点能力 */
-    g_module_runtime[runtime_idx].endpoint_cap = endpoint_cap;
+    /* IPC 3.0 服务在注册阶段创建入口页，不在能力设置阶段处理 */
 
     /* 处理模块需要的额外能力 */
     for (int i = 0; i < 8 && module->capabilities[i] != 0; i++) {
@@ -433,12 +410,41 @@ int static_module_setup_capabilities(static_module_desc_t *module, u32 runtime_i
 int static_module_register_service(static_module_desc_t *module, u32 runtime_idx)
 {
     domain_id_t domain = g_module_runtime[runtime_idx].domain_id;
-    cap_id_t endpoint_cap = g_module_runtime[runtime_idx].endpoint_cap;
-    
+    ipc3_service_id_t service_id;
+    hic_status_t status;
+
+    /* 查找模块入口点作为业务处理地址 */
+    virt_addr_t business_entry = 0;
+    for (int i = 0; g_service_entries[i].name != NULL; i++) {
+        if (strcmp(module->name, g_service_entries[i].name) == 0) {
+            union {
+                int (*func)(void);
+                virt_addr_t addr;
+            } conv;
+            conv.func = g_service_entries[i].entry_func;
+            business_entry = conv.addr;
+            break;
+        }
+    }
+
+    /* 通过 IPC 3.0 注册服务（创建入口页） */
+    status = ipc3_register_service(domain, business_entry, 0, &service_id);
+    if (status != HIC_SUCCESS) {
+        console_puts("[STATIC_MODULE]     ERROR: IPC3 service registration failed (status=");
+        console_putu64(status);
+        console_puts(")\n");
+        return -1;
+    }
+
+    /* 授权本域调用 */
+    ipc3_authorize(service_id, domain);
+
+    /* 保存服务ID */
+    g_module_runtime[runtime_idx].service_id = service_id;
+
     /* 根据模块名称确定端点类型 */
     endpoint_type_t type = ENDPOINT_TYPE_GENERIC;
-    
-    if (strcmp(module->name, "fat32") == 0 || 
+    if (strcmp(module->name, "fat32") == 0 ||
         strcmp(module->name, "fat32_service") == 0) {
         type = ENDPOINT_TYPE_FILESYSTEM;
     } else if (strcmp(module->name, "module_signer") == 0 ||
@@ -452,51 +458,40 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
     /* 生成服务 UUID（基于名称的 UUID） */
     u8 uuid[16];
     memzero(uuid, 16);
-    
-    /* 使用 FNV-1a 哈希算法生成名称哈希
-     * FNV-1a 是一种快速、分布良好的非加密哈希算法
-     * 注意：标准 UUID v5 要求 SHA-1，但 FNV-1a 提供足够的唯一性
-     * 对于操作系统内部使用的服务标识符 */
+
     u64 hash1 = 0, hash2 = 0;
     const u64 FNV_OFFSET = 14695981039346656037ULL;
     const u64 FNV_PRIME = 1099511628211ULL;
-    
-    /* 双重哈希增强碰撞抵抗 */
+
     hash1 = FNV_OFFSET;
     hash2 = FNV_OFFSET ^ 0xFFFFFFFFFFFFFFFFULL;
     for (u32 i = 0; module->name[i]; i++) {
-        /* 第一重：标准 FNV-1a */
         hash1 ^= (u8)module->name[i];
         hash1 *= FNV_PRIME;
-        /* 第二重：加入位置相关混合 */
         hash2 ^= (u8)module->name[i] * (i + 1);
         hash2 *= FNV_PRIME;
     }
-    
-    /* 添加版本和类型增强唯一性 */
+
     hash1 ^= (u64)module->version * FNV_PRIME;
     hash1 ^= (u64)module->type * FNV_PRIME;
-    
-    /* 使用时间戳作为额外的盐值（如果可用） */
+
     extern u64 hal_get_timestamp(void);
     u64 timestamp = hal_get_timestamp();
     hash2 ^= timestamp;
     hash2 *= FNV_PRIME;
-    
-    /* 填充 UUID */
+
     memcpy(uuid, &hash1, 8);
     memcpy(uuid + 8, &hash2, 8);
-    
-    /* 设置 UUID 版本 5（基于命名空间）和变体 */
-    uuid[6] = (uuid[6] & 0x0F) | 0x50;  /* 版本 5 */
-    uuid[8] = (uuid[8] & 0x3F) | 0x80;  /* 变体 1 (RFC 4122) */
 
-    /* 注册服务 */
-    hic_status_t status = service_register_endpoint(
+    uuid[6] = (uuid[6] & 0x0F) | 0x50;
+    uuid[8] = (uuid[8] & 0x3F) | 0x80;
+
+    /* 注册到服务注册表（关联 IPC 3.0 服务 ID） */
+    status = service_register_endpoint(
         module->name,
         uuid,
         domain,
-        endpoint_cap,
+        service_id,
         type,
         module->version
     );
@@ -504,12 +499,15 @@ int static_module_register_service(static_module_desc_t *module, u32 runtime_idx
     if (status == HIC_SUCCESS) {
         console_puts("[STATIC_MODULE]     Service registered: ");
         console_puts(module->name);
-        console_puts("\n");
+        console_puts(" (service_id=");
+        console_putu32(service_id);
+        console_puts(")\n");
         return 0;
     } else {
         console_puts("[STATIC_MODULE]     ERROR: Service registration failed (status=");
         console_putu64(status);
         console_puts(")\n");
+        ipc3_unregister_service(service_id);
         return -1;
     }
 }
@@ -740,14 +738,6 @@ service_endpoint_t* static_module_get_service(const char *name)
     return service_find_by_name(name);
 }
 
-/**
- * 获取模块端点句柄
- */
-hic_status_t static_module_get_endpoint_handle(const char *name, cap_handle_t *handle)
-{
-    return service_get_endpoint_handle(name, handle);
-}
-
 /* ==================== 卸载功能 ==================== */
 
 /**
@@ -850,13 +840,12 @@ hic_status_t static_module_unload(const char *name)
     console_puts("[STATIC_MODULE]   Unregistering service...\n");
     service_unregister_endpoint(name);
     
-    /* 步骤3: 撤销能力 */
-    console_puts("[STATIC_MODULE]   Revoking capabilities...\n");
-    if (runtime->endpoint_cap != 0) {
-        cap_revoke(runtime->endpoint_cap);
-        runtime->endpoint_cap = 0;
+    /* 步骤3: 注销 IPC 3.0 服务 */
+    if (runtime->service_id != IPC3_SERVICE_INVALID) {
+        ipc3_unregister_service(runtime->service_id);
+        runtime->service_id = IPC3_SERVICE_INVALID;
     }
-    
+
     /* 步骤4: 销毁域 */
     console_puts("[STATIC_MODULE]   Destroying domain...\n");
     if (runtime->domain_id != HIC_INVALID_DOMAIN) {

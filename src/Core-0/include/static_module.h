@@ -162,7 +162,6 @@ domain_id_t static_module_get_domain(const char *name);
 bool static_module_is_running(const char *name);
 static_module_state_t static_module_get_state(const char *name);
 struct service_endpoint* static_module_get_service(const char *name);
-hic_status_t static_module_get_endpoint_handle(const char *name, cap_handle_t *handle);
 
 /* ==================== 内存信息 ==================== */
 

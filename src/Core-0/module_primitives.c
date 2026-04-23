@@ -12,6 +12,7 @@
 
 #include "include/module_primitives.h"
 #include "include/service_registry.h"
+#include "ipc3.h"
 #include "capability.h"
 #include "domain.h"
 #include "domain_switch.h"
@@ -514,27 +515,24 @@ hic_status_t module_cap_create(domain_id_t domain_id,
         case CAP_SHARED:
             /* 内存相关能力 */
             return cap_create_memory(domain_id, 0, PAGE_SIZE, rights, cap_id);
-            
-        case CAP_ENDPOINT:
-        case CAP_IPC:
+
         case CAP_SERVICE:
-            /* 通信端点能力 */
-            return cap_create_endpoint(domain_id, domain_id, cap_id);
-            
+            /* 服务能力：分配基本内存能力 */
+            return cap_create_memory(domain_id, 0, PAGE_SIZE, rights, cap_id);
+
         case CAP_THREAD:
-            /* 线程能力 - 使用端点能力作为基础 */
-            return cap_create_endpoint(domain_id, domain_id, cap_id);
-            
+            /* 线程能力：分配基本内存能力 */
+            return cap_create_memory(domain_id, 0, PAGE_SIZE, rights, cap_id);
+
         case CAP_IRQ:
-            /* 中断能力 - 使用端点能力作为基础 */
-            return cap_create_endpoint(domain_id, domain_id, cap_id);
-            
+            /* 中断能力：分配基本内存能力 */
+            return cap_create_memory(domain_id, 0, PAGE_SIZE, rights, cap_id);
+
         default:
-            /* 未知能力类型，默认创建端点能力 */
-            console_puts("[PRIMITIVES] Creating default endpoint for cap_type=");
+            console_puts("[PRIMITIVES] Unknown cap_type=");
             console_putu64(cap_type);
-            console_puts("\n");
-            return cap_create_endpoint(domain_id, domain_id, cap_id);
+            console_puts(", returning error\n");
+            return HIC_ERROR_INVALID_PARAM;
     }
 }
 
@@ -640,68 +638,64 @@ hic_status_t module_cap_check(cap_id_t cap_id,
     return HIC_SUCCESS;
 }
 
-/* ==================== 端点管理原语 ==================== */
+/* ==================== IPC 3.0 服务原语 ==================== */
 
-hic_status_t module_endpoint_create(domain_id_t domain_id,
-                                     const char* name,
-                                     cap_id_t* endpoint_cap)
+hic_status_t module_service_create(domain_id_t domain_id,
+                                    virt_addr_t business_entry,
+                                    ipc3_service_id_t* out_id)
 {
-    if (!name || !endpoint_cap) {
+    if (!out_id) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
-    /* 创建端点能力 */
-    return cap_create_endpoint(domain_id, domain_id, endpoint_cap);
+
+    return ipc3_register_service(domain_id, business_entry, 0, out_id);
 }
 
-hic_status_t module_endpoint_register(domain_id_t domain_id,
-                                       cap_id_t endpoint_cap,
-                                       const char* name)
+hic_status_t module_service_register(domain_id_t domain_id,
+                                      ipc3_service_id_t service_id,
+                                      const char* name)
 {
     if (!name) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
     /* 生成服务 UUID（基于名称哈希） */
     u8 uuid[16];
     memzero(uuid, sizeof(uuid));
-    
-    /* 简单哈希生成 UUID */
+
     u64 hash = 0;
     for (size_t i = 0; name[i]; i++) {
         hash = hash * 31 + (u8)name[i];
     }
-    
-    /* 设置 UUID 版本 4（随机）和变体 */
+
     memcpy(uuid, &hash, sizeof(u64));
-    uuid[6] = (uuid[6] & 0x0F) | 0x40;  /* 版本 4 */
-    uuid[8] = (uuid[8] & 0x3F) | 0x80;  /* 变体 1 */
-    
-    /* 在服务注册表中注册 */
-    return service_register_endpoint(name, uuid, domain_id, endpoint_cap,
+    uuid[6] = (uuid[6] & 0x0F) | 0x40;
+    uuid[8] = (uuid[8] & 0x3F) | 0x80;
+
+    return service_register_endpoint(name, uuid, domain_id, service_id,
                                      ENDPOINT_TYPE_GENERIC, 1);
 }
 
-hic_status_t module_endpoint_lookup(const char* name,
-                                     cap_id_t* endpoint_cap,
-                                     domain_id_t* owner_domain)
+hic_status_t module_service_lookup(const char* name,
+                                    ipc3_service_id_t* service_id,
+                                    domain_id_t* owner_domain)
 {
     if (!name) {
         return HIC_ERROR_INVALID_PARAM;
     }
-    
+
     service_endpoint_t* ep = service_find_by_name(name);
     if (!ep) {
         return HIC_ERROR_NOT_FOUND;
     }
-    
-    if (endpoint_cap) {
-        *endpoint_cap = ep->endpoint_cap;
+
+    if (service_id) {
+        *service_id = ep->service_id;
     }
     if (owner_domain) {
         *owner_domain = ep->owner;
     }
-    
+
     return HIC_SUCCESS;
 }
 
@@ -744,18 +738,19 @@ uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain)
 }
 
 /**
- * @brief 创建端点能力
+ * @brief 创建 IPC 3.0 服务
  * 用于动态模块加载器
  */
-uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id)
+uint64_t module_cap_create_service(uint32_t domain_id, uint32_t *service_id)
 {
-    cap_id_t endpoint_cap;
-    hic_status_t status = module_endpoint_create((domain_id_t)domain_id, "module_ep", &endpoint_cap);
-    
-    if (status == HIC_SUCCESS && endpoint_id) {
-        *endpoint_id = (uint32_t)endpoint_cap;
+    ipc3_service_id_t sid;
+    /* 使用0作为业务入口（模块将在初始化后自行设置） */
+    hic_status_t status = ipc3_register_service((domain_id_t)domain_id, 0, 0, &sid);
+
+    if (status == HIC_SUCCESS && service_id) {
+        *service_id = (uint32_t)sid;
     }
-    
+
     return (uint64_t)status;
 }
 

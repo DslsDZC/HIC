@@ -5,284 +5,62 @@
  */
 
 /**
- * HIC域切换实现
- * 遵循文档第2.1节：跨域通信和隔离
- * 
- * HIC通信模型：
- * - 数据平面：共享内存 + 无锁环形缓冲区（零拷贝，无内核介入）
- * - 控制平面：共享内存标志位（用户态同步）
- * - 初始化：shmem_map + 能力授权（一次性建立）
- * 
- * 本模块仅提供域切换（用于能力调用），不包含传统IPC消息队列。
+ * HIC Domain State Tracking
+ *
+ * IPC 3.0 replaces the old domain_switch IPC call path.
+ * This module only tracks current domain and per-domain page tables.
  */
 
 #include "domain_switch.h"
-#include "capability.h"
 #include "pagetable.h"
-#include "hal.h"
-#include "thread.h"
-#include "audit.h"
 #include "lib/mem.h"
 #include "lib/console.h"
 
-/* 当前域ID */
+/* Current domain ID */
 static domain_id_t g_current_domain = HIC_DOMAIN_CORE;
 
-/* 调用栈（用于恢复到调用者域） */
-static struct {
-    domain_id_t domain;
-    u64 return_address;
-    hal_context_t context;
-} g_call_stack[16];
-static u32 g_call_stack_depth = 0;
-
-/* 域上下文保存（移到数据段，避免栈溢出） */
-static hal_context_t g_domain_contexts[HIC_DOMAIN_MAX] __attribute__((section(".data")));
-
-/* 域页表 */
+/* Per-domain page tables */
 static page_table_t* g_domain_pagetables[HIC_DOMAIN_MAX];
 
-/* 域切换初始化 */
 void domain_switch_init(void)
 {
-    /* 初始化域上下文 */
     for (domain_id_t i = 0; i < HIC_DOMAIN_MAX; i++) {
-        memzero(&g_domain_contexts[i], sizeof(hal_context_t));
         g_domain_pagetables[i] = NULL;
     }
-    
-    /* 初始化调用栈 */
-    memzero(g_call_stack, sizeof(g_call_stack));
-    g_call_stack_depth = 0;
-    
-    /* 设置Core-0为当前域 */
     g_current_domain = HIC_DOMAIN_CORE;
-    
-    console_puts("[DOMAIN] Domain switch initialized\n");
+    console_puts("[DOMAIN] Domain state tracking initialized\n");
 }
 
-/* 执行域切换（用于能力调用） */
-hic_status_t domain_switch(domain_id_t from, domain_id_t to,
-                           cap_id_t endpoint_cap, u64 syscall_num,
-                           u64* args, u32 arg_count)
-{
-    (void)arg_count;  /* 避免未使用参数警告 */
-    (void)args;       /* 避免未使用参数警告 */
-    (void)syscall_num;
-
-    /* 验证参数 */
-    if (from >= HIC_DOMAIN_MAX || to >= HIC_DOMAIN_MAX) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
-
-    /* 验证端点能力 */
-    hic_status_t status = cap_check_access(from, endpoint_cap, 0);
-    if (status != HIC_SUCCESS) {
-        return HIC_ERROR_PERMISSION;
-    }
-
-    /* 获取端点信息 */
-    if (endpoint_cap >= CAP_TABLE_SIZE) {
-        return HIC_ERROR_CAP_INVALID;
-    }
-
-    cap_entry_t *endpoint = &g_global_cap_table[endpoint_cap];
-    if (endpoint->cap_id != endpoint_cap) {
-        return HIC_ERROR_CAP_INVALID;
-    }
-
-    /* 1. 验证目标域是否存在且已初始化 */
-    if (to >= MAX_DOMAINS) {
-        return HIC_ERROR_INVALID_DOMAIN;
-    }
-    domain_t *target_domain = &g_domains[to];
-    if (target_domain->state != DOMAIN_STATE_READY &&
-        target_domain->state != DOMAIN_STATE_RUNNING) {
-        return HIC_ERROR_INVALID_STATE;
-    }
-    if (target_domain->state == DOMAIN_STATE_TERMINATED) {
-        return HIC_ERROR_INVALID_STATE;
-    }
-
-    /* 验证端点能力的目标域匹配 */
-    if (endpoint->endpoint.target != to) {
-        return HIC_ERROR_PERMISSION;
-    }
-
-    /* 2. 验证域上下文已初始化（避免空指针解引用） */
-    if (g_domain_contexts[to].rsp == 0) {
-        console_puts("[DOMAIN] ERROR: Target domain context not initialized\n");
-        return HIC_ERROR_NO_RESOURCE;
-    }
-
-    /* 3. 验证调用者上下文有效 */
-    if (g_domain_contexts[from].rsp == 0) {
-        console_puts("[DOMAIN] ERROR: Caller domain context not initialized\n");
-        return HIC_ERROR_NO_RESOURCE;
-    }
-
-    /* 保存调用者上下文到调用栈 */
-    if (g_call_stack_depth < 16) {
-        g_call_stack[g_call_stack_depth].domain = from;
-        g_call_stack[g_call_stack_depth].return_address = syscall_num;
-        hal_save_context(&g_call_stack[g_call_stack_depth].context);
-        g_call_stack_depth++;
-    } else {
-        console_puts("[DOMAIN] ERROR: Call stack overflow\n");
-        return HIC_ERROR_NO_RESOURCE;
-    }
-
-    /* 保存当前域上下文 */
-    hal_save_context(&g_domain_contexts[from]);
-
-    /* 切换到目标域 */
-    g_current_domain = to;
-
-    /* 切换页表 */
-    if (g_domain_pagetables[to]) {
-        pagetable_switch(g_domain_pagetables[to]);
-    }
-
-    /* 恢复目标域上下文 */
-    hal_restore_context(&g_domain_contexts[to]);
-
-    /* 记录域切换审计日志 */
-    AUDIT_LOG_DOMAIN_SWITCH(from, to, endpoint_cap);
-
-    return HIC_SUCCESS;
-}
-
-/* 从域切换返回 */
-void __attribute__((unused)) domain_switch_return(hic_status_t result)
-{
-    (void)result;  /* 避免未使用参数警告 */
-    if (g_call_stack_depth == 0) {
-        /* 调用栈为空，返回Core-0 */
-        g_current_domain = HIC_DOMAIN_CORE;
-        
-        if (g_domain_pagetables[HIC_DOMAIN_CORE]) {
-            pagetable_switch(g_domain_pagetables[HIC_DOMAIN_CORE]);
-        }
-        
-        hal_restore_context(&g_domain_contexts[HIC_DOMAIN_CORE]);
-        return;
-    }
-    
-    /* 从调用栈弹出调用者信息 */
-    g_call_stack_depth--;
-    domain_id_t caller_domain = g_call_stack[g_call_stack_depth].domain;
-    
-    /* 切换回调用者域 */
-    g_current_domain = caller_domain;
-    
-    /* 切换页表 */
-    if (g_domain_pagetables[caller_domain]) {
-        pagetable_switch(g_domain_pagetables[caller_domain]);
-    }
-    
-    /* 恢复调用者上下文 */
-    hal_restore_context(&g_call_stack[g_call_stack_depth].context);
-}
-
-/* 保存当前域上下文 */
-void __attribute__((unused)) domain_switch_save_context(domain_id_t domain, hal_context_t* ctx)
-{
-    if (domain < HIC_DOMAIN_MAX && ctx) {
-        memcopy(&g_domain_contexts[domain], ctx, sizeof(hal_context_t));
-    }
-}
-
-/* 恢复域上下文 */
-void __attribute__((unused)) domain_switch_restore_context(domain_id_t domain, hal_context_t* ctx)
-{
-    if (domain < HIC_DOMAIN_MAX && ctx) {
-        memcopy(ctx, &g_domain_contexts[domain], sizeof(hal_context_t));
-    }
-}
-
-/* 获取当前域ID */
-__attribute__((unused)) domain_id_t domain_switch_get_current(void)
+domain_id_t domain_switch_get_current(void)
 {
     return g_current_domain;
 }
 
-/* 设置当前域ID */
-__attribute__((unused)) void domain_switch_set_current(domain_id_t domain)
+void domain_switch_set_current(domain_id_t domain)
 {
     if (domain < HIC_DOMAIN_MAX) {
         g_current_domain = domain;
     }
 }
 
-/* 设置域页表 */
-hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t* pagetable)
+page_table_t* domain_switch_get_pagetable(domain_id_t domain)
 {
-    if (domain >= HIC_DOMAIN_MAX) {
-        return HIC_ERROR_INVALID_PARAM;
-    }
+    if (domain >= HIC_DOMAIN_MAX) return NULL;
+    return g_domain_pagetables[domain];
+}
 
-    /* 检查指针是否有效 */
-    if (pagetable == NULL) {
-        console_puts("[DOMAIN_SWITCH] ERROR: Invalid pagetable pointer (NULL)\n");
-        return HIC_ERROR_INVALID_PARAM;
-    }
+hic_status_t domain_switch_set_pagetable(domain_id_t domain, page_table_t *pagetable)
+{
+    if (domain >= HIC_DOMAIN_MAX) return HIC_ERROR_INVALID_PARAM;
+    if (pagetable == NULL) return HIC_ERROR_INVALID_PARAM;
 
     g_domain_pagetables[domain] = pagetable;
 
-    /* 使用内核控制台接口输出调试信息 */
-    console_puts("[DOMAIN_SWITCH] Set pagetable for domain ");
+    console_puts("[DOMAIN] Set pagetable for domain ");
     console_putu32(domain);
     console_puts(" = 0x");
     console_puthex64((u64)pagetable);
     console_puts("\n");
 
     return HIC_SUCCESS;
-}
-
-/* 获取域页表 */
-__attribute__((unused)) page_table_t* domain_switch_get_pagetable(domain_id_t domain)
-{
-    if (domain >= HIC_DOMAIN_MAX) {
-        return NULL;
-    }
-    
-    return g_domain_pagetables[domain];
-}
-
-/* 上下文切换到指定线程 */
-void __attribute__((unused)) context_switch_to(thread_id_t next_thread)
-{
-    if (next_thread == INVALID_THREAD) {
-        console_puts("[SCHED] Invalid thread ID\n");
-        return;
-    }
-
-    extern thread_t g_threads[MAX_THREADS];
-    extern thread_t *g_current_thread;
-
-    if (next_thread >= MAX_THREADS) {
-        console_puts("[SCHED] Thread ID out of range\n");
-        return;
-    }
-
-    thread_t *next = &g_threads[next_thread];
-    if (next == NULL) {
-        console_puts("[SCHED] Thread not found\n");
-        return;
-    }
-
-    /* 保存当前线程上下文 */
-    if (g_current_thread != NULL) {
-        if (g_current_thread->state == THREAD_STATE_RUNNING) {
-            g_current_thread->state = THREAD_STATE_READY;
-        }
-    }
-
-    /* 切换到新线程 */
-    g_current_thread = next;
-    g_current_thread->state = THREAD_STATE_RUNNING;
-    g_current_thread->last_run_time = hal_get_timestamp();
-
-    /* 执行实际的上下文切换（调用 schedule 中的实现） */
-    schedule();
 }
