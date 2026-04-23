@@ -16,6 +16,7 @@
 #include "capability.h"
 #include "domain.h"
 #include "thread.h"
+#include "exec_flow.h"
 #include "pmm.h"
 
 /* 内核版本 */

@@ -179,6 +179,40 @@ hic_status_t cap_create_endpoint(domain_id_t owner, domain_id_t target, cap_id_t
     return HIC_SUCCESS;
 }
 
+/* 创建执行流能力 (EFC: Execution Flow Capability) */
+hic_status_t cap_create_thread(domain_id_t owner, thread_id_t thread_id, cap_id_t *out) {
+    if (owner >= HIC_DOMAIN_MAX || out == NULL) {
+        return HIC_ERROR_INVALID_PARAM;
+    }
+
+    bool irq = atomic_enter_critical();
+
+    cap_id_t cap = HIC_CAP_INVALID;
+    for (u32 i = 1; i < CAP_TABLE_SIZE; i++) {
+        if (g_global_cap_table[i].cap_id == 0 || g_global_cap_table[i].cap_id == HIC_CAP_INVALID) {
+            cap = i;
+            break;
+        }
+    }
+
+    if (cap == HIC_CAP_INVALID) {
+        atomic_exit_critical(irq);
+        return HIC_ERROR_NO_RESOURCE;
+    }
+
+    g_global_cap_table[cap].cap_id = cap;
+    g_global_cap_table[cap].rights = CAP_TYPE_THREAD;
+    g_global_cap_table[cap].owner = owner;
+    g_global_cap_table[cap].flags = 0;
+    g_global_cap_table[cap].thread_efc.thread_id = thread_id;
+    g_global_cap_table[cap].thread_efc.reserved = 0;
+
+    atomic_exit_critical(irq);
+
+    *out = cap;
+    return HIC_SUCCESS;
+}
+
 /* ==================== 能力授予（返回混淆句柄） ==================== */
 
 hic_status_t cap_grant(domain_id_t domain, cap_id_t cap, cap_handle_t *out) {

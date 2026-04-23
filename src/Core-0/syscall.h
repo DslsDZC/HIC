@@ -67,7 +67,16 @@ typedef enum {
     SYSCALL_SHMEM_MAP,            /* 映射共享内存 */
     SYSCALL_SHMEM_UNMAP,          /* 解除映射 */
     SYSCALL_SHMEM_GET_INFO,       /* 获取共享内存信息 */
-    
+
+    /* 执行流能力系统调用（EFC） */
+    SYSCALL_EXEC_FLOW_CREATE,     /* 创建执行流 */
+    SYSCALL_EXEC_FLOW_DESTROY,    /* 销毁执行流 */
+    SYSCALL_EXEC_FLOW_DISPATCH,   /* 调度执行流 */
+    SYSCALL_EXEC_FLOW_BLOCK,      /* 阻塞执行流 */
+    SYSCALL_EXEC_FLOW_WAKE,       /* 唤醒执行流 */
+    SYSCALL_EXEC_FLOW_GET_STATE,  /* 获取执行流状态 */
+    SYSCALL_EXEC_FLOW_YIELD,      /* 让出执行流 */
+
     SYSCALL_MAX,
 } syscall_num_t;
 

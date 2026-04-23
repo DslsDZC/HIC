@@ -69,6 +69,10 @@ typedef struct __attribute__((aligned(64))) cap_entry {
             u8    max_derived_policy; /* 允许派生的最高策略 */
             u8    reserved[6];     /* 对齐填充 */
         } logical_core;
+        struct {
+            thread_id_t thread_id;
+            u32         reserved;
+        } thread_efc;
     };
 } cap_entry_t;
 
@@ -189,6 +193,9 @@ void cap_init_domain_key(domain_id_t domain);
 hic_status_t cap_create_memory(domain_id_t owner, phys_addr_t base, 
                                size_t size, cap_rights_t rights, cap_id_t *out);
 hic_status_t cap_create_endpoint(domain_id_t owner, domain_id_t target, cap_id_t *out);
+
+/* 创建执行流能力（EFC） */
+hic_status_t cap_create_thread(domain_id_t owner, thread_id_t thread_id, cap_id_t *out);
 
 /* 能力授予（返回混淆句柄） */
 hic_status_t cap_grant(domain_id_t domain, cap_id_t cap, cap_handle_t *out);
@@ -745,10 +752,15 @@ typedef struct cdt_node {
 
 /* 新增能力类型：CNode */
 #define CAP_CNODE           (1U << 24)    /* CNode 能力 */
+#define CAP_TYPE_THREAD     (1U << 25)    /* 执行流能力 (EFC) */
 
 /* 能力类型判断 */
 static inline bool cap_is_cnode(cap_rights_t rights) {
     return (rights & CAP_CNODE) != 0;
+}
+
+static inline bool cap_is_thread(cap_rights_t rights) {
+    return (rights & CAP_TYPE_THREAD) != 0;
 }
 
 /* ==================== CNode 操作接口 ==================== */

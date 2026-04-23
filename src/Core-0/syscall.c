@@ -26,6 +26,7 @@
 #include "domain.h"
 #include "domain_switch.h"
 #include "thread.h"
+#include "exec_flow.h"
 #include "formal_verification.h"
 #include "audit.h"
 #include "monitor.h"
@@ -329,7 +330,50 @@ void syscall_handler(u64 syscall_num, u64 arg1, u64 arg2, u64 arg3, u64 arg4)
         case SYSCALL_SHMEM_GET_INFO:
             status = shmem_get_info((cap_id_t)arg1, (shmem_region_t*)arg2);
             break;
-            
+
+        /* 执行流能力系统调用（EFC） */
+        case SYSCALL_EXEC_FLOW_CREATE:
+            {
+                exec_flow_id_t efc;
+                status = exec_flow_create((domain_id_t)arg1, (virt_addr_t)arg2, &efc);
+                if (status == HIC_SUCCESS) {
+                    *(exec_flow_id_t*)arg3 = efc;
+                }
+            }
+            break;
+
+        case SYSCALL_EXEC_FLOW_DESTROY:
+            status = exec_flow_destroy((exec_flow_id_t)arg1);
+            break;
+
+        case SYSCALL_EXEC_FLOW_DISPATCH:
+            status = exec_flow_dispatch((exec_flow_id_t)arg1,
+                                        (logical_core_id_t)arg2);
+            break;
+
+        case SYSCALL_EXEC_FLOW_BLOCK:
+            status = exec_flow_block((exec_flow_id_t)arg1);
+            break;
+
+        case SYSCALL_EXEC_FLOW_WAKE:
+            status = exec_flow_wake((exec_flow_id_t)arg1);
+            break;
+
+        case SYSCALL_EXEC_FLOW_GET_STATE:
+            {
+                exec_flow_state_t state;
+                status = exec_flow_get_state((exec_flow_id_t)arg1, &state);
+                if (status == HIC_SUCCESS) {
+                    *(exec_flow_state_t*)arg2 = state;
+                }
+            }
+            break;
+
+        case SYSCALL_EXEC_FLOW_YIELD:
+            exec_flow_yield();
+            status = HIC_SUCCESS;
+            break;
+
         default:
             status = HIC_ERROR_NOT_SUPPORTED;
             break;

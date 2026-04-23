@@ -117,7 +117,7 @@ extern thread_t g_threads[MAX_THREADS];
 
 /* 调度器接口（由core实现） */
 void scheduler_init(void);
-void schedule(void);
+thread_t *schedule(void);
 void scheduler_tick(void);
 thread_id_t scheduler_pick_next(void);
 void context_switch_to(thread_id_t next_thread);
@@ -128,6 +128,9 @@ void scheduler_print_perf(void);
 
 /* 当前线程 */
 extern thread_t *g_current_thread;
+
+/* 空闲线程 */
+extern thread_t idle_thread;
 
 /* ============================================ */
 /* 形式化验证接口实现 */
