@@ -301,6 +301,16 @@ void boot_info_parse_cmdline(const char* cmdline);
 void boot_info_copy_hardware_info(hic_boot_info_t* boot_info);
 
 /**
+ * 复制引导信息到静态存储（域安全）
+ *
+ * 将 Bootloader 动态分配的引导信息复制到内核 BSS 段的静态缓冲区中。
+ * 确保所有特权域通过 g_boot_info 访问时不会触发页错误。
+ *
+ * 调用时机：域创建之前（main.c Step 10 之后、Step 11 之前）
+ */
+void boot_info_copy_to_static(void);
+
+/**
  * 获取启动状态
  * 
  * 返回值：启动状态指针

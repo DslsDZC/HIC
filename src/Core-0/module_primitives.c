@@ -755,6 +755,22 @@ uint64_t module_cap_create_service(uint32_t domain_id, uint32_t *service_id)
 }
 
 /**
+ * @brief 创建 IPC 3.0 端点
+ * 用于动态模块加载器，为每个动态加载的模块创建独立的端点
+ */
+uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id)
+{
+    ipc3_service_id_t sid;
+    hic_status_t status = ipc3_register_service((domain_id_t)domain_id, 0, 0, &sid);
+
+    if (status == HIC_SUCCESS && endpoint_id) {
+        *endpoint_id = (uint32_t)sid;
+    }
+
+    return (uint64_t)status;
+}
+
+/**
  * @brief 启动域
  * 用于动态模块加载器
  * 注意：入口点需要通过其他机制设置（如加载时指定）

@@ -264,6 +264,10 @@ void kernel_main(void *info)
     /* 【步骤11：加载静态模块】 */
     console_puts("\n[BOOT] STEP 11: Loading Static Modules\n");
     console_puts("[BOOT] Loading static modules from configuration...\n");
+
+    /* 在域创建前复制引导信息到静态存储 */
+    boot_info_copy_to_static();
+
     static_module_system_init();
     int static_loaded = static_module_load_all();
     console_puts("[BOOT] Static modules loaded: ");

@@ -209,6 +209,11 @@ uint64_t module_cap_create_domain(uint32_t parent_domain, uint32_t *new_domain);
 uint64_t module_cap_create_service(uint32_t domain_id, uint32_t *service_id);
 
 /**
+ * @brief 创建 IPC 3.0 端点（用于动态模块加载）
+ */
+uint64_t module_cap_create_endpoint(uint32_t domain_id, uint32_t *endpoint_id);
+
+/**
  * @brief 启动域
  */
 uint64_t module_domain_start(uint32_t domain_id, uint64_t entry_point);

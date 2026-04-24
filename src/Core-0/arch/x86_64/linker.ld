@@ -185,8 +185,9 @@ SECTIONS
 
         /* @STATIC_MODULES_TEXT_END@ */
         
-        /* 通配符匹配其他静态服务段 */
-        *(.static_svc.*)
+        /* 通配符匹配其他静态服务段（仅文本和只读数据） */
+        *(.static_svc.*.text)
+        *(.static_svc.*.rodata)
         *(.static_service.*)
         _static_modules_text_end = .;
     }

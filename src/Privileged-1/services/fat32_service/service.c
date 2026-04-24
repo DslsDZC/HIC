@@ -46,15 +46,21 @@ int _fat32_service_entry(void)
 extern int ide_read_sector(uint32_t lba, void *buffer);
 extern int ide_read_sectors(uint32_t lba, uint8_t count, void *buffer);
 
-/* Boot信息结构 */
+/* Boot信息结构
+ *
+ * 重要：此结构必须与 src/Core-0/boot_info.h 中的完整定义保持偏移一致。
+ * `embedded_modules` 在完整结构中的偏移为 0xA40（2624 字节），
+ * 因此在 magic/version/flags 后需要填充 0xA30 字节以匹配.
+ */
 typedef struct {
     uint32_t magic;
     uint32_t version;
     uint64_t flags;
+    uint8_t __pad_embedded[0xA30];  /* 填充至 embedded_modules 的正确偏移 0xA40 */
     struct {
-        void *magic_region_base;
-        uint64_t magic_region_size;
-        uint32_t embedded_module_count;
+        void *magic_region_base;       /* offset 0xA40 */
+        uint64_t magic_region_size;    /* offset 0xA48 */
+        uint32_t embedded_module_count; /* offset 0xA50 */
     } embedded_modules;
 } hic_boot_info_t;
 
@@ -428,8 +434,12 @@ static int find_in_dir(uint32_t dir_cluster, const char *name,
         for (uint32_t i = 0; i < g_fat32_ctx.bytes_per_cluster; i += FAT32_DIR_ENTRY_SIZE) {
             fat32_dir_entry_t *entry = (fat32_dir_entry_t *)&cluster_buffer[i];
             
-            /* 空条目或已删除 */
-            if (entry->name[0] == 0x00 || entry->name[0] == 0xE5) {
+            /* 空条目：目录结束，跳到下一个簇 */
+            if (entry->name[0] == 0x00) {
+                break;
+            }
+            /* 已删除条目 */
+            if (entry->name[0] == 0xE5) {
                 continue;
             }
             
@@ -521,6 +531,8 @@ static uint32_t get_first_cluster(const fat32_dir_entry_t *entry) {
 /* ========== 公开接口 ========== */
 
 /* 读取文件 */
+
+
 hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_size, uint32_t *bytes_read) {
     uint32_t cluster, size, bytes_read_val;
     uint8_t cluster_buffer[4096];
@@ -528,53 +540,63 @@ hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_siz
     const char *current_path = path;
     fat32_dir_entry_t entry;
     uint32_t dir_cluster;
-    
+
+
     if (!path || !buffer || !bytes_read) {
         return HIC_INVALID_PARAM;
     }
-    
+
     if (g_fat32_ctx.device_base == 0) {
         return HIC_NOT_INITIALIZED;
     }
-    
+
     *bytes_read = 0;
-    
+
+
     /* 从根目录开始 */
     dir_cluster = g_fat32_ctx.root_cluster;
-    
+
     /* 解析路径 */
     while (*current_path) {
         current_path = get_next_component(current_path, component);
-        
+
         if (component[0] == '\0') {
             continue;
         }
-        
+
+        /* crude serial output of component */
+        extern void hal_outb(uint16_t port, uint8_t value);
+        int ci = 0;
+        while (component[ci] && ci < 50) {
+            hal_outb(0x3F8, (uint8_t)component[ci++]);
+        }
+        hal_outb(0x3F8, '\n');
+
         if (*current_path) {
             /* 还有子目录，查找目录 */
             if (find_in_dir(dir_cluster, component, &entry) != 0) {
                 return HIC_NOT_FOUND;
             }
-            
+
             if (!(entry.attr & ATTR_DIRECTORY)) {
                 return HIC_NOT_FOUND;
             }
-            
+
             dir_cluster = get_first_cluster(&entry);
         } else {
             /* 最后一个组件，是文件 */
             if (find_in_dir(dir_cluster, component, &entry) != 0) {
                 return HIC_NOT_FOUND;
             }
-            
+
             cluster = get_first_cluster(&entry);
             size = entry.file_size;
-            
+
             /* 读取文件内容 */
             bytes_read_val = 0;
             while (cluster >= 2 && cluster < 0x0FFFFFF8 && bytes_read_val < buffer_size) {
                 read_cluster(cluster, cluster_buffer);
-                
+
                 uint32_t copy_size = g_fat32_ctx.bytes_per_cluster;
                 if (bytes_read_val + copy_size > size) {
                     copy_size = size - bytes_read_val;
@@ -582,18 +604,18 @@ hic_status_t fat32_read_file(const char *path, void *buffer, uint32_t buffer_siz
                 if (bytes_read_val + copy_size > buffer_size) {
                     copy_size = buffer_size - bytes_read_val;
                 }
-                
+
                 memcpy((uint8_t *)buffer + bytes_read_val, cluster_buffer, copy_size);
                 bytes_read_val += copy_size;
-                
+
                 cluster = get_fat_entry(cluster);
             }
-            
+
             *bytes_read = bytes_read_val;
             return HIC_SUCCESS;
         }
     }
-    
+
     return HIC_NOT_FOUND;
 }
 

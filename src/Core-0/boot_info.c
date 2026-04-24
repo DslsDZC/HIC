@@ -33,6 +33,73 @@ boot_state_t g_boot_state = {0};
 /* 全局引导信息指针 */
 hic_boot_info_t *g_boot_info = NULL;
 
+/* 引导信息静态备份（确保在所有域页表中可访问） */
+static hic_boot_info_t g_boot_info_storage;
+
+/**
+ * 复制引导信息到静态存储
+ *
+ * 引导信息由 Bootloader 动态分配，位于不可预测的物理地址。
+ * 当服务在自己的域中运行时，其页表可能不包含引导信息的物理页面，
+ * 导致通过 g_boot_info 访问字段时触发页错误。
+ *
+ * 此函数将完整的引导信息复制到内核 BSS 段的静态缓冲区中，
+ * 该区域已映射到所有特权域的页表中。
+ *
+ * 调用时机：在域创建之前调用（main.c 中 Step 10 之后、Step 11 之前）
+ */
+void boot_info_copy_to_static(void)
+{
+    if (g_boot_info == NULL) {
+        return;
+    }
+
+    /* 复制整个引导信息结构 */
+    memcpy(&g_boot_info_storage, g_boot_info, sizeof(hic_boot_info_t));
+
+    /* 修正 magic_region_base：Bootloader 在 load_kernel_segments
+     * 更新 kernel_base 前已赋值，可能指向 UEFI 缓冲区地址，
+     * 该地址在服务域页表中不可访问。修正为内核链接基址。 */
+    {
+        extern u8 _text_start[];
+        phys_addr_t kernel_phys_base = (phys_addr_t)_text_start;
+        g_boot_info_storage.embedded_modules.magic_region_base = (void*)kernel_phys_base;
+    }
+
+    /* 同时也修复原始 boot_info（如果后续有直接引用） */
+    if (g_boot_info != &g_boot_info_storage) {
+        extern u8 _text_start[];
+        g_boot_info->embedded_modules.magic_region_base = (void*)(phys_addr_t)_text_start;
+    }
+
+    /* 更新全局指针指向静态复制 */
+    g_boot_info = &g_boot_info_storage;
+
+    console_puts("[BOOT] Boot info copied to static storage (domain-safe)\n");
+
+    /* 调试：打印 magic_region_base 最终值 */
+    {
+        char dbg[80];
+        dbg[0] = '['; dbg[1] = 'B'; dbg[2] = 'O'; dbg[3] = 'O'; dbg[4] = 'T'; dbg[5] = ']';
+        dbg[6] = ' '; dbg[7] = 'm'; dbg[8] = 'a'; dbg[9] = 'g'; dbg[10] = 'i'; dbg[11] = 'c';
+        dbg[12] = '_'; dbg[13] = 'r'; dbg[14] = 'e'; dbg[15] = 'g'; dbg[16] = 'i'; dbg[17] = 'o';
+        dbg[18] = 'n'; dbg[19] = '_'; dbg[20] = 'b'; dbg[21] = 'a'; dbg[22] = 's'; dbg[23] = 'e';
+        dbg[24] = '='; dbg[25] = '0'; dbg[26] = 'x';
+        u64 val = (u64)g_boot_info_storage.embedded_modules.magic_region_base;
+        const char hex[] = "0123456789ABCDEF";
+        dbg[27] = hex[(val >> 60) & 0xF]; dbg[28] = hex[(val >> 56) & 0xF];
+        dbg[29] = hex[(val >> 52) & 0xF]; dbg[30] = hex[(val >> 48) & 0xF];
+        dbg[31] = hex[(val >> 44) & 0xF]; dbg[32] = hex[(val >> 40) & 0xF];
+        dbg[33] = hex[(val >> 36) & 0xF]; dbg[34] = hex[(val >> 32) & 0xF];
+        dbg[35] = hex[(val >> 28) & 0xF]; dbg[36] = hex[(val >> 24) & 0xF];
+        dbg[37] = hex[(val >> 20) & 0xF]; dbg[38] = hex[(val >> 16) & 0xF];
+        dbg[39] = hex[(val >> 12) & 0xF]; dbg[40] = hex[(val >> 8) & 0xF];
+        dbg[41] = hex[(val >> 4) & 0xF]; dbg[42] = hex[val & 0xF];
+        dbg[43] = '\n'; dbg[44] = 0;
+        console_puts(dbg);
+    }
+}
+
 /* ==================== 辅助函数 ==================== */
 
 /* 简化的 sscanf 实现 */

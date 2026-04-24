@@ -261,6 +261,7 @@ static int find_elf_entry_ex(const uint8_t *elf_data, size_t elf_size, uint64_t 
     /* 所以我们不能检查 st_value != 0，而是检查 st_shndx 是否指向有效的节 */
     uint64_t fallback_entry = 0;
     const char *fallback_name = NULL;
+    uint16_t fallback_shndx = 0;
     
     for (int i = 0; i < num_syms; i++) {
         /* 检查是否是函数类型，并且 st_shndx 不是未定义 (SHN_UNDEF = 0) */
@@ -281,7 +282,17 @@ static int find_elf_entry_ex(const uint8_t *elf_data, size_t elf_size, uint64_t 
                     launcher_log("Found service_start entry:");
                     launcher_log(name);
                     launcher_log_hex("Entry offset: ", syms[i].st_value);
-                    *out_offset = syms[i].st_value;
+                    /* For relocatable objects: absolute offset = section sh_offset + st_value */
+                    uint16_t entry_shndx;
+                    module_memcpy(&entry_shndx, &syms[i].st_shndx, sizeof(uint16_t));
+                    if (entry_shndx < ehdr->e_shnum) {
+                        uint64_t sec_off;
+                        module_memcpy(&sec_off, &shdrs[entry_shndx].sh_offset, sizeof(uint64_t));
+                        *out_offset = sec_off + syms[i].st_value;
+                        launcher_log_hex("Computed entry offset (section+st_value): ", *out_offset);
+                    } else {
+                        *out_offset = syms[i].st_value;
+                    }
                     return 1;  /* 找到了 */
                 }
             }
@@ -294,6 +305,7 @@ static int find_elf_entry_ex(const uint8_t *elf_data, size_t elf_size, uint64_t 
                         *(p+3) == 'a' && *(p+4) == 'r' && *(p+5) == 't') {
                         fallback_entry = syms[i].st_value;
                         fallback_name = name;
+                        module_memcpy(&fallback_shndx, &syms[i].st_shndx, sizeof(uint16_t));
                         launcher_log("Fallback entry:");
                         launcher_log(name);
                         launcher_log_hex("Fallback offset: ", fallback_entry);
@@ -307,7 +319,14 @@ static int find_elf_entry_ex(const uint8_t *elf_data, size_t elf_size, uint64_t 
     
     if (fallback_entry != 0 || fallback_name != NULL) {
         launcher_log("Using fallback entry point");
-        *out_offset = fallback_entry;
+        if (fallback_shndx > 0 && fallback_shndx < ehdr->e_shnum) {
+            uint64_t sec_off;
+            module_memcpy(&sec_off, &shdrs[fallback_shndx].sh_offset, sizeof(uint64_t));
+            *out_offset = sec_off + fallback_entry;
+            launcher_log_hex("Computed fallback offset (section+st_value): ", *out_offset);
+        } else {
+            *out_offset = fallback_entry;
+        }
         return 1;  /* 找到了备选 */
     }
     
@@ -384,6 +403,9 @@ static void __stub_cap_migration_channel_create(void) { }
 static void __stub_domain_atomic_switch(void) { }
 static void __stub_domain_graceful_shutdown(void) { }
 static void __stub_sha384_hash(void) { }
+static void __stub_service_register(const char *name, void *api) {
+    (void)name; (void)api;
+}
 
 static uint64_t find_external_symbol(const char *name) {
     /* 内核符号查找表 */
@@ -403,10 +425,13 @@ static uint64_t find_external_symbol(const char *name) {
         /* module_primitives */
         {"module_cap_create_domain", (uint64_t)module_cap_create_domain},
         {"module_cap_create_service", (uint64_t)module_cap_create_service},
+        {"module_cap_create_endpoint", (uint64_t)module_cap_create_service},
         {"module_domain_start", (uint64_t)module_domain_start},
+        {"module_memory_alloc", (uint64_t)module_memory_alloc},
+        /* module wrappers for external calls */
+        {"service_register", (uint64_t)__stub_service_register},
         {"module_memcpy", (uint64_t)module_memcpy},
         {"module_memset", (uint64_t)module_memset},
-        {"module_memory_alloc", (uint64_t)module_memory_alloc},
         /* 占位符 - 未完全实现的功能 */
         {"domain_parallel_create", (uint64_t)__stub_domain_parallel_create},
         {"cap_migration_channel_create", (uint64_t)__stub_cap_migration_channel_create},

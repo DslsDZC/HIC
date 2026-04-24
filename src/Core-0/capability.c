@@ -1448,7 +1448,7 @@ hic_status_t cap_get_service_instance_state(cap_id_t instance_cap,
 
 /* CNode 内存池（预分配） */
 #define CNODE_POOL_SIZE     256
-#define CNODE_BLOCK_SIZE    4096
+#define CNODE_BLOCK_SIZE    8192
 
 /* CNode 内存池结构 */
 static struct {

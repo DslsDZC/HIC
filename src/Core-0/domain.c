@@ -20,6 +20,8 @@
 #include "atomic.h"
 #include "lib/mem.h"
 #include "hal.h"
+#include "hal_cr3.h"
+#include "ipc3.h"
 #include "thread.h"  /* 用于域切换时的线程状态管理 */
 
 /* 外部引用：内核代码段地址范围 */
@@ -185,6 +187,9 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
         domain->page_table = 0;  /* 使用当前CR3（内核页表） */
         domain->flags |= DOMAIN_FLAG_TRUSTED;
         console_puts("[Domain] Core-0 domain uses kernel page table\n");
+
+        /* 注册 Core-0 页表到 domain_switch 子系统 */
+        pagetable_setup_domain(HIC_DOMAIN_CORE, (page_table_t*)hal_get_cr3());
     } else {
         /* 其他域创建独立页表 */
         page_table_t *domain_pagetable = pagetable_create();
@@ -303,7 +308,44 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
                         PERM_RW,  /* 可读写：大型 BSS 可能包含栈 */
                         MAP_TYPE_KERNEL);
                 }
-                
+
+                /* 映射静态服务模块区域（所有特权服务代码位于此区域） */
+                {
+                    extern char _static_modules_text_start[], _static_modules_text_end[];
+                    extern char _static_modules_data_start[], _static_modules_data_end[];
+                    extern char _static_modules_bss_start[], _static_modules_bss_end[];
+
+                    size_t svc_text_size = (size_t)(_static_modules_text_end - _static_modules_text_start);
+                    if (svc_text_size > 0) {
+                        pagetable_map(domain_pagetable,
+                            (virt_addr_t)_static_modules_text_start,
+                            (phys_addr_t)_static_modules_text_start,
+                            svc_text_size,
+                            PERM_RX,
+                            MAP_TYPE_KERNEL);
+                    }
+
+                    size_t svc_data_size = (size_t)(_static_modules_data_end - _static_modules_data_start);
+                    if (svc_data_size > 0) {
+                        pagetable_map(domain_pagetable,
+                            (virt_addr_t)_static_modules_data_start,
+                            (phys_addr_t)_static_modules_data_start,
+                            svc_data_size,
+                            PERM_RW,
+                            MAP_TYPE_KERNEL);
+                    }
+
+                    size_t svc_bss_size = (size_t)(_static_modules_bss_end - _static_modules_bss_start);
+                    if (svc_bss_size > 0) {
+                        pagetable_map(domain_pagetable,
+                            (virt_addr_t)_static_modules_bss_start,
+                            (phys_addr_t)_static_modules_bss_start,
+                            svc_bss_size,
+                            PERM_RW,
+                            MAP_TYPE_KERNEL);
+                    }
+                }
+
                 console_puts("[Domain] Privileged domain: kernel data mapped RW for scheduler\n");
             } else {
                 /* 非特权域（Application）：映射为只读 */
@@ -346,6 +388,9 @@ hic_status_t domain_create(domain_type_t type, domain_id_t parent,
         console_puts("[Domain] Registered page table for domain ");
         console_putu32(domain_id);
         console_puts(" (with kernel regions mapped)\n");
+
+        /* 映射 IPC 3.0 域数据页（所有域都需要读取 current_domain_id） */
+        ipc3_map_domain_data(domain_id);
     }
     
     /* 特权域标记（Privileged-1 服务默认为特权域） */

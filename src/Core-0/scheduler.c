@@ -49,15 +49,20 @@ static u64 g_idle_stack[1024] __attribute__((aligned(16)));
 /* ==================== Minimal Boot Scheduler ==================== */
 
 /**
- * Simple linear scan for any READY thread.
+ * Simple round-robin scan for any READY thread.
+ * Starts from the last scheduled thread + 1 to ensure fairness.
  * NO priority, NO policy, NO queues — pure mechanism.
  * Used only during boot before Privileged-1 scheduler takes over.
  */
+static u32 g_last_scheduled = 0;
+
 static thread_t *boot_pick_next(void)
 {
-    for (u32 i = 0; i < MAX_THREADS; i++) {
+    for (u32 offset = 1; offset <= MAX_THREADS; offset++) {
+        u32 i = (g_last_scheduled + offset) % MAX_THREADS;
         thread_t *t = &g_threads[i];
         if (t->thread_id == i && t->state == THREAD_STATE_READY) {
+            g_last_scheduled = i;
             return t;
         }
     }

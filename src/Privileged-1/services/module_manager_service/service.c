@@ -225,13 +225,18 @@ static inline void mod_pause_loop(void) {
 
 /* 服务启动 */
 hic_status_t module_manager_service_start(void) {
-    /* 使用内联函数输出，避免外部函数调用和重定位问题 */
     mod_serial_puts("[MOD_MGR] Module manager service started\n");
-    mod_serial_puts("[MOD_MGR] Entering idle loop (no external deps)\n");
-    
-    /* 进入空闲循环 - 不调用任何外部函数 */
+    mod_serial_puts("[MOD_MGR] Starting dynamic module loading...\n");
+
+    /* 加载所有动态模块（读取 modules.list，拓扑排序，按依赖顺序加载） */
+    int loaded = dynamic_module_load_all();
+
+    mod_serial_puts("[MOD_MGR] Dynamic module loading complete\n");
+    mod_serial_puts("[MOD_MGR] Entering idle loop\n");
+
+    /* 事件循环 - 后续将替换为 IPC 消息处理 */
     mod_pause_loop();
-    
+
     return HIC_SUCCESS;
 }
 

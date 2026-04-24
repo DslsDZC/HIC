@@ -179,49 +179,44 @@ context_switch:
      * 只有新线程开始执行时才运行在其私有页表中
      */
     
-    /* 保存 next 线程指针 */
-    pushq %rsi
-    
+    /* 将 next 指针保存在 callee-saved 寄存器 %rbx 中
+     * 避免 CR3 切换后访问旧栈（旧栈在新域页表中不可见） */
+    movq %rsi, %rbx
+
     /* 获取 next 线程的 domain_id (偏移 4) */
-    movq 4(%rsi), %rdi           /* %rdi = next->domain_id */
-    
+    movl 4(%rbx), %edi           /* %edi = next->domain_id (zero-extended to 64-bit) */
+
     /* 检查域ID是否有效 */
     cmpq $256, %rdi              /* HIC_DOMAIN_MAX = 256 */
     jae .L_skip_cr3_switch       /* 无效域ID，跳过CR3切换 */
-    
-    /* 调用 domain_switch_get_pagetable(domain_id) 获取目标域页表
-     * 注意：这可能返回 NULL（Core-0 域使用内核页表）
-     */
+
+    /* 调用 domain_switch_get_pagetable(domain_id) */
     call domain_switch_get_pagetable
-    
+
     /* 检查返回的页表是否有效 */
     testq %rax, %rax
     jz .L_skip_cr3_switch        /* NULL 页表，跳过切换（Core-0 域） */
-    
-    /* 获取页表物理地址（返回的是 page_table_t*，即物理地址） */
-    movq %rax, %rbx
-    
-    /* 获取当前 CR3 并清除低位标志进行比较 */
-    movq %cr3, %rax
-    movq $0xFFFFFFFFF000, %rcx   /* 页表地址掩码（高52位） */
-    andq %rcx, %rax              /* 清除低位标志位 */
-    andq %rcx, %rbx              /* 同样处理目标页表地址 */
-    
+
+    /* 在 %rax 中保留页表地址，使用 %rcx 和 %rdx 进行比较 */
+    movq %cr3, %rcx
+    movq $0xFFFFFFFFF000, %rdx   /* 页表地址掩码（高52位） */
+    andq %rdx, %rcx              /* 清除低位标志位 */
+    andq %rdx, %rax              /* 同样处理目标页表地址 */
+
     /* 比较是否需要切换 */
-    cmpq %rax, %rbx
+    cmpq %rcx, %rax
     je .L_skip_cr3_switch        /* 相同页表，无需切换 */
-    
+
     /* 切换 CR3 - 新线程将运行在其私有页表中 */
-    movq %rbx, %cr3
-    
+    movq %rax, %cr3
+
 .L_skip_cr3_switch:
-    /* 恢复 next 线程指针 */
-    popq %rsi
-    
-    /* ===== 恢复线程上下文 ===== */
+    /* ===== 恢复线程上下文 =====
+     * 通过 %rbx 访问 next 指针——该寄存器是 callee-saved，
+     * CR3 切换后仍有效，且不涉及旧栈访问。 */
 
     /* 恢复栈指针从 next->stack_ptr (偏移 40) */
-    movq 40(%rsi), %rsp
+    movq 40(%rbx), %rsp
 
     /* 恢复调用者保存的寄存器 */
     popq %r15

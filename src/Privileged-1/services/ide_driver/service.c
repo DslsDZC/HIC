@@ -131,10 +131,10 @@ static int ide_wait_ready(void) {
 static int ide_wait_data(void) {
     uint8_t status;
     int timeout = 1000000;  /* 增加超时 */
-    
+
     while (timeout-- > 0) {
         status = hal_inb(IDE_PRIMARY_STATUS);
-        
+
         if (status & IDE_STATUS_ERR) {
             /* 读取错误寄存器获取更多信息 */
             uint8_t error = hal_inb(0x1F1);  /* 错误寄存器 */
@@ -155,12 +155,20 @@ static int ide_wait_data(void) {
             serial_print(buf);
             return -1;
         }
-        
+
         if ((status & IDE_STATUS_DRQ) && !(status & IDE_STATUS_BSY)) {
             return 0;
         }
+
+        /* If drive is idle (BSY=0, DRQ=0, ERR=0), command may not have been accepted */
+        if (!(status & IDE_STATUS_BSY) && !(status & IDE_STATUS_DRQ) && !(status & IDE_STATUS_ERR)) {
+            /* Give the controller more time by a small delay and retry */
+            for (volatile int d = 0; d < 100; d++) {
+                hal_inb(0x177);
+            }
+        }
     }
-    
+
     ide_log("Timeout waiting for data");
     return -1;
 }
@@ -203,12 +211,19 @@ hic_status_t ide_driver_init(void) {
     ide_log("Step 5: Check result...");
     if (count == 0x55 && lba == 0xAA) {
         ide_log("Primary master detected");
+
+        /* ！！！调试：逐句测试崩溃点 */
+        serial_print("[IDE_DRV] DBG1: before drive_present=1\n");
         g_ide_state.drive_present = 1;
+        serial_print("[IDE_DRV] DBG2: after drive_present=1\n");
         g_ide_state.initialized = 1;
-        
-        /* 清除状态 */
+        serial_print("[IDE_DRV] DBG3: after initialized=1\n");
+
+        /* 读取状态 */
         status = hal_inb(IDE_PRIMARY_STATUS);
-        
+        serial_print("[IDE_DRV] DBG4: after hal_inb(0x1F7)\n");
+
+        serial_print("[IDE_DRV] DBG5: returning SUCCESS from init\n");
         return HIC_SUCCESS;
     }
     
@@ -220,15 +235,41 @@ hic_status_t ide_driver_init(void) {
  * 启动 IDE 驱动服务
  */
 hic_status_t ide_driver_start(void) {
+    extern void serial_print(const char *);
+
     /* 首先初始化驱动 */
+    serial_print("[IDE_DRV] DEBUG: about to call ide_driver_init()\n");
     hic_status_t status = ide_driver_init();
+    serial_print("[IDE_DRV] DEBUG: back from ide_driver_init(), status=");
+    /* manual hex print of status */
+    {
+        char buf[20];
+        buf[0] = '0'; buf[1] = 'x';
+        const char hex[] = "0123456789ABCDEF";
+        buf[2] = hex[((u32)status >> 28) & 0xF];
+        buf[3] = hex[((u32)status >> 24) & 0xF];
+        buf[4] = hex[((u32)status >> 20) & 0xF];
+        buf[5] = hex[((u32)status >> 16) & 0xF];
+        buf[6] = hex[((u32)status >> 12) & 0xF];
+        buf[7] = hex[((u32)status >> 8) & 0xF];
+        buf[8] = hex[((u32)status >> 4) & 0xF];
+        buf[9] = hex[status & 0xF];
+        buf[10] = '\n';
+        buf[11] = '\0';
+        serial_print(buf);
+    }
+
     if (status != HIC_SUCCESS) {
         ide_log("Drive not initialized");
     } else {
+        serial_print("[IDE_DRV] DEBUG: about to log success\n");
         ide_log("Drive initialized successfully");
+        serial_print("[IDE_DRV] DEBUG: after log success\n");
     }
-    
+
+    serial_print("[IDE_DRV] DEBUG: about to log service started\n");
     ide_log("Service started");
+    serial_print("[IDE_DRV] DEBUG: entering service loop\n");
     
     /* 主服务循环 */
     while (1) {

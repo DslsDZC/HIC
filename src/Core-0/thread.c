@@ -274,7 +274,24 @@ hic_status_t thread_create_bound(domain_id_t domain_id,
         atomic_exit_critical(irq);
         return HIC_ERROR_NO_RESOURCE;
     }
-    
+
+    /* 将栈映射到域的页表中（确保 CR3 切换后栈可访问） */
+    {
+        extern page_table_t* domain_switch_get_pagetable(domain_id_t domain);
+        page_table_t* domain_pagetable = domain_switch_get_pagetable(domain_id);
+        if (domain_pagetable != NULL) {
+            extern hic_status_t pagetable_map(page_table_t *pt, virt_addr_t vaddr,
+                                               phys_addr_t paddr, size_t size,
+                                               page_perm_t perm, map_type_t type);
+            pagetable_map(domain_pagetable,
+                          (virt_addr_t)stack_phys,  /* 虚拟地址 = 物理地址（恒等映射）*/
+                          stack_phys,                /* 物理地址 */
+                          2 * PAGE_SIZE,             /* 大小 */
+                          PERM_RW,                   /* 读写权限 */
+                          MAP_TYPE_USER);           /* 内核栈映射（恒等映射）*/
+        }
+    }
+
     /* 初始化线程结构 */
     thread_t *thread = &g_threads[free_slot];
     memzero(thread, sizeof(thread_t));
