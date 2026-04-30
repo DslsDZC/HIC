@@ -8,6 +8,14 @@ SPDX-License-Identifier: CC-BY-4.0
 
 本文档详细说明了HIC系统的CHAL (Compatibility Hardware Abstraction Layer) 兼容性硬件抽象层。
 
+## 版本信息
+
+- **文档版本**: 1.0.0
+- **最后更新**: 2026-02-26
+- **适用内核版本**: HIC Core-0 v1.0+
+
+---
+
 ## 一、CHAL概述
 
 ### 1.1 什么是CHAL？
@@ -663,9 +671,10 @@ CHAL_IRQ_SCOPE_END();
 
 ## 十、参考文档
 
-- [API接口列表](./API列表.md)
-- [接口分类与维护原则](./接口规范.md)
-- [API开发者指南](./API开发.md)
+- [HAL硬件抽象层](../Wiki/10-HardwareAbstractionLayer.md)
+- [API接口列表](./api_interface_list.md)
+- [接口分类与维护原则](./interface_classification.md)
+- [API开发者指南](./api_developer_guide.md)
 
 ---
 

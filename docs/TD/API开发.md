@@ -624,7 +624,7 @@ hic_thread_create(domain2, &config2, &thread2);
 ## 官方接口 vs 第三方接口
 
 **重要**: 关于接口分类和官方接口维护原则的详细信息，请参阅：
-- [接口分类与维护原则](./接口规范.md)
+- [接口分类与维护原则](./interface_classification.md)
 
 ### 对比表
 
@@ -702,9 +702,10 @@ hic_endpoint_register("my_service", 0x7500, handler);
 
 ## 参考文档
 
-- [API接口列表](./API列表.md)
+- [API接口列表](./api_interface_list.md)
+- [能力系统](../Wiki/11-CapabilitySystem.md)
 - [三层模型](./三层模型.md)
-- [性能指标](./三层模型.md#性能指标)
+- [性能指标](./README.md#性能指标)
 
 ---
 
